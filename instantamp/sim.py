@@ -1,0 +1,422 @@
+"""The simulator of the G1 AMP-Flat task (env.py) on MuJoCo Warp through MJX, on a flat floor: N worlds, one jitted function per policy
+step.
+
+The scene is mjlab's G1 (assets/g1_mjlab.xml) as mjlab builds it: full collision (every `*_collision` geom collides, self-collisions
+included; the 14 foot capsules condim 3, priority 1, friction 0.6, the rest condim 1), a position actuator per joint (kp, kd, force range
++- effort, joint armature), a ground plane, and the solver options: timestep 5 ms, implicitfast, Newton with 10 iterations and 20
+line-search iterations, pyramidal cone. Visual geoms and meshes are removed: training needs none.
+
+A step:
+  1. joint target q0 + scale a - encoder bias; 4 substeps, each with the Unitree actuator's torque recomputed from the current q, qd
+  2. counter + 1; terminations: a robot that has been up in this episode ends when a termination body touches the floor with more than
+     1 N; one that has not been up ends when it is still not up after 5 s; time-out after 20 s; rewards of the final state with the
+     command the policy saw
+  3. finished envs reset: a share `reset_floor` in a not-up frame of a get-up clip (random heading, noise), the rest in a frame of the
+     walking clips; `prob_shove` of the upright resets get a kick of the root and joint velocities
+  4. the command term ticks (resampling every 3 to 8 s, heading control); a push overwrites the root's world xy velocity every 5 to 10 s;
+     the 4-frame observation history appends the new frame
+Start-up randomization: foot friction, encoder bias, torso CoM (env.py).
+"""
+
+from __future__ import annotations
+
+import glob
+import os
+from typing import NamedTuple
+
+import jax
+import jax.numpy as jnp
+import mujoco
+import numpy as np
+import warp as wp
+from mujoco import mjx
+
+from . import amp, env, resets
+from .kin import Kinematics
+from .rot import axis_angle_to_mat, mm3, mv3, quat_to_mat, tr3
+
+XML = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "g1_mjlab.xml")
+wp.config.log_level = wp.LOG_WARNING
+WORLD_FIELDS = ("body_ipos", "geom_friction")  # the model fields that differ between envs
+DIVERGED = 1e3  # |qvel| beyond this counts as a physics failure
+NCONMAX, NJMAX = 64, 640  # contact and constraint pools per world
+WALK_DIR = "data/amp/walk_run"
+FLOOR_DIR = "data/recovery/lafan1"
+
+
+def build_scene(iterations: int = 10, ls_iterations: int = 20, ccd_iterations: int = 50) -> mujoco.MjModel:
+    """The compiled scene: the floor and the robot (prefix "robot_"), without visual geoms, meshes or sensors."""
+    world = mujoco.MjSpec()
+    world.copy_during_attach = True
+    o = world.option
+    o.timestep, o.iterations, o.ls_iterations, o.ccd_iterations = env.SIM_DT, iterations, ls_iterations, ccd_iterations
+    o.integrator = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
+    o.cone = mujoco.mjtCone.mjCONE_PYRAMIDAL
+    world.worldbody.add_geom(name="floor", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[0, 0, 0.01])
+    robot = mujoco.MjSpec.from_file(XML)
+    for g in [g for g in robot.geoms if g.contype == 0 and g.conaffinity == 0]:
+        robot.delete(g)
+    for m in list(robot.meshes):
+        robot.delete(m)
+    for s in list(robot.sensors):
+        robot.delete(s)
+    for g in robot.geoms:  # full collision
+        if not g.name.endswith("_collision"):
+            continue
+        if "_foot" in g.name:
+            g.condim, g.priority, g.friction = 3, 1, [0.6, g.friction[1], g.friction[2]]
+        else:
+            g.condim = 1
+    for i, name in enumerate(env.DOF):
+        j = robot.joint(f"{name}_joint")
+        j.armature = float(env.ARMATURE[i])
+        a = robot.add_actuator(name=name, target=f"{name}_joint")
+        a.trntype = mujoco.mjtTrn.mjTRN_JOINT
+        a.dyntype, a.gaintype, a.biastype = mujoco.mjtDyn.mjDYN_NONE, mujoco.mjtGain.mjGAIN_FIXED, mujoco.mjtBias.mjBIAS_AFFINE
+        a.gainprm[0], a.biasprm[1], a.biasprm[2] = float(env.KP[i]), -float(env.KP[i]), -float(env.KD[i])
+        a.inheritrange, a.ctrllimited = 0.0, False
+        a.forcelimited, a.forcerange = True, [-float(env.EFFORT[i]), float(env.EFFORT[i])]
+    world.attach(robot, frame=world.worldbody.add_frame(), prefix="robot_")
+    return world.compile()
+
+
+def collider_points(m: mujoco.MjModel, geoms, frames):
+    """Reduce geoms to points with a radius, so that a point's height over the floor minus its radius tells how far the geom is above the
+    floor: a sphere is its center, a capsule or cylinder its two end centers, a box its four bottom corners (radius 0). Returns the
+    points in their body frames, the index of each point's body in `frames`, and the radii."""
+    local, frame, radius = [], [], []
+    for g in geoms:
+        R = np.asarray(quat_to_mat(np.asarray(m.geom_quat[g], np.float32)))
+        kind, size, pos = int(m.geom_type[g]), m.geom_size[g], m.geom_pos[g]
+        if kind == mujoco.mjtGeom.mjGEOM_SPHERE:
+            pts, r = [pos], size[0]
+        elif kind in (mujoco.mjtGeom.mjGEOM_CAPSULE, mujoco.mjtGeom.mjGEOM_CYLINDER):  # a cylinder as the capsule of its axis
+            pts, r = [pos + s * size[1] * R[:, 2] for s in (1, -1)], size[0]
+        elif kind == mujoco.mjtGeom.mjGEOM_BOX:
+            pts, r = [pos + R @ (np.asarray([sx, sy, -1.0]) * size) for sx in (1, -1) for sy in (1, -1)], 0.0
+        else:
+            raise ValueError(f"collider geom {m.geom(g).name} has unsupported type {kind}")
+        local += pts
+        frame += [frames.index(int(m.geom_bodyid[g]))] * len(pts)
+        radius += [float(r)] * len(pts)
+    return np.asarray(local, np.float32), np.asarray(frame), np.asarray(radius, np.float32)
+
+
+class VelKinematics(Kinematics):
+    """Forward kinematics with velocities: world poses, the world linear velocities of the body origins and the angular velocities of
+    the requested bodies (every hinge sits at its body's origin, which Kinematics checks)."""
+
+    def forward_vel(self, p, R, v, w, q, qd):
+        P, Rs, V, W = {1: p}, {1: R}, {1: v}, {1: w}
+        for b in self.order:
+            par = self.parent[b]
+            P[b] = P[par] + mv3(Rs[par], self.pos[b])
+            Rb = mm3(Rs[par], self.rot[b])
+            V[b] = V[par] + jnp.cross(W[par], P[b] - P[par])
+            if self.col[b] < 0:
+                Rs[b], W[b] = Rb, W[par]
+            else:
+                Rs[b] = mm3(Rb, axis_angle_to_mat(self.axis[b], q[..., self.col[b]]))
+                W[b] = W[par] + mv3(Rb, self.axis[b]) * qd[..., self.col[b], None]
+        st = lambda d, ax: jnp.stack([d[b] for b in self.out], ax)  # noqa: E731
+        return st(P, -2), st(Rs, -3), st(V, -2), st(W, -2)
+
+
+class World(NamedTuple):
+    body_ipos: jax.Array  # (N, nbody, 3)
+    geom_friction: jax.Array  # (N, ngeom, 3)
+    bias: jax.Array  # (N, J) encoder bias
+    model: mjx.Model
+    walk: dict  # reset frames of the walking and running clips
+    floor: dict  # reset frames of the get-up clips in which the robot is not up
+
+
+class State(NamedTuple):
+    data: mjx.Data
+    world: World
+    obs: jax.Array  # (N, OBS_DIM) actor observation history (with noise)
+    a_last: jax.Array  # (N, J) last raw action (zero after a reset)
+    a_ode: jax.Array  # (N, J) last action without exploration noise (the ODE actor integrates from it)
+    cmd: env.Cmd
+    c_obs: jax.Array  # (N, 3) the command in the current observation
+    t: jax.Array  # (N,) episode counter
+    was_up: jax.Array  # (N,) the robot has been up in this episode (it started up, or has risen since)
+    down: jax.Array  # (N,) the episode started with the robot not up (a get-up start)
+    push_t: jax.Array  # (N,) steps since the last push or reset
+    push_at: jax.Array  # (N,) push interval in steps
+    ep_sums: jax.Array  # (N, len(TERMS)) running episode sums of the weighted terms
+    key: jax.Array
+
+
+class Transition(NamedTuple):
+    qpos: jax.Array
+    qvel: jax.Array
+    target: jax.Array  # (N, J) joint target of the PD law
+    qpos1: jax.Array
+    qvel1: jax.Array
+    reward: jax.Array
+    terminated: jax.Array
+    truncated: jax.Array
+    diverged: jax.Array
+    parts: jax.Array  # (N, len(TERMS)) the reward's weighted terms
+    contact: jax.Array  # (N, 2) foot-ground contact after the last substep
+    clearance: jax.Array  # (N, k) termination colliders over the floor (imagination's termination geometry)
+    stats: dict
+
+
+class View(NamedTuple):
+    kin: env.Kin
+    height: jax.Array  # (N,) pelvis over the floor
+    soles: jax.Array  # (N, k) sole collider points over the floor (radius included)
+    clearance: jax.Array  # (N, k) termination collider points over the floor (radius included); negative when penetrating
+
+
+def unflatten(qpos, qvel):
+    """MuJoCo's (qpos, qvel) -> S = (p, R, v, w, q, qd) with world-frame w (MuJoCo's free-joint angular velocity is in the body frame)."""
+    R = quat_to_mat(qpos[..., 3:7])
+    return qpos[..., :3], R, qvel[..., :3], mv3(R, qvel[..., 3:6]), qpos[..., 7:], qvel[..., 6:]
+
+
+def load_bank(directory: str):
+    """Every frame of the walking clips in `directory` (npz of tools/convert_motions.py, quaternions x, y, z, w): pelvis height, quaternion
+    (w, x, y, z), world velocities, joints. Resets draw uniformly over all frames of all clips."""
+    files = sorted(glob.glob(os.path.join(directory, "*.npz")))
+    assert files, f"no clips in {directory} (bash tools/download_data.sh)"
+    cols = {k: [] for k in ("z", "quat", "v", "w", "q", "qd")}
+    for f in files:
+        d = np.load(f)
+        assert int(d["fps"]) == 50, f
+        assert d["dof_pos"].shape[1] == env.J, f
+        q = d["root_quat"]
+        for k, a in (("z", d["root_pos"][:, 2]), ("quat", np.concatenate([q[:, 3:], q[:, :3]], -1)), ("v", d["root_lin_vel"]), ("w", d["root_ang_vel"]),
+                     ("q", d["dof_pos"]), ("qd", d["dof_vel"])):  # fmt: skip
+            cols[k].append(a)
+    return {k: jnp.asarray(np.concatenate(v, 0), jnp.float32) for k, v in cols.items()}
+
+
+class Sim:
+    def __init__(self, num_envs: int = 4096, nconmax: int = NCONMAX, njmax: int = NJMAX, walk_dir: str = WALK_DIR,
+                 floor_dir: str = FLOOR_DIR, random_start: bool = True, seed: int = 0, reset_floor: float = 0.2,
+                 prob_shove: float = 0.0, push: bool = True, physics: bool = True):  # fmt: skip
+        """physics=False: everything but MuJoCo Warp's model and data (no GPU): the scene, kinematics, reset banks and `_fresh`, for
+        checks on the CPU."""
+        self.N, self.random_start, self.seed = num_envs, random_start, seed
+        self.reset_floor, self.prob_shove, self.push = reset_floor, prob_shove, push
+        self.m = m = build_scene()
+        assert m.nu == env.J and m.nq == 7 + env.J
+        assert tuple(m.joint(m.actuator_trnid[i, 0]).name.removeprefix("robot_").removesuffix("_joint") for i in range(m.nu)) == env.DOF
+        self.qa, self.va = np.arange(7, 7 + env.J), np.arange(6, 6 + env.J)
+        rng = m.jnt_range[1:]
+        mid, half = rng.mean(-1), (rng[:, 1] - rng[:, 0]) / 2 * env.SOFT_LIMIT
+        self.q_soft = np.stack([mid - half, mid + half], -1).astype(np.float32)
+        self.torso = m.body("robot_torso_link").id
+        feet = [m.body(f"robot_{s}_ankle_roll_link").id for s in ("left", "right")]
+        self.foot_geoms = np.asarray([g for g in range(m.ngeom) if m.geom_bodyid[g] in feet and m.geom_contype[g] > 0])
+        assert len(self.foot_geoms) == env.N_FOOT_GEOMS
+        tb = [m.body(f"robot_{b}").id for b in env.TERMINATION_BODIES]
+        self.term_geoms = np.asarray([g for g in range(m.ngeom) if m.geom_bodyid[g] in tb and m.geom_contype[g] > 0])
+        assert len(set(int(m.geom_bodyid[g]) for g in self.term_geoms)) == len(tb), "every termination body carries a collision geom"
+        # frames of the forward kinematics: the torso, the two ankle-roll links, then the termination bodies
+        frames = [self.torso] + feet + tb
+        self.kin = VelKinematics(m, [m.body(b).name for b in frames])
+        self.site_off = np.stack([m.site_pos[m.site(f"robot_{s}_foot").id] for s in ("left", "right")]).astype(np.float32)
+        self.sole_local, self.sole_frame, self.sole_radius = collider_points(m, self.foot_geoms, frames)
+        self.coll_local, self.coll_frame, self.coll_radius = collider_points(m, self.term_geoms, frames)
+        self.kin_amp = Kinematics(m, [f"robot_{b}" for b in amp.KEY_BODIES])
+        # contact decoding: which foot (0 / 1) a geom belongs to, the termination geoms, the floor, the robot's geoms
+        self.foot_side = np.full(m.ngeom, -1, np.int32)
+        for g in self.foot_geoms:
+            self.foot_side[g] = feet.index(int(m.geom_bodyid[g]))
+        self.is_term = np.isin(np.arange(m.ngeom), self.term_geoms)
+        self.floor_id = m.geom("floor").id
+        self.robot_geom = np.asarray([m.body(int(m.geom_bodyid[g])).name.startswith("robot_") for g in range(m.ngeom)])
+        self.walk = load_bank(walk_dir)
+        self.floor = resets.load(floor_dir, "floor", env.UP_HEIGHT, env.UP_TILT) if reset_floor > 0 else resets.empty(env.J)
+        if not physics:
+            return
+        self.mx = mjx.put_model(m, impl="warp")
+        # the solver budget (10 iterations, 20 line-search iterations) often runs out; MuJoCo Warp would print a warning per step. Those
+        # two warnings are off; the overflow warnings of the contact and constraint pools stay on.
+        import mujoco_warp as mjw
+
+        quiet = int(self.mx.opt._impl.warn_overflow) & ~int(mjw.OverflowType.ITERATIONS) & ~int(mjw.OverflowType.LS_ITERATIONS)
+        self.mx = self.mx.tree_replace({"opt._impl.warn_overflow": quiet})
+        self.dx = mjx.make_data(m, impl="warp", naconmax=num_envs * nconmax, njmax=njmax)
+        self.axes = jax.tree.map(lambda _: None, self.mx).tree_replace({k: 0 for k in WORLD_FIELDS})
+
+    # ------------------------------------------------------------------ geometry shared with imagination
+    def view_state(self, S) -> View:
+        p, R, v, w, q, qd = S
+        P, Rs, V, W = self.kin.forward_vel(p, R, v, w, q, qd)
+        foot_v = V[..., 1:3, :] + jnp.cross(W[..., 1:3, :], mv3(Rs[..., 1:3, :, :], self.site_off))
+
+        def clearance(local, frame, radius):
+            pts = P[..., frame, :] + mv3(Rs[..., frame, :, :], local)
+            return pts[..., 2] - radius
+
+        return View(env.Kin(Rs[..., 0, :, :], V[..., 0, :], W[..., 0, :], foot_v), p[..., 2],
+                    clearance(self.sole_local, self.sole_frame, self.sole_radius), clearance(self.coll_local, self.coll_frame, self.coll_radius))  # fmt: skip
+
+    def soft_contact(self, soles):
+        """(N, 2) soft foot-ground contact of the imagined states: the lowest sole point of each foot near the floor."""
+        n = len(self.sole_frame) // 2
+        low = jnp.stack([soles[..., :n].min(-1), soles[..., n:].min(-1)], -1)
+        return jax.nn.sigmoid((env.FOOT_CONTACT_H - low) / env.FOOT_CONTACT_SOFT)
+
+    def key_positions(self, p, R, q):
+        """World positions (.., 4, 3) of the motion prior's key bodies (amp.KEY_BODIES)."""
+        return self.kin_amp.forward(p, R, q)[0]
+
+    def context(self, s: State):
+        """(N, 4) dynamics context xi: foot friction and torso CoM offset. The encoder bias enters through the joint target."""
+        m, w = self.m, s.world
+        return jnp.concatenate((w.geom_friction[:, self.foot_geoms[0], :1], w.body_ipos[:, self.torso] - m.body_ipos[self.torso]), -1)
+
+    # ------------------------------------------------------------------ setup
+    def world(self, key) -> World:
+        m, N = self.m, self.N
+        k_mu, k_b, k_com = jax.random.split(key, 3)
+        tile = lambda x: jnp.tile(jnp.asarray(x, jnp.float32)[None], (N,) + (1,) * np.ndim(x))  # noqa: E731
+        mu = jax.random.uniform(k_mu, (N,), minval=env.FOOT_FRICTION[0], maxval=env.FOOT_FRICTION[1])
+        fr = tile(m.geom_friction).at[:, self.foot_geoms, 0].set(mu[:, None])
+        com = jax.random.uniform(k_com, (N, 3), minval=-1.0, maxval=1.0) * jnp.asarray(env.TORSO_COM)
+        ipos = tile(m.body_ipos).at[:, self.torso].add(com)
+        bias = jax.random.uniform(k_b, (N, env.J), minval=-env.ENCODER_BIAS, maxval=env.ENCODER_BIAS)
+        return World(ipos, fr, bias, getattr(self, "mx", None), self.walk, self.floor)  # (no model: built with physics=False)
+
+    def _push_interval(self, key):
+        u = jax.random.uniform(key, (self.N,), minval=env.PUSH_INTERVAL[0], maxval=env.PUSH_INTERVAL[1])
+        return (u / env.DT).astype(jnp.int32)
+
+    def _fresh(self, key, world: World):
+        """Fresh start states for every env (`_reset` applies them where an episode ended): a walking frame (no noise, the clip's
+        heading), or with probability reset_floor a not-up frame of a get-up clip (random heading, roll / pitch / joint / velocity
+        noise); prob_shove of the starts that are up get a kick of the velocities."""
+        N, J = self.N, env.J
+        kw, kf, ku, ks, kk1, kk2 = jax.random.split(key, 6)
+        i = jax.random.randint(kw, (N,), 0, world.walk["z"].shape[0])
+        wb = world.walk
+        q = jnp.clip(wb["q"][i], self.q_soft[:, 0], self.q_soft[:, 1])
+        qpos = jnp.concatenate((jnp.zeros((N, 2)), wb["z"][i][:, None], wb["quat"][i], q), -1)
+        qvel = jnp.concatenate((wb["v"][i], mv3(tr3(quat_to_mat(wb["quat"][i])), wb["w"][i]), wb["qd"][i]), -1)
+        if self.reset_floor > 0:
+            z, quat, v, w, fq, fqd, _ = resets.states(kf, world.floor, N, "floor", self.q_soft[:, 0], self.q_soft[:, 1])
+            fpos = jnp.concatenate((jnp.zeros((N, 2)), z[:, None], quat, fq), -1)
+            fvel = jnp.concatenate((v, mv3(tr3(quat_to_mat(quat)), w), fqd), -1)
+            floor = jax.random.uniform(ku, (N,)) < self.reset_floor
+            qpos, qvel = jnp.where(floor[:, None], fpos, qpos), jnp.where(floor[:, None], fvel, qvel)
+        was_up = env.is_up(qpos[:, 2], quat_to_mat(qpos[:, 3:7]))
+        if self.prob_shove > 0:
+            shove = was_up & (jax.random.uniform(ks, (N,)) < self.prob_shove)
+            kick = jnp.concatenate((jax.random.uniform(kk1, (N, 6), minval=-1.0, maxval=1.0) * jnp.asarray(env.SHOVE_ROOT),
+                                    env.SHOVE_JOINT * jax.random.uniform(kk2, (N, J), minval=-1.0, maxval=1.0)), -1)  # fmt: skip
+            qvel = qvel + jnp.where(shove[:, None], kick, 0.0)  # (the root's angular part is in the body frame, as MuJoCo's)
+        return qpos, qvel, was_up
+
+    def _reset(self, s: State, done, key) -> State:
+        """Reset the envs where `done`: start state (`_fresh`), command drawn anew, last action zero, push schedule restarted."""
+        kf, kc, kp = jax.random.split(key, 3)
+        qpos, qvel, was_up = self._fresh(kf, s.world)
+        on = done[:, None]
+        d = s.data.replace(qpos=jnp.where(on, qpos, s.data.qpos), qvel=jnp.where(on, qvel, s.data.qvel), qacc_warmstart=jnp.where(on, 0.0, s.data.qacc_warmstart))
+        cmd = env.where_cmd(done, env.sample_cmd(kc, self.N), s.cmd)
+        return s._replace(data=d, a_last=jnp.where(on, 0.0, s.a_last), a_ode=jnp.where(on, 0.0, s.a_ode), cmd=cmd, t=jnp.where(done, 0, s.t),
+                          was_up=jnp.where(done, was_up, s.was_up), down=jnp.where(done, ~was_up, s.down), push_t=jnp.where(done, 0, s.push_t),
+                          push_at=jnp.where(done, self._push_interval(kp), s.push_at), ep_sums=jnp.where(on, 0.0, s.ep_sums))  # fmt: skip
+
+    def init(self, key) -> State:
+        N, J = self.N, env.J
+        k_world, k_reset, k_t, k_obs, key = jax.random.split(key, 5)
+        world = self.world(k_world)
+        data = jax.vmap(lambda q: self.dx.replace(qpos=q))(jnp.zeros((N, self.m.nq), jnp.float32))
+        z, zi, zb = jnp.zeros((N,), jnp.float32), jnp.zeros((N,), jnp.int32), jnp.zeros((N,), bool)
+        cmd = env.Cmd(jnp.zeros((N, 3)), z, zb, zb, z)
+        s = State(data, world, jnp.zeros((N, env.OBS_DIM)), jnp.zeros((N, J)), jnp.zeros((N, J)), cmd, jnp.zeros((N, 3)), zi, jnp.ones((N,), bool),
+                  jnp.zeros((N,), bool), zi, zi, jnp.zeros((N, len(env.TERMS))), key)  # fmt: skip
+        s = self._reset(s, jnp.ones((N,), bool), k_reset)
+        if self.random_start:  # episodes then end at different times (a get-up start keeps its full time to rise)
+            s = s._replace(t=jnp.where(s.down, 0, jax.random.randint(k_t, (N,), 0, env.MAX_EPISODE)))
+        S = unflatten(s.data.qpos, s.data.qvel)
+        c_obs = env.command(s.cmd, S[1])
+        frame = env.obs_frame(S, s.a_last, c_obs, k_obs)
+        return s._replace(c_obs=c_obs, obs=jnp.tile(frame, (1, env.HIST)))
+
+    # ------------------------------------------------------------------ physics
+    def contact_stats(self, data):
+        """Of the solver's current contacts: foot-ground contact (N, 2), self-collision above 10 N (N,), and a floor contact above 1 N on a
+        termination body (N,)."""
+        im, N = data._impl, self.N
+        valid = jnp.arange(im.contact__dist.shape[0]) < im.nacon[0]
+        w, rows = jnp.clip(im.contact__worldid, 0, N - 1), im.contact__efc_address
+        rows = rows.reshape(rows.shape[0], -1)
+        normal = (im.efc__force[w[:, None], jnp.maximum(rows, 0)] * (rows >= 0)).sum(-1)  # the normal force: the sum of a contact's rows
+        g0, g1 = im.contact__geom[:, 0], im.contact__geom[:, 1]
+        robot, side, term = jnp.asarray(self.robot_geom), jnp.asarray(self.foot_side), jnp.asarray(self.is_term)
+        floor = (g0 == self.floor_id) | (g1 == self.floor_id)
+        fside = jnp.maximum(side[g0], side[g1])
+        foot = valid & floor & (fside >= 0)
+        found = jnp.zeros((N, 2)).at[w, jnp.maximum(fside, 0)].max(foot.astype(jnp.float32))
+        selfc = valid & robot[g0] & robot[g1] & (jnp.abs(normal) > env.SELF_FORCE)
+        hit = jnp.zeros((N,)).at[w].max(selfc.astype(jnp.float32))
+        tc = valid & floor & (term[g0] | term[g1]) & (jnp.abs(normal) > env.CONTACT_FORCE)
+        touch = jnp.zeros((N,)).at[w].max(tc.astype(jnp.float32)) > 0
+        return found, hit, touch
+
+    def physics(self, world: World, data, target):
+        """4 substeps with the actuator's control recomputed before each; the feet's contact and the termination contact after the last
+        substep, and the number of substeps with a self-collision."""
+        mx = world.model.tree_replace({k: getattr(world, k) for k in WORLD_FIELDS})
+        step = jax.vmap(lambda m_, d, c: mjx.step(m_, d.replace(ctrl=c)), in_axes=(self.axes, 0, 0))
+
+        def sub(carry, _):
+            d, hits = carry
+            d = step(mx, d, env.actuator_ctrl(d.qpos[:, self.qa], d.qvel[:, self.va], target))
+            found, hit, touch = self.contact_stats(d)
+            return (d, hits + hit), (found, touch)
+
+        (data, hits), (found, touch) = jax.lax.scan(sub, (data, jnp.zeros((self.N,))), None, length=env.DECIMATION)
+        return data, found[-1], hits, touch[-1]
+
+    # ------------------------------------------------------------------ one policy step
+    def step(self, s: State, action, clean=None):
+        N = self.N
+        key, k_reset, k_cmd, k_obs, k_push, k_push_at = jax.random.split(s.key, 6)
+        a = action.astype(jnp.float32)
+        target = env.joint_target(a, s.world.bias)
+        data, contact, hits, touch = self.physics(s.world, s.data, target)
+        S0, S1 = unflatten(s.data.qpos, s.data.qvel), unflatten(data.qpos, data.qvel)
+        t = s.t + 1
+        v = self.view_state(S1)
+        diverged = ~(jnp.isfinite(data.qpos).all(-1) & jnp.isfinite(data.qvel).all(-1)) | (jnp.abs(data.qvel) > DIVERGED).any(-1)
+        up1 = env.is_up(v.height, S1[1])
+        terminated = jnp.where(s.was_up, touch, (t >= env.GETUP_STEPS) & ~up1) | diverged
+        was_up1 = s.was_up | up1
+        timeout = t >= env.MAX_EPISODE
+        terms = env.reward_terms(S0, S1, v.kin, a, s.a_last, s.c_obs, ~was_up1, terminated.astype(jnp.float32), contact, hits, self.q_soft)
+        parts = env.weighted(terms)
+        parts = jnp.where(diverged[:, None], 0.0, jnp.stack([parts[k] for k in env.TERMS], -1))
+        reward = parts.sum(-1)
+        done = terminated | timeout
+        ep_sums = s.ep_sums + parts
+        fin = done.astype(jnp.float32)
+        stats = {"reward": reward.mean(), "done": fin.sum(), "terminated": terminated.sum().astype(jnp.float32), "len_sum": (fin * t).sum(),
+                 "rew_sums": (fin[:, None] * ep_sums).sum(0) / env.EPISODE_S, "diverged": diverged.sum().astype(jnp.float32),
+                 "nacon": data._impl.nacon[0] / data._impl.contact__dist.shape[0],
+                 "term_geom": (((v.clearance.min(-1) < 0) == terminated) | diverged | ~s.was_up).mean(),  # imagination's geometric termination agrees
+                 "down_done": (fin * s.down).sum(), "down_up": (fin * s.down * was_up1).sum(), "up_frac": was_up1.mean(),
+                 "self_hits": hits.mean(), "foot_contact": contact.mean()}  # fmt: skip
+        s1 = s._replace(data=data, a_last=a, a_ode=a if clean is None else clean.astype(jnp.float32), t=t, was_up=was_up1, ep_sums=ep_sums)
+        s1 = self._reset(s1, done, k_reset)
+        cmd = env.tick(s1.cmd, k_cmd)
+        push_t = s1.push_t + 1
+        push = (push_t == s1.push_at) & self.push
+        qvel = s1.data.qvel  # a push overwrites the root's world xy velocity
+        qvel = qvel.at[:, :2].set(jnp.where(push[:, None], env.PUSH_VEL * jax.random.uniform(k_push, (N, 2), minval=-1.0, maxval=1.0), qvel[:, :2]))
+        s1 = s1._replace(data=s1.data.replace(qvel=qvel), push_t=jnp.where(push, 0, push_t), push_at=jnp.where(push, self._push_interval(k_push_at), s1.push_at))
+        stats["pushes"] = push.sum().astype(jnp.float32)
+        S2 = unflatten(s1.data.qpos, s1.data.qvel)
+        c_obs = env.command(cmd, S2[1])
+        obs = env.push_frame(s.obs, env.obs_frame(S2, s1.a_last, c_obs, k_obs), done)
+        s2 = s1._replace(obs=obs, cmd=cmd, c_obs=c_obs, key=key)
+        return s2, Transition(s.data.qpos, s.data.qvel, target, data.qpos, data.qvel, reward, terminated, timeout & ~terminated, diverged, parts,
+                              contact, v.clearance, stats)  # fmt: skip
