@@ -55,6 +55,10 @@ def evaluate_recovery(cfg, paths, args):
     names, poses, velocities = fallen_starts(cfg["floor_dir"])
     sim = Sim(len(names), cfg["nconmax"], cfg["njmax"], floor_dir=cfg["floor_dir"], robot=cfg["robot"],
               random_start=False, assist_newtons=0., obs_noise=False, randomize_world=False)
+    reference = zenbot.RecoveryReference(cfg["floor_dir"], sim.key_positions)
+    clips_by_name = {path.name: i for i, path in enumerate(reference.files)}
+    clips = jnp.asarray([clips_by_name[name] for name, _ in names])
+    offsets = jnp.asarray([round(sec / env.DT) for _, sec in names])
     steps = sim.episode_steps
     hold = round(1. / env.DT)
 
@@ -63,7 +67,7 @@ def evaluate_recovery(cfg, paths, args):
         data = s.data.replace(qpos=poses, qvel=velocities)
         frame = sim.obs_frame(unflatten(poses, velocities), s.a_last, s.c_obs, None)
         s = s._replace(data=data, obs=jnp.tile(frame, (1, sim.history)))
-        def step(state, _):
+        def step(state, frame_index):
             out = nets.pi_apply(pi, jnp.clip(nets.rn_apply(norm, state.obs), -args.obs_clip, args.obs_clip))
             act = nets.ode_step(out, state.a_ode, *ode) if ode is not None else out
             state, tr = sim.step(state, act)
@@ -71,16 +75,26 @@ def evaluate_recovery(cfg, paths, args):
             upright = quat_to_mat(tr.qpos1[:, 3:7])[:, 2, 2] > np.cos(np.pi / 6)
             posture = (height > zenbot.UP_HEIGHT) & (height <= 2 * zenbot.RISE_HEIGHT - zenbot.UP_HEIGHT) & upright
             loaded = tr.stats["foot_load"] >= 0.5 * zenbot.MASS * 9.81
-            return state, (posture, loaded, tr.terminated)
-        _, (posture, loaded, ended) = jax.lax.scan(step, s, None, length=steps)
-        return posture[-hold:].all(0) & (loaded[-hold:].sum(0) >= np.ceil(0.9 * hold)) & ~ended.any(0)
+            pose = sim.reference_pose(unflatten(tr.qpos1, tr.qvel1))
+            errors, active = reference.errors(pose, clips, offsets + frame_index + 1)
+            return state, (posture, loaded, tr.terminated, errors, active)
+        _, (posture, loaded, ended, errors, active) = jax.lax.scan(step, s, jnp.arange(steps))
+        passed = posture[-hold:].all(0) & (loaded[-hold:].sum(0) >= np.ceil(0.9 * hold)) & ~ended.any(0)
+        valid = active & (jnp.cumsum(ended, axis=0) == 0)
+        count = valid.sum()
+        mean = lambda x: jnp.where(valid, x, 0.).sum() / jnp.maximum(count, 1)
+        height, _, joints, points = errors
+        return passed, count, 100 * mean(jnp.sqrt(height)), jnp.sqrt(mean(joints)), 100 * jnp.sqrt(mean(points))
 
     run_j = jax.jit(run, static_argnums=(2,))
     with open(os.path.join(args.run, "eval.jsonl"), "w") as stream:
         for path in paths:
-            passed = np.asarray(run_j(*load(path, args.which)))
+            passed, count, height_cm, joint_rad, points_cm = map(np.asarray, run_j(*load(path, args.which)))
             result = {"ckpt": os.path.basename(path), "assist_n": 0., "duration_s": steps * env.DT,
                       "successes": int(passed.sum()), "total": len(passed), "getup_rate": float(passed.mean()),
+                      "reference_frames": int(count), "reference_height_mae_cm": float(height_cm) if count else None,
+                      "reference_joint_rmse_rad": float(joint_rad) if count else None,
+                      "reference_landmark_rmse_cm": float(points_cm) if count else None,
                       "starts": [{"clip": name, "offset_s": sec, "success": bool(ok)} for (name, sec), ok in zip(names, passed)]}
             stream.write(json.dumps(result) + "\n")
             print(f"{result['ckpt']} | unassisted get-up {passed.sum()}/{len(passed)}", flush=True)

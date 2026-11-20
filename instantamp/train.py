@@ -177,6 +177,7 @@ class ZenbotGetUpConfig(Config):
     amp_ramp: int = 0
     amp_lr: float = 1e-3
     amp_style_scale: float = 50.
+    reference_weight: float = 5.0  # per second while the selected native recovery clip is playing
     critic_hidden: str = "512,256,128"
     ppo_len: int = 24
     warmup_steps: int = 40
@@ -189,7 +190,7 @@ class InstantAMP:
         self.cfg = c = cfg
         set_jax(c.jax_cache)
         self.sim = Sim(c.num_envs, c.nconmax, c.njmax, c.walk_dir, c.floor_dir, bool(c.random_start), c.seed, c.reset_floor, c.prob_shove, bool(c.push),
-                       robot=c.robot, amp_wrists=bool(c.amp_wrists))
+                       robot=c.robot, amp_wrists=bool(c.amp_wrists), reference_weight=getattr(c, "reference_weight", 0.))
         self.J = self.JS = self.sim.J  # joints (actions, targets) and the world model's q, qd
         self.ode = bool(c.ode)
         self.ode_dmax = c.ode_dmax if c.ode_dmax > 0 else None
@@ -266,6 +267,8 @@ class InstantAMP:
                "bias": s.world.bias, "was_up": s.was_up, "obs": s.obs, "a_last": s.a_last, "a_ode": s.a_ode, "cmd": cmd, "c_obs": s.c_obs,
                "t": s.t, "done": (tr.terminated | tr.truncated).astype(jnp.float32), "term": tr.terminated.astype(jnp.float32),
                "r": tr.reward}  # fmt: skip
+        if self.sim.reference is not None:
+            rec["reference_clip"] = s.reference_clip
         if self.ppo and self.sim.recovery:
             rec.update(a=a, mu=mu)
         elif self.ppo:  # the action taken, the mean it was drawn around, and the unweighted tracking term (the locomotion style's gate)
@@ -413,7 +416,8 @@ class InstantAMP:
                 d = (t1 >= sim.episode_steps).astype(jnp.float32)
             recovering = ~up1
             terms = sim.reward_terms(S, S1, v1.kin, a, a_last, c_obs, recovering, d, sim.soft_contact(v1.soles), zeros, sim.q_soft,
-                                     torque=sim.robot.actuator_ctrl(S[4], S[5], target[..., -sim.J:]) if sim.recovery else None)
+                                     torque=sim.robot.actuator_ctrl(S[4], S[5], target[..., -sim.J:]) if sim.recovery else None,
+                                     clip=start.get("reference_clip"), step=t1)
             r = sum(sim.weighted(terms).values())
             if use_amp:  # the gates of the two styles at this step: the locomotion one while up, the get-up one while not yet up
                 frame1 = sim.amp_frame(S1)
@@ -586,7 +590,8 @@ class InstantAMP:
         return out, {**aux, "gn": gn, "gn_gated": (finite & ~ok).astype(jnp.float32)}
 
     # ------------------------------------------------------------------ iteration programs
-    SUMMED = ("done", "terminated", "len_sum", "rew_sums", "diverged", "down_done", "down_up", "pushes")
+    SUMMED = ("done", "terminated", "len_sum", "rew_sums", "diverged", "down_done", "down_up", "pushes",
+              "reference_score_sum", "reference_frames")
 
     def collect_iter(self, carry):
         key, k_c = jax.random.split(carry["key"])
@@ -769,6 +774,10 @@ def main(argv=None):
               **{k: float(np.mean([x[k] for x in ls])) for k in ls[0]}, **{k: float(v) for k, v in ev.items()}}  # fmt: skip
         if xs.sim.recovery:
             st["assist_n"] = float(np.mean([x["assist_n"] for x in cs]))
+        if xs.sim.reference is not None:
+            frames = sum(int(x["reference_frames"]) for x in cs)
+            if frames:
+                st["reference_pose_score"] = sum(float(x["reference_score_sum"]) for x in cs) / frames
         train_s = time.time() - t0
         it, env_steps = int(carry["it"]), float(carry["env_steps"])
         logf.write(json.dumps({"it": it, "train_s": train_s, "wall_s": time.time() - t_launch, "env_steps": env_steps, "nonfinite": int(carry["nonfinite"]), **st}) + "\n")

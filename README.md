@@ -146,11 +146,19 @@ fades linearly from 0.48 to 0.68 m and drops by 12.92 N for the resetting enviro
 exceeds 60% of its maximum. The reference-style discriminator uses LSGAN, a 1024/512 leaky-ReLU network, a style scale of 50 and
 a task/style mix of 0.5. One discriminator covers the entire recovery including the standing phase.
 
+The Zenbot recipe also tracks the selected reset clip at 50 Hz until its last frame.
+The reference reward compares pelvis height and tilt, the 23 joint angles and the six landmark positions
+in pelvis coordinates. The default weight is 5 per second before task/style mixing. Use
+`--reference_weight 0` to reproduce the previous reward. Both real PPO samples and world-model rollouts
+use the episode's clip and elapsed time. The actor uses its existing proprioceptive history at deployment.
+
 The policy optimizer remains InstantAMP's imagined rollouts, world-model gradients and real PPO minibatches.
 The real torque penalty reads the last physics substep. Imagination estimates it from delayed targets and predicted joint state.
 The default limit is 100,000 InstantAMP iterations, with one real step per environment per iteration.
 The reference PPO runner collects 24 real steps per environment per iteration. Set `--minutes` or `--max_iterations` for a shorter run.
 Evaluation measures unassisted recovery over the final second on fixed fallen starts.
+It also reports pelvis height MAE (cm), joint RMSE (rad) and landmark RMSE (cm) over the valid
+reference frames, aligned to each evaluation start's 0 or 0.5 s offset.
 
 ## Training
 

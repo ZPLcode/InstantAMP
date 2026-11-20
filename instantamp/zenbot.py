@@ -1,7 +1,11 @@
 """23-DoF Zenbot AMP controls in MJCF hinge order (motion_train, 43 kg variant)."""
 
+from pathlib import Path
+
 import jax.numpy as jnp
 import numpy as np
+
+from .rot import mv3, quat_to_mat, tr3
 
 # Each row gives the PD gains, action offset, and delayed-actuator group.
 # Group IDs correspond to hips/waist yaw, knees, ankles,
@@ -55,6 +59,51 @@ def actuator_ctrl(q, qd, target):
 WEIGHTS = {"joint_acc_l2": -1e-7, "action_rate_l2": -0.005, "joint_torques_l2": -2e-6,
            "joint_pos_limits": -10., "ang_vel_xy": 2., "lin_vel_xy": 2., "target_orientation": 2.,
            "target_base_height": 5., "target_joint_deviation_l2": -0.1}
+
+
+class RecoveryReference:
+    """Phase-aligned poses for the native Zenbot clips used to initialize episodes."""
+
+    def __init__(self, directory, key_positions):
+        self.files = sorted(Path(directory).glob("*.npz"))
+        poses, lengths = [], []
+        for path in self.files:
+            with np.load(path) as clip:
+                pos, q = clip["root_pos"], clip["dof_pos"]
+                if float(clip["fps"]) != 50 or not len(pos) or q.shape != (len(pos), len(DOF)):
+                    raise ValueError(f"Expected a 50 Hz Zenbot reference in {path}")
+                rot = quat_to_mat(clip["root_quat"][:, [3, 0, 1, 2]])
+                points = clip["key_body_pos"] if "key_body_pos" in clip else key_positions(pos, rot, q)
+                poses.append(self.pose(pos, rot, q, points))
+                lengths.append(len(pos))
+        if not lengths:
+            raise ValueError(f"No Zenbot references in {directory}")
+        self.poses = jnp.concatenate(poses)
+        self.offsets = jnp.asarray(np.cumsum([0, *lengths[:-1]]), dtype=jnp.int32)
+        self.lengths = jnp.asarray(lengths, dtype=jnp.int32)
+
+    @staticmethod
+    def pose(pos, rot, q, points):
+        # Landmark coordinates in the pelvis frame and world vertical in that frame.
+        local = mv3(tr3(rot)[..., None, :, :], points - pos[..., None, :])
+        return jnp.concatenate((pos[..., 2:3], rot[..., 2, :], q, local.reshape(*q.shape[:-1], -1)), axis=-1)
+
+    def errors(self, pose, clip, step):
+        index = self.offsets[clip] + jnp.clip(step, 0, self.lengths[clip] - 1)
+        delta = pose - self.poses[index]
+        height = delta[..., 0] ** 2
+        tilt = (delta[..., 1:4] ** 2).sum(-1)
+        joints = (delta[..., 4:4 + len(DOF)] ** 2).mean(-1)
+        landmarks = delta[..., 4 + len(DOF):].reshape(*height.shape, len(KEY_BODIES), 3)
+        points = (landmarks ** 2).sum(-1).mean(-1)
+        return (height, tilt, joints, points), (step >= 0) & (step < self.lengths[clip])
+
+    def score(self, pose, clip, step):
+        errors, active = self.errors(pose, clip, step)
+        # Half reward at 15 cm pelvis/landmark error, ~29 degrees tilt, or 0.5 rad joint RMS.
+        scales = (0.15, 0.5, 0.5, 0.15)
+        score = sum(1 / (1 + error / scale**2) for error, scale in zip(errors, scales)) / len(scales)
+        return jnp.where(active, score, 0.)
 
 
 def reward_terms(state, next_state, action, last_action, torque, limits, dt):

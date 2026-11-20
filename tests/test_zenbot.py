@@ -83,6 +83,7 @@ def test_robot_cli_paths():
     assert cfg.amp_getup_dir == cfg.floor_dir == "data/zenbot23_getup/recovery"
     assert cfg.max_iterations == 100_000 and cfg.ppo_len == 24
     assert cfg.push == 0 and cfg.amp_getup == 0 and cfg.amp_style_scale == 50.
+    assert cfg.reference_weight == 5.
     assert parse([]).log_dir == "runs/instantamp"
 
 
@@ -102,3 +103,22 @@ def test_recovery_reward_and_observations(sim):
     np.testing.assert_allclose(obs[:, -41:-18], 2)
     np.testing.assert_allclose(obs[:, -18:], disc[:, -18:])
     np.testing.assert_allclose(disc[:, :6], [[1, 0, 0, 0, 0, 1]] * 2)
+
+
+def test_zenbot_reference_clip_phase_and_gradient(sim, tmp_path):
+    with np.load(tmp_path / "test.npz") as clip:
+        shifted = dict(clip)
+    shifted["root_pos"] = shifted["root_pos"][:12].copy()
+    shifted["root_pos"][:, 2] += 0.25
+    shifted = {k: v[:12] if v.ndim else v for k, v in shifted.items()}
+    np.savez(tmp_path / "two.npz", **shifted)
+    reference = zenbot.RecoveryReference(tmp_path, sim.key_positions)
+    np.testing.assert_array_equal(reference.lengths, [20, 12])
+    state = reference.poses[reference.offsets[1] + 5]
+    clip, step = jnp.array(1), jnp.array(5)
+    assert reference.score(state, clip, step) == pytest.approx(1.)
+    assert reference.score(state, 0, step) < 1.
+    assert reference.score(state, clip, step + 4) < 1.
+    assert reference.score(state, clip, 12) == 0.
+    grad = jax.grad(lambda height: reference.score(state.at[0].set(height), clip, step))(state[0] - 0.12)
+    assert np.isfinite(grad) and grad > 0

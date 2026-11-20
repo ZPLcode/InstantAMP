@@ -195,6 +195,7 @@ class State(NamedTuple):
     key: jax.Array
     assist: jax.Array  # per-world curriculum force in newtons
     delay_steps: jax.Array  # per actuator group, in physics steps
+    reference_clip: jax.Array | None = None  # selected reset clip for phase-aligned Zenbot rewards
 
 
 class Transition(NamedTuple):
@@ -246,7 +247,7 @@ def load_bank(directory: str, joints: int = env.J, first_only=False):
 class Sim:
     def __init__(self, num_envs: int = 4096, nconmax: int = NCONMAX, njmax: int = NJMAX, walk_dir: str | None = None,
                  floor_dir: str | None = None, random_start: bool = True, seed: int = 0, reset_floor: float = 0.2,
-                 prob_shove: float = 0.0, push: bool = True, physics: bool = True, robot: str = "g1", amp_wrists: bool = True, assist_newtons=None, obs_noise=True, randomize_world=True):  # fmt: skip
+                 prob_shove: float = 0.0, push: bool = True, physics: bool = True, robot: str = "g1", amp_wrists: bool = True, assist_newtons=None, obs_noise=True, randomize_world=True, reference_weight=0.):  # fmt: skip
         """physics=False: everything but MuJoCo Warp's model and data (no GPU): the scene, kinematics, reset banks and `_fresh`, for
         checks on the CPU."""
         self.N, self.random_start, self.seed = num_envs, random_start, seed
@@ -259,6 +260,10 @@ class Sim:
         self.randomize_world = randomize_world
         self.noisy_obs = obs_noise
         self.weights = zenbot.WEIGHTS if self.recovery else env.WEIGHTS
+        if reference_weight:
+            if not self.recovery or not np.isfinite(reference_weight) or reference_weight < 0:
+                raise ValueError("reference_weight requires a finite positive weight for Zenbot recovery")
+            self.weights = {**self.weights, "motion_reference": reference_weight}
         self.terms = tuple(self.weights) if self.recovery else env.TERMS
         self.episode_steps = 500 if self.recovery else env.MAX_EPISODE
         self.world_fields = WORLD_FIELDS + (("body_mass", "body_subtreemass") if self.recovery else ())
@@ -307,6 +312,7 @@ class Sim:
         self.robot_geom = np.asarray([m.body(int(m.geom_bodyid[g])).name.startswith("robot_") for g in range(m.ngeom)])
         walk_default, floor_default = motion_dirs(robot)
         self.walk = load_bank((floor_dir or floor_default) if self.recovery else (walk_dir or walk_default), self.J, first_only=self.recovery)
+        self.reference = zenbot.RecoveryReference(floor_dir or floor_default, self.key_positions) if reference_weight else None
         self.floor = resets.load(floor_dir or floor_default, "floor", profile.UP_HEIGHT, env.UP_TILT, self.J) if reset_floor > 0 and not self.recovery else resets.empty(self.J)
         if not physics:
             return
@@ -368,9 +374,16 @@ class Sim:
     def weighted(self, terms):
         return {k: env.DT * self.weights[k] * terms[k] for k in self.terms}
 
-    def reward_terms(self, *args, torque=None):
+    def reference_pose(self, state):
+        pos, rot, _, _, q, _ = state
+        return zenbot.RecoveryReference.pose(pos, rot, q, self.key_positions(pos, rot, q))
+
+    def reward_terms(self, *args, torque=None, clip=None, step=None):
         if self.recovery:
-            return zenbot.reward_terms(args[0], args[1], args[3], args[4], torque, self.q_soft, env.DT)
+            terms = zenbot.reward_terms(args[0], args[1], args[3], args[4], torque, self.q_soft, env.DT)
+            if self.reference is not None:
+                terms["motion_reference"] = self.reference.score(self.reference_pose(args[1]), clip, step)
+            return terms
         return env.reward_terms(*args, wrist_idx=self.robot.WRIST_IDX, default_q=self.robot.DEFAULT_Q,
                                 rise_height=self.robot.RISE_HEIGHT)
 
@@ -432,13 +445,13 @@ class Sim:
         u = jax.random.uniform(key, (self.N,), minval=env.PUSH_INTERVAL[0], maxval=env.PUSH_INTERVAL[1])
         return (u / env.DT).astype(jnp.int32)
 
-    def _fresh(self, key, world: World):
+    def _fresh(self, key, world: World, clip=None):
         """Fresh start states for every env (`_reset` applies them where an episode ended): a walking frame (no noise, the clip's
         heading), or with probability reset_floor a not-up frame of a get-up clip (random heading, roll / pitch / joint / velocity
         noise); prob_shove of the starts that are up get a kick of the velocities."""
         N, J = self.N, self.J
         kw, kf, ku, ks, kk1, kk2 = jax.random.split(key, 6)
-        i = jax.random.randint(kw, (N,), 0, world.walk["z"].shape[0])
+        i = jax.random.randint(kw, (N,), 0, world.walk["z"].shape[0]) if clip is None else clip
         wb = world.walk
         q = jnp.clip(wb["q"][i], self.q_soft[:, 0], self.q_soft[:, 1])
         qpos = jnp.concatenate((jnp.zeros((N, 2)), wb["z"][i][:, None], wb["quat"][i], q), -1)
@@ -463,7 +476,11 @@ class Sim:
     def _reset(self, s: State, done, key) -> State:
         """Reset the envs where `done`: start state (`_fresh`), command drawn anew, last action zero, push schedule restarted."""
         kf, kc, kp = jax.random.split(key, 3)
-        qpos, qvel, was_up = self._fresh(kf, s.world)
+        clip = None
+        if self.reference is not None:
+            clip = jax.random.randint(jax.random.split(kf, 6)[0], (self.N,), 0, len(self.reference.files))
+            s = s._replace(reference_clip=jnp.where(done, clip, s.reference_clip))
+        qpos, qvel, was_up = self._fresh(kf, s.world, clip)
         on = done[:, None]
         d = s.data.replace(qpos=jnp.where(on, qpos, s.data.qpos), qvel=jnp.where(on, qvel, s.data.qvel), qacc_warmstart=jnp.where(on, 0.0, s.data.qacc_warmstart))
         cmd = env.where_cmd(done, env.sample_cmd(kc, self.N), s.cmd)
@@ -483,6 +500,8 @@ class Sim:
         cmd = env.Cmd(jnp.zeros((N, 3)), z, zb, zb, z)
         s = State(data, world, jnp.zeros((N, self.obs_dim)), jnp.zeros((N, J)), jnp.zeros((N, J)), cmd, jnp.zeros((N, 3)), zi, jnp.ones((N,), bool),
                   jnp.zeros((N,), bool), zi, zi, jnp.zeros((N, len(self.terms))), key, jnp.full((N,), self.assist_newtons, jnp.float32), jnp.zeros((N, 5 if self.recovery else 0), jnp.int32))  # fmt: skip
+        if self.reference is not None:
+            s = s._replace(reference_clip=zi)
         s = self._reset(s, jnp.ones((N,), bool), k_reset)
         if self.random_start and not self.recovery:  # episodes then end at different times (a get-up start keeps its full time to rise)
             s = s._replace(t=jnp.where(s.down, 0, jax.random.randint(k_t, (N,), 0, env.MAX_EPISODE)))
@@ -557,7 +576,8 @@ class Sim:
         if self.recovery:
             terminated = diverged
         timeout = t >= self.episode_steps
-        terms = self.reward_terms(S0, S1, v.kin, a, s.a_last, s.c_obs, ~was_up1, terminated.astype(jnp.float32), contact, hits, self.q_soft, torque=data.ctrl)
+        terms = self.reward_terms(S0, S1, v.kin, a, s.a_last, s.c_obs, ~was_up1, terminated.astype(jnp.float32), contact, hits, self.q_soft,
+                                  torque=data.ctrl, clip=s.reference_clip, step=t)
         parts = self.weighted(terms)
         parts = jnp.where(diverged[:, None], 0.0, jnp.stack([parts[k] for k in self.terms], -1))
         reward = parts.sum(-1)
@@ -571,6 +591,10 @@ class Sim:
                  "down_done": (fin * s.down).sum(), "down_up": (fin * s.down * was_up1).sum(), "up_frac": was_up1.mean(),
                  "self_hits": hits.mean(), "foot_contact": contact.mean()}  # fmt: skip
         s1 = s._replace(data=data, a_last=a, a_ode=a if clean is None else clean.astype(jnp.float32), t=t, was_up=was_up1, ep_sums=ep_sums)
+        if self.reference is not None:
+            valid = (t < self.reference.lengths[s.reference_clip]) & ~diverged
+            stats["reference_score_sum"] = jnp.where(valid, terms["motion_reference"], 0.).sum()
+            stats["reference_frames"] = valid.sum()
         if self.recovery:
             height_score = ep_sums[:, self.terms.index("target_base_height")] / (self.episode_steps * env.DT)
             avg = (height_score * fin).sum() / jnp.maximum(fin.sum(), 1)
