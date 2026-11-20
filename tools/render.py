@@ -25,7 +25,7 @@ import sys  # noqa: E402
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from instantamp import env, nets  # noqa: E402
-from instantamp.evaluate import load  # noqa: E402
+from instantamp.inference import load, policy_output  # noqa: E402
 from instantamp.sim import XML, ZENBOT_XML, Sim, unflatten  # noqa: E402
 
 MESH_DIR = os.path.join(os.path.dirname(XML), "meshes")
@@ -62,13 +62,13 @@ def rollout(run, ckpt, n, seconds, seed):
     cfg = json.load(open(os.path.join(run, "config.json")))
     pi, norm, ode = load(ckpt)
     sim = Sim(n, cfg.get("nconmax", 64), cfg.get("njmax", 640), cfg["walk_dir"], cfg["floor_dir"], True, seed, cfg["reset_floor"],
-              cfg["prob_shove"], bool(cfg["push"]), robot=cfg.get("robot", "g1"), assist_newtons=0., obs_noise=cfg.get("robot", "g1") == "g1")  # fmt: skip
+              cfg["prob_shove"], bool(cfg["push"]), robot=cfg.get("robot", "g1"), assist_newtons=0., obs_noise=cfg.get("robot", "g1") == "g1",
+              g1_style=bool(cfg.get("g1_style", 0)), getup_rise_weight=cfg.get("getup_rise_weight", -0.25))  # fmt: skip
 
     @jax.jit
     def go(s, key):
         def body(s, k):
-            o = jnp.clip(nets.rn_apply(norm, s.obs), -10, 10)
-            out = nets.pi_apply(pi, o)
+            out = policy_output(pi, norm, s.obs, cfg.get("obs_clip", 10.))
             s1, tr = sim.step(s, nets.ode_step(out, s.a_ode, *ode) if ode is not None else out)
             return s1, (tr.qpos1, tr.qvel1, tr.terminated | tr.truncated, tr.terminated, s.c_obs, s.was_up, s.down)
 

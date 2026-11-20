@@ -17,19 +17,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from . import env, nets, zenbot
+from .inference import load, policy_output
 from .rot import mv3, quat_to_mat, tr3
 from .sim import Sim, unflatten
-
-
-def load(path, which="avg"):
-    z = np.load(path)
-    layers, i = [], 0
-    while f"{which}/{i}/w" in z.files:
-        layers.append({k.split("/")[-1]: jnp.asarray(z[k]) for k in z.files if k.startswith(f"{which}/{i}/")})
-        i += 1
-    norm = {"mean": jnp.asarray(z["obs_norm/mean"]), "var": jnp.asarray(z["obs_norm/var"])}
-    ode = (float(z["ode/dmax"]) or None, float(z["ode/amax"]) or None) if "ode/dmax" in z.files else None
-    return layers, norm, ode
 
 
 def fallen_starts(directory):
@@ -68,7 +58,7 @@ def evaluate_recovery(cfg, paths, args):
         frame = sim.obs_frame(unflatten(poses, velocities), s.a_last, s.c_obs, None)
         s = s._replace(data=data, obs=jnp.tile(frame, (1, sim.history)))
         def step(state, frame_index):
-            out = nets.pi_apply(pi, jnp.clip(nets.rn_apply(norm, state.obs), -args.obs_clip, args.obs_clip))
+            out = policy_output(pi, norm, state.obs, args.obs_clip)
             act = nets.ode_step(out, state.a_ode, *ode) if ode is not None else out
             state, tr = sim.step(state, act)
             height = tr.qpos1[:, 2]
@@ -119,13 +109,13 @@ def main(argv=None):
     if cfg.get("robot") == "zenbot23_getup":
         return evaluate_recovery(cfg, ckpts, a)
     sim = Sim(a.n, cfg.get("nconmax", 64), cfg.get("njmax", 640), cfg["walk_dir"], cfg["floor_dir"], True, 123, cfg["reset_floor"], cfg["prob_shove"],
-              bool(cfg["push"]), robot=cfg.get("robot", "g1"))  # fmt: skip
+              bool(cfg["push"]), robot=cfg.get("robot", "g1"), g1_style=bool(cfg.get("g1_style", 0)),
+              getup_rise_weight=cfg.get("getup_rise_weight", -0.25))  # fmt: skip
 
     def run(pi, norm, ode, key):
         def body(carry, k):
             s, acc = carry
-            o = jnp.clip(nets.rn_apply(norm, s.obs), -a.obs_clip, a.obs_clip)
-            out = nets.pi_apply(pi, o)
+            out = policy_output(pi, norm, s.obs, a.obs_clip)
             act = nets.ode_step(out, s.a_ode, *ode) if ode is not None else out
             s1, tr = sim.step(s, act)
             S1 = unflatten(tr.qpos1, tr.qvel1)

@@ -1,0 +1,54 @@
+"""Sampling regressions for the G1 segmented and untrimmed get-up banks."""
+
+import os
+
+os.environ.setdefault("JAX_PLATFORMS", "cpu")
+
+import jax
+import numpy as np
+
+from instantamp.getup_amp import GetupDemos
+
+
+class MotionFeatures:
+    J = 1
+
+    @staticmethod
+    def amp_frame(state):
+        return state[4]
+
+    @staticmethod
+    def is_up(height, rotation):
+        return height > 0.60
+
+
+def write_clip(path, height, first_joint_value):
+    height = np.asarray(height, dtype=np.float32)
+    n = len(height)
+    pos = np.zeros((n, 3), np.float32)
+    pos[:, 2] = height
+    vel = np.gradient(pos, axis=0) * 50
+    joints = (first_joint_value + np.arange(n, dtype=np.float32))[:, None]
+    np.savez(path, fps=50, root_pos=pos, root_quat=np.tile([0., 0., 0., 1.], (n, 1)),
+             dof_pos=joints, dof_vel=joints * 0, root_ang_vel=pos * 0, root_lin_vel=vel)
+    return vel[:, 2]
+
+
+def test_forward_windows_include_standing_and_balance_clips(tmp_path):
+    vz = write_clip(tmp_path / "a.npz", [.10, .30, .65, .72], 10)
+    write_clip(tmp_path / "b.npz", np.linspace(.12, .72, 20), 200)
+    bank = GetupDemos(tmp_path, MotionFeatures(), 3, segmented=True)
+    assert bank.n_windows == 2 + 18
+    np.testing.assert_allclose(bank.frames[:4, -2], [.10, .30, .65, .72])
+    np.testing.assert_allclose(bank.frames[:4, -1], vz)
+    windows = np.asarray(jax.jit(lambda key: bank.sample(key, 4096))(jax.random.PRNGKey(12)))
+    assert np.all(np.diff(windows[..., 0], axis=1) == 1)  # contiguous, never crosses clips
+    assert .45 < np.mean(windows[:, 0, 0] < 100) < .55
+    assert np.any((windows[:, 0, 0] == 11) & (windows[:, -1, -2] > .70))
+
+
+def test_legacy_windows_keep_only_all_down_frames(tmp_path):
+    write_clip(tmp_path / "sequence.npz", [.12, .30, .50, .70, .65, .42, .30, .15], 0)
+    bank = GetupDemos(tmp_path, MotionFeatures(), 3)
+    np.testing.assert_array_equal(bank.starts, [0, 5])
+    assert bank.frames.shape == (8, 1)

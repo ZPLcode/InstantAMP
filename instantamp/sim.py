@@ -247,7 +247,7 @@ def load_bank(directory: str, joints: int = env.J, first_only=False):
 class Sim:
     def __init__(self, num_envs: int = 4096, nconmax: int = NCONMAX, njmax: int = NJMAX, walk_dir: str | None = None,
                  floor_dir: str | None = None, random_start: bool = True, seed: int = 0, reset_floor: float = 0.2,
-                 prob_shove: float = 0.0, push: bool = True, physics: bool = True, robot: str = "g1", amp_wrists: bool = True, assist_newtons=None, obs_noise=True, randomize_world=True, reference_weight=0.):  # fmt: skip
+                 prob_shove: float = 0.0, push: bool = True, physics: bool = True, robot: str = "g1", amp_wrists: bool = True, assist_newtons=None, obs_noise=True, randomize_world=True, reference_weight=0., g1_style=False, getup_rise_weight=-0.25):  # fmt: skip
         """physics=False: everything but MuJoCo Warp's model and data (no GPU): the scene, kinematics, reset banks and `_fresh`, for
         checks on the CPU."""
         self.N, self.random_start, self.seed = num_envs, random_start, seed
@@ -260,6 +260,8 @@ class Sim:
         self.randomize_world = randomize_world
         self.noisy_obs = obs_noise
         self.weights = zenbot.WEIGHTS if self.recovery else env.WEIGHTS
+        if g1_style:
+            self.weights = {**self.weights, "rise": getup_rise_weight}
         if reference_weight:
             if not self.recovery or not np.isfinite(reference_weight) or reference_weight < 0:
                 raise ValueError("reference_weight requires a finite positive weight for Zenbot recovery")
@@ -313,7 +315,8 @@ class Sim:
         walk_default, floor_default = motion_dirs(robot)
         self.walk = load_bank((floor_dir or floor_default) if self.recovery else (walk_dir or walk_default), self.J, first_only=self.recovery)
         self.reference = zenbot.RecoveryReference(floor_dir or floor_default, self.key_positions) if reference_weight else None
-        self.floor = resets.load(floor_dir or floor_default, "floor", profile.UP_HEIGHT, env.UP_TILT, self.J) if reset_floor > 0 and not self.recovery else resets.empty(self.J)
+        self.floor = resets.load(floor_dir or floor_default, "floor", profile.UP_HEIGHT, env.UP_TILT, self.J,
+                                 first_frames=20 if g1_style else None) if reset_floor > 0 and not self.recovery else resets.empty(self.J)
         if not physics:
             return
         self.mx = mjx.put_model(m, impl="warp")

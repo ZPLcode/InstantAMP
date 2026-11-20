@@ -52,7 +52,7 @@ def _centered_mean(x, n=CMD_WINDOW):
     return (c[n:] - c[:-n]) / n
 
 
-def load(directory: str, kind: str, up_height: float, up_tilt: float, joints: int | None = None):
+def load(directory: str, kind: str, up_height: float, up_tilt: float, joints: int | None = None, first_frames: int | None = None):
     """The bank of the clips in `directory`. kind "walk": every frame; "floor": the frames that are not up (pelvis at or below
     up_height, or tilted by up_tilt or more)."""
     files = sorted(glob.glob(os.path.join(directory, "*.npz")))
@@ -68,6 +68,8 @@ def load(directory: str, kind: str, up_height: float, up_tilt: float, joints: in
         if kind == "floor":
             x, y = quat[:, 0], quat[:, 1]
             keep = (z <= up_height) | (2 * (x * x + y * y) >= up_tilt)
+            if first_frames is not None:
+                keep[first_frames:] = False
         cmd = _centered_mean(_heading_velocity(quat, d["root_lin_vel"], d["root_ang_vel"]))
         for k, a in (("z", z), ("quat", _wxyz(quat)), ("v", d["root_lin_vel"]), ("w", d["root_ang_vel"]), ("q", d["dof_pos"]), ("qd", d["dof_vel"]), ("cmd", cmd)):
             cols[k].append(a[keep])

@@ -120,6 +120,48 @@ To use your own clips, convert them with [`tools/convert_motions.py`](tools/conv
 `.npz` clip holds `fps` (50), `root_pos`, `root_quat` (x, y, z, w), `root_lin_vel`, `root_ang_vel` (world frame), `dof_pos` and
 `dof_vel` (29 joints in the order of `instantamp/env.py`'s `DOF`).
 
+## G1 recovery style
+
+The G1 recovery experiment uses the original 29-joint actor and native 50 Hz motions.
+The preparation tool extracts 61 forward rises from five takes. It reserves the entire
+`fallAndGetUp1_subject1` take for evaluation of the fine-tuning. The original G1
+checkpoint was trained on all six untrimmed takes.
+
+```bash
+python tools/prepare_g1_rises.py
+python -m instantamp.train --g1_style 1 --num_envs 4096 \
+  --init_g1_full runs/g1_4096_20261120_01/ckpt/full/0011.npz \
+  --buffer_steps 128 --amp_batch 1024 --wm_batch 768 --pi_batch 640 \
+  --wm_only_iters 80 --pi_ema 0.99 --max_iterations 850 --minutes 0 \
+  --ckpt_minutes 1000 --log_dir runs/g1_style_replica
+python tools/export_g1_arm_blend.py runs/g1_4096_20261120_01/ckpt/0011.npz \
+  runs/g1_style_replica/ckpt/0000.npz --out runs/g1_arm_recovery
+python tools/evaluate_g1_style.py runs/g1_4096_20261120_01/ckpt/0011.npz \
+  runs/g1_arm_recovery/ckpt/best.npz --out runs/g1_arm_recovery/comparison.json \
+  --gif runs/g1_arm_recovery/comparison.gif
+```
+
+Fine-tuning starts from the averaged baseline actor and copies the world model,
+observation statistics, critic, and walking discriminator. A new least-squares recovery
+discriminator observes ten consecutive frames including pelvis height and vertical
+velocity. It scores the first four seconds of a floor-start episode. Half the resets
+come from the opening 0.4 seconds of a recovery. The commands above save the final
+actor at iteration 850. In the original run, this actor is checkpoint 0001.
+
+The exported policy blends up to 20% of the fine-tuned actor's shoulder, elbow and
+wrist action increments into the baseline. Projected gravity and knee flexion set
+the blend at each step. The baseline controls the waist and legs. Both actors use
+their own observation statistics and share one action integrator. Load the export
+through `instantamp.inference.load` and call `policy_output` before the usual ODE
+integration. The native renderer and evaluator also accept the exported run directory.
+
+On the eleven fixed starts from the reserved take, both policies stood up within
+five seconds and stayed upright through seconds five to six. Comparing corresponding
+fractions of the rise, median wrist error fell from 37.3 to 36.4 cm, ankle error
+from 56.7 to 55.6 cm, and joint error from 0.704 to 0.683 rad. The reference took
+2.34 s to rise at the median. The original and exported policies took 0.82 and
+0.80 s. The comparison uses nominal physics and zero assistance.
+
 ## Zenbot 23-DoF get-up
 
 The `zenbot23_getup` task uses the 43.0678308 kg articulation from
