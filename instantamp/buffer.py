@@ -73,7 +73,7 @@ def gather(buf, rows, envs):
     return {k: (v[rows, envs].astype(jnp.float32) if v.dtype == jnp.float16 else v[rows, envs]) for k, v in buf.items() if k not in ("ptr", "size")}
 
 
-def sample_windows(buf, key, B: int, k: int, recent: int = 0, envs=None):
+def sample_windows(buf, key, B: int, k: int, recent: int = 0, envs=None, recovery_lengths=None):
     """B windows of k consecutive transitions, each from one env: (B, k, ...), and their validity mask (B, k). Transition j counts
     while transitions 0..j are finite and no earlier transition in the window ended its env's run of consecutive states (the
     env was done, or the next transition starts elsewhere, for example after a push). The transition after the window is read
@@ -84,6 +84,22 @@ def sample_windows(buf, key, B: int, k: int, recent: int = 0, envs=None):
     n = buf["size"] - k
     t0 = _uniform_int(kt, n, B) if recent <= 0 else jnp.maximum(n - recent, 0) + _uniform_int(kt, jnp.minimum(n, recent), B)
     env = jax.random.randint(ke, (B,), 0, N) if envs is None else jnp.asarray(envs)[jax.random.randint(ke, (B,), 0, len(envs))]
+    if recovery_lengths is not None:
+        # Sample the end of a complete recovery window, within the most recent filled rows.
+        available_envs = jnp.arange(N) if envs is None else jnp.asarray(envs)
+        age = (jnp.arange(_T(buf)) - (buf["ptr"] - buf["size"])) % _T(buf)
+        clip = buf["reference_clip"][:, available_envs]
+        end = buf["t"][:, available_envs]
+        source = buf["reference_start"][:, available_envs] + end
+        oldest = jnp.maximum(k - 1, buf["size"] - recent - 1) if recent else k - 1
+        eligible = ((age >= oldest) & (age < buf["size"] - 1))[:, None]
+        eligible &= (clip >= 0) & (end >= k-1) & (source < recovery_lengths[jnp.maximum(0, clip)])
+        prefix = jnp.cumsum(eligible.reshape(-1), dtype=jnp.int32)
+        selected = jnp.searchsorted(prefix, jax.random.randint(jax.random.fold_in(key, 1), (B,), 0,
+                                                               jnp.maximum(prefix[-1], 1)), side="right")
+        row, col = jnp.divmod(jnp.minimum(selected, prefix.size-1), len(available_envs))
+        t0 = jnp.where(prefix[-1] > 0, age[row] - (k-1), t0)
+        env = jnp.where(prefix[-1] > 0, available_envs[col], env)
     rows = _rows(buf, t0[:, None] + jnp.arange(k + 1))
     w = gather(buf, rows, env[:, None])
     nxt_q, nxt_v = w["s_qpos"][:, 1:], w["s_qvel"][:, 1:]

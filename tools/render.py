@@ -63,7 +63,9 @@ def rollout(run, ckpt, n, seconds, seed):
     pi, norm, ode = load(ckpt)
     sim = Sim(n, cfg.get("nconmax", 64), cfg.get("njmax", 640), cfg["walk_dir"], cfg["floor_dir"], True, seed, cfg["reset_floor"],
               cfg["prob_shove"], bool(cfg["push"]), robot=cfg.get("robot", "g1"), assist_newtons=0., obs_noise=cfg.get("robot", "g1") == "g1",
-              g1_style=bool(cfg.get("g1_style", 0)), getup_rise_weight=cfg.get("getup_rise_weight", -0.25))  # fmt: skip
+              g1_style=bool(cfg.get("g1_style", 0)), getup_rise_weight=cfg.get("getup_rise_weight", -0.25),
+              g1_support_friction=bool(cfg.get("g1_support_friction", 0)), getup_reset_frames=cfg.get("getup_reset_frames", 20),
+              g1_phase_amp=bool(cfg.get("g1_phase_share", 0.)))  # fmt: skip
 
     @jax.jit
     def go(s, key):
@@ -147,7 +149,7 @@ def main():
                  f"robot vx {vel[i, e, 0]:+.2f}  vy {vel[i, e, 1]:+.2f}  wz {wz[i, e]:+.2f}",
                  "up" if was_up[i, e] else "getting up"] for i in range(n_steps)]  # fmt: skip
 
-    if cfg.get("robot") == "zenbot23_getup":
+    if cfg.get("robot") in ("zenbot23_getup", "g1_getup"):
         n = int(a.getup_s / env.DT)
         e = 0
         labels = [[f"pelvis height {q[i, e, 2]:.2f} m", "assistance 0 N"] for i in range(n)]

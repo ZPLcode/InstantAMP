@@ -52,13 +52,15 @@ def _centered_mean(x, n=CMD_WINDOW):
     return (c[n:] - c[:-n]) / n
 
 
-def load(directory: str, kind: str, up_height: float, up_tilt: float, joints: int | None = None, first_frames: int | None = None):
+def load(directory: str, kind: str, up_height: float, up_tilt: float, joints: int | None = None, first_frames: int | None = None, source_indices=False):
     """The bank of the clips in `directory`. kind "walk": every frame; "floor": the frames that are not up (pelvis at or below
     up_height, or tilted by up_tilt or more)."""
     files = sorted(glob.glob(os.path.join(directory, "*.npz")))
     assert files, f"no clips in {directory} (bash tools/download_data.sh)"
     cols = {k: [] for k in ("z", "quat", "v", "w", "q", "qd", "cmd")}
-    for f in files:
+    if source_indices:
+        cols.update(clip=[], frame=[])
+    for clip_index, f in enumerate(files):
         d = np.load(f)
         assert int(d["fps"]) == 50, f
         if joints is not None and d["dof_pos"].shape[1] != joints:
@@ -70,12 +72,16 @@ def load(directory: str, kind: str, up_height: float, up_tilt: float, joints: in
             keep = (z <= up_height) | (2 * (x * x + y * y) >= up_tilt)
             if first_frames is not None:
                 keep[first_frames:] = False
+        if source_indices:
+            frames = np.flatnonzero(keep)
+            cols["clip"].append(np.full(len(frames), clip_index, np.int32))
+            cols["frame"].append(frames)
         cmd = _centered_mean(_heading_velocity(quat, d["root_lin_vel"], d["root_ang_vel"]))
         for k, a in (("z", z), ("quat", _wxyz(quat)), ("v", d["root_lin_vel"]), ("w", d["root_ang_vel"]), ("q", d["dof_pos"]), ("qd", d["dof_vel"]), ("cmd", cmd)):
             cols[k].append(a[keep])
     if not any(len(z) for z in cols["z"]):
         raise ValueError(f"No {kind} reset frames in {directory}")
-    return {k: jnp.asarray(np.concatenate(v, 0), jnp.float32) for k, v in cols.items()}
+    return {k: jnp.asarray(np.concatenate(v, 0), jnp.int32 if k in ("clip", "frame") else jnp.float32) for k, v in cols.items()}
 
 
 def qmul(a, b):
@@ -92,7 +98,7 @@ def rotate_z(yaw, v):
     return jnp.stack([c * v[:, 0] - s * v[:, 1], s * v[:, 0] + c * v[:, 1], v[:, 2]], -1)
 
 
-def states(key, bank, n: int, kind: str, q_lo, q_hi, noise: bool = True):
+def states(key, bank, n: int, kind: str, q_lo, q_hi, noise: bool = True, return_source=False):
     """n starts from a bank: pelvis height over the floor, quaternion (w, x, y, z), world velocities, joints q, qd, and the clip's
     command. q is clipped to [q_lo, q_hi]."""
     ki, kh, kr, kq, kv, kw = jax.random.split(key, 6)
@@ -109,4 +115,7 @@ def states(key, bank, n: int, kind: str, q_lo, q_hi, noise: bool = True):
         v = v + jax.random.uniform(kv, (n, 3), minval=-1.0, maxval=1.0) * jnp.asarray(NOISE_V)
         w = w + jax.random.uniform(kw, (n, 3), minval=-1.0, maxval=1.0) * jnp.asarray(NOISE_W)
     q = jnp.clip(q, q_lo, q_hi)
-    return z, quat / jnp.linalg.norm(quat, axis=-1, keepdims=True), v, w, q, qd, cmd
+    result = z, quat / jnp.linalg.norm(quat, axis=-1, keepdims=True), v, w, q, qd, cmd
+    if return_source:
+        return result, (bank["clip"][i], bank["frame"][i], yaw)
+    return result

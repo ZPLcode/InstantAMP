@@ -19,21 +19,21 @@ import numpy as np
 from . import env, nets, zenbot
 from .inference import load, policy_output
 from .rot import mv3, quat_to_mat, tr3
-from .sim import Sim, unflatten
+from .sim import Sim, robot_profile, unflatten
 
 
-def fallen_starts(directory):
+def fallen_starts(directory, lift=zenbot.RESET_LIFT):
     """Repeatable legged_lab evaluation poses at 0 and 0.5 s, below 0.5 m including the lift."""
     names, poses, velocities = [], [], []
     for path in sorted(glob.glob(os.path.join(directory, "*.npz"))):
         with np.load(path) as clip:
             for sec in (0., 0.5):
                 i = round(sec * float(clip["fps"]))
-                if i >= len(clip["root_pos"]) or clip["root_pos"][i, 2] + 0.02 > 0.5:
+                if i >= len(clip["root_pos"]) or clip["root_pos"][i, 2] + lift > 0.5:
                     continue
                 quat = clip["root_quat"][i, [3, 0, 1, 2]]
                 ang = mv3(tr3(quat_to_mat(quat)), clip["root_ang_vel"][i])
-                poses.append(np.r_[0., 0., clip["root_pos"][i, 2] + 0.02, quat, clip["dof_pos"][i]])
+                poses.append(np.r_[0., 0., clip["root_pos"][i, 2] + lift, quat, clip["dof_pos"][i]])
                 velocities.append(np.r_[clip["root_lin_vel"][i], ang, clip["dof_vel"][i]])
                 names.append((os.path.basename(path), sec))
     if not names:
@@ -42,10 +42,12 @@ def fallen_starts(directory):
 
 
 def evaluate_recovery(cfg, paths, args):
-    names, poses, velocities = fallen_starts(cfg["floor_dir"])
+    robot = robot_profile(cfg["robot"])
+    names, poses, velocities = fallen_starts(cfg["floor_dir"], robot.RESET_LIFT)
     sim = Sim(len(names), cfg["nconmax"], cfg["njmax"], floor_dir=cfg["floor_dir"], robot=cfg["robot"],
               random_start=False, assist_newtons=0., obs_noise=False, randomize_world=False)
-    reference = zenbot.RecoveryReference(cfg["floor_dir"], sim.key_positions)
+    velocities = sim.reference_velocity(poses, velocities)
+    reference = zenbot.RecoveryReference(cfg["floor_dir"], sim.key_positions, sim.J)
     clips_by_name = {path.name: i for i, path in enumerate(reference.files)}
     clips = jnp.asarray([clips_by_name[name] for name, _ in names])
     offsets = jnp.asarray([round(sec / env.DT) for _, sec in names])
@@ -55,16 +57,19 @@ def evaluate_recovery(cfg, paths, args):
     def run(pi, norm, ode):
         s = sim.init(jax.random.PRNGKey(42))
         data = s.data.replace(qpos=poses, qvel=velocities)
-        frame = sim.obs_frame(unflatten(poses, velocities), s.a_last, s.c_obs, None)
-        s = s._replace(data=data, obs=jnp.tile(frame, (1, sim.history)))
+        initial = unflatten(poses, velocities)
+        frame = sim.obs_frame(initial, s.a_last, s.c_obs, None)
+        up = sim.is_up(poses[:, 2], initial[1])
+        critic_obs = sim.push_critic(None, initial, s.a_last) if s.critic_obs is not None else None
+        s = s._replace(data=data, obs=sim.push_actor(None, frame), critic_obs=critic_obs, was_up=up, down=~up)
         def step(state, frame_index):
             out = policy_output(pi, norm, state.obs, args.obs_clip)
             act = nets.ode_step(out, state.a_ode, *ode) if ode is not None else out
             state, tr = sim.step(state, act)
             height = tr.qpos1[:, 2]
             upright = quat_to_mat(tr.qpos1[:, 3:7])[:, 2, 2] > np.cos(np.pi / 6)
-            posture = (height > zenbot.UP_HEIGHT) & (height <= 2 * zenbot.RISE_HEIGHT - zenbot.UP_HEIGHT) & upright
-            loaded = tr.stats["foot_load"] >= 0.5 * zenbot.MASS * 9.81
+            posture = (height > robot.UP_HEIGHT) & (height <= 2 * robot.RISE_HEIGHT - robot.UP_HEIGHT) & upright
+            loaded = tr.stats["foot_load"] >= 0.5 * sim.m.body_mass.sum() * 9.81
             pose = sim.reference_pose(unflatten(tr.qpos1, tr.qvel1))
             errors, active = reference.errors(pose, clips, offsets + frame_index + 1)
             return state, (posture, loaded, tr.terminated, errors, active)
@@ -106,11 +111,13 @@ def main(argv=None):
 
     if not ckpts:
         raise ValueError(f"No policy checkpoints in {a.run}")
-    if cfg.get("robot") == "zenbot23_getup":
+    if cfg.get("robot") in ("zenbot23_getup", "g1_getup"):
         return evaluate_recovery(cfg, ckpts, a)
     sim = Sim(a.n, cfg.get("nconmax", 64), cfg.get("njmax", 640), cfg["walk_dir"], cfg["floor_dir"], True, 123, cfg["reset_floor"], cfg["prob_shove"],
               bool(cfg["push"]), robot=cfg.get("robot", "g1"), g1_style=bool(cfg.get("g1_style", 0)),
-              getup_rise_weight=cfg.get("getup_rise_weight", -0.25))  # fmt: skip
+              getup_rise_weight=cfg.get("getup_rise_weight", -0.25),
+              g1_support_friction=bool(cfg.get("g1_support_friction", 0)), getup_reset_frames=cfg.get("getup_reset_frames", 20),
+              g1_phase_amp=bool(cfg.get("g1_phase_share", 0.)))  # fmt: skip
 
     def run(pi, norm, ode, key):
         def body(carry, k):

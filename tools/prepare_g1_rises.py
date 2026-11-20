@@ -3,6 +3,7 @@
 Run from the repository root with python tools/prepare_g1_rises.py. Each output NPZ
 retains the source joint order, velocities and coordinate conventions. Frame ranges
 in the manifest are zero-based at 50 Hz, with exclusive end indices.
+Use --lead-in-frames to retain more of the native floor motion in the training split.
 """
 
 import argparse
@@ -44,7 +45,26 @@ def rise_intervals(height, quat_xyzw, vertical_speed, angular_velocity):
             yield int(start), int(stand), int(min(end, stand + 25))
 
 
-def prepare(source, destination, heldout_take=HELDOUT_TAKE):
+def fallen_lead_in_start(height, vertical_speed, angular_velocity, start, stand, frames):
+    """Extend on the floor, stopping at a descending or elevated pelvis."""
+    lower = max(0, start - frames, stand - 5 * FPS)
+    floor_height = height[lower:start + 1]
+    speed = vertical_speed[lower:start + 1]
+    # Both native velocity and a short height window catch descents into the floor.
+    valid = (floor_height < 0.4) & (speed >= -0.35)
+    if len(floor_height) > 5:
+        valid[5:] &= floor_height[5:] >= floor_height[:-5] - 0.03
+    breaks = np.flatnonzero(~valid)
+    usable = int(breaks[-1] + 1) if len(breaks) else 0
+    slow = (np.abs(speed[usable:]) < 0.18) & (np.linalg.norm(angular_velocity[lower + usable:start + 1], axis=1) < 2)
+    # Require three stable native frames before accepting an earlier start.
+    settled = np.flatnonzero(slow[:-2] & slow[1:-1] & slow[2:])
+    return lower + usable + int(settled[0]) if len(settled) else start
+
+
+def prepare(source, destination, heldout_take=HELDOUT_TAKE, lead_in_frames=0):
+    if lead_in_frames < 0:
+        raise ValueError("lead_in_frames must be non-negative")
     paths = sorted(source.glob("fallAndGetUp*.npz"))
     if not any(path.stem == heldout_take for path in paths):
         raise ValueError(f"Held-out take {heldout_take} is missing from {source}")
@@ -66,13 +86,21 @@ def prepare(source, destination, heldout_take=HELDOUT_TAKE):
             ranges = rise_intervals(motion["root_pos"][:, 2], motion["root_quat"], motion["root_lin_vel"][:, 2], motion["root_ang_vel"])
             split = "heldout" if path.stem == heldout_take else "train"
             for start, stand, end in ranges:
+                original_start = start
+                if split == "train" and lead_in_frames:
+                    start = fallen_lead_in_start(motion["root_pos"][:, 2], motion["root_lin_vel"][:, 2],
+                                                 motion["root_ang_vel"], start, stand, lead_in_frames)
                 name = f"{path.stem}_{start:05d}_{end:05d}.npz"
                 np.savez_compressed(bank / split / name, fps=np.int64(FPS), **{k: v[start:end] for k, v in motion.items()})
                 splits[split].append({"file": name, "source_take": path.stem, "start_frame": start, "stand_frame": stand, "end_frame": end})
+                if split == "train" and lead_in_frames:
+                    splits[split][-1].update(original_start_frame=original_start, lead_in_frames=original_start - start)
         for split, clips in splits.items():
             if not clips:
                 raise ValueError(f"No complete {split} get-ups found in {source}")
             manifest = {"kind": "g1_rise_clips", "fps": FPS, "heldout_take": heldout_take, "clips": clips}
+            if split == "train" and lead_in_frames:
+                manifest["lead_in_frames_requested"] = lead_in_frames
             (bank / split / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         if destination.exists():
             files = sorted(path.relative_to(bank) for path in bank.rglob("*") if path.is_file())
@@ -89,5 +117,7 @@ if __name__ == "__main__":
     parser.add_argument("--src", type=Path, default=Path("data/recovery/lafan1"))
     parser.add_argument("--dst", type=Path, default=Path("data/recovery/g1_rises"))
     parser.add_argument("--heldout-take", default=HELDOUT_TAKE)
+    parser.add_argument("--lead-in-frames", type=int, default=0,
+                        help="Maximum earlier 50 Hz frames of fallen motion to retain in training clips.")
     args = parser.parse_args()
-    print(prepare(args.src, args.dst, args.heldout_take))
+    print(prepare(args.src, args.dst, args.heldout_take, args.lead_in_frames))

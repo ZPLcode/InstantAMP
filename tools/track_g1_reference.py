@@ -42,12 +42,30 @@ def main():
     r.add_argument("--seconds", type=float, help="Rollout duration; defaults to the selected reference duration")
     r.add_argument("--legacy-contacts", action="store_true", help="Use the original G1 normal-only palm and knee contacts")
     r.add_argument("--out", type=Path, required=True, help="Output NPZ with physics states, reference, landmarks and controls")
+    feedback = sub.add_parser("feedback", help="Run an exported 50 Hz clip feedback policy in native MuJoCo")
+    feedback.add_argument("policy", type=Path)
+    feedback.add_argument("case", help="Clip name in the exported policy")
+    feedback.add_argument("--out", type=Path, required=True, help="Save the simulated qpos trajectory")
     args = p.parse_args()
     if args.task == "export":
         export(args.checkpoint, args.output)
         print(args.output)
         return
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    if args.task == "feedback":
+        from instantamp.sim import build_scene
+        from instantamp.timed_feedback import TimedFeedbackPolicy
+        from tools.export_g1_tracking_policy import replay
+        policy = TimedFeedbackPolicy.load(args.policy)
+        if args.case not in policy.names:
+            feedback.error(f"Choose a clip from {', '.join(policy.names)}")
+        model = build_scene(g1_support_friction=policy.support_friction)
+        qpos = replay(model, policy, policy.names.index(args.case))
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        with args.out.open("xb") as stream:
+            np.savez_compressed(stream, qpos=qpos, fps=50, name=args.case)
+        print(args.out)
+        return
     from instantamp import env
     from instantamp.reference_tracker import Motion, ReferencePolicy, track
     motion = Motion.load(args.clip, args.start, args.end)

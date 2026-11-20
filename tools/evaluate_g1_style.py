@@ -19,13 +19,15 @@ import jax.numpy as jnp
 import numpy as np
 
 from instantamp import env, nets
-from instantamp.inference import load, policy_output
+from instantamp.inference import G1LimbBlend, load, policy_output
 from instantamp.rot import mv3, quat_to_mat, tr3, yaw_mat
 from instantamp.sim import Sim, unflatten
 from instantamp.train import set_jax
 
 TAKE = "fallAndGetUp1_subject1"
 STARTS_30HZ = (458, 670, 845, 1058, 1262, 1395, 1584, 1808, 2088, 2301, 4873)
+# End frames of the same source segments used in legged_lab's 11-clip recovery benchmark.
+ENDS_30HZ = (565, 785, 936, 1140, 1320, 1461, 1684, 1916, 2210, 2391, 4962)
 STEPS = env.GETUP_STEPS + round(1 / env.DT)
 PROBE_SPEEDS = (0., 0.8)
 
@@ -90,7 +92,8 @@ def reference_starts(take, clips_dir=None, count=12):
         starts = np.rint(np.array(STARTS_30HZ) / (30 * env.DT)).astype(int)
         paths = qpos[starts[:, None] + np.arange(env.GETUP_STEPS + 1)[None]]
         paths[:, :, :2] -= qpos[starts, None, :2]
-        cases = [{"source_take": take.stem, "source_frame_30hz": frame} for frame in STARTS_30HZ]
+        cases = [{"source_take": take.stem, "source_frame_30hz": frame, "end_frame_30hz": end}
+                 for frame, end in zip(STARTS_30HZ, ENDS_30HZ, strict=True)]
         initial_velocities = qvel[starts]
     q0 = paths[:, 0].copy()
     q0[:, 2] += 0.02
@@ -115,7 +118,23 @@ def fixed_state(sim, qpos, qvel, standing, commands, key=None):
                           was_up=standing, down=~standing, t=jnp.zeros_like(state.t))
 
 
-def rollout_function(sim, qpos, qvel, predict=None):
+def foot_load_fraction(sim, state):
+    """Pyramidal contact rows sum to contact-normal force on G1 feet touching the plane."""
+    imp = state.data._impl
+    left, right = imp.contact__geom[:, 0], imp.contact__geom[:, 1]
+    world = jnp.clip(imp.contact__worldid, 0, sim.N - 1)
+    rows = imp.contact__efc_address.reshape(len(world), -1)
+    forces = imp.efc__force[world[:, None], jnp.maximum(rows, 0)]
+    normal = jnp.where(rows >= 0, forces, 0).sum(-1)
+    sides = jnp.asarray(sim.foot_side)
+    feet = jnp.maximum(sides[left], sides[right]) >= 0
+    floor = (left == sim.floor_id) | (right == sim.floor_id)
+    valid = jnp.arange(len(world)) < imp.nacon[0]
+    total = jnp.zeros(sim.N).at[world].add(jnp.where(feet & floor & valid, normal, 0))
+    return total / (float(sim.m.body_mass.sum()) * 9.81)
+
+
+def rollout_function(sim, qpos, qvel, predict=None, contact_loads=False):
     n_fallen = len(qpos) - len(PROBE_SPEEDS)
     commands = jnp.zeros((len(qpos), 3)).at[n_fallen:, 0].set(jnp.array(PROBE_SPEEDS))
     standing = jnp.arange(len(qpos)) >= n_fallen
@@ -130,10 +149,13 @@ def rollout_function(sim, qpos, qvel, predict=None):
                 output = predict(pi, norm, state.obs, obs_clip)
             action = nets.ode_step(output, state.a_ode, *ode) if ode is not None else output
             state, transition = sim.step(state, action)
-            return state, (transition.qpos1, transition.qvel1[..., :2], transition.terminated | transition.truncated)
+            row = (transition.qpos1, transition.qvel1[..., :2], transition.terminated | transition.truncated)
+            return state, (*row, foot_load_fraction(sim, state)) if contact_loads else row
 
-        _, (poses, velocity_xy, ended) = jax.lax.scan(step, state, None, length=STEPS)
-        return (jnp.concatenate((qpos[None], poses)).swapaxes(0, 1), velocity_xy.swapaxes(0, 1), ended.T)
+        _, rows = jax.lax.scan(step, state, None, length=STEPS)
+        poses, velocity_xy, ended = rows[:3]
+        result = (jnp.concatenate((qpos[None], poses)).swapaxes(0, 1), velocity_xy.swapaxes(0, 1), ended.T)
+        return (*result, rows[3].T) if contact_loads else result
 
     return jax.jit(rollout, static_argnums=(2,))
 
@@ -151,7 +173,7 @@ def pose_errors(qpos, points, demo, demo_points):
             "joint_rmse_rad": float(np.sqrt(((qpos[:, 7:] - demo[:, 7:]) ** 2).mean()))}
 
 
-def compare_trajectories(sim, cases, refs, paths, velocities, ended):
+def compare_trajectories(sim, cases, refs, paths, velocities, ended, foot_load=None):
     def landmarks(qpos):
         rot = quat_to_mat(qpos[..., 3:7])
         pos = qpos[..., :3]
@@ -169,6 +191,10 @@ def compare_trajectories(sim, cases, refs, paths, velocities, ended):
         row = {**cases[i], "demo_rise_s": demo_step * env.DT,
                "rose_in_5s": bool(len(threshold)), "upright_last_second": bool(len(up) == STEPS + 1 and up[-round(1 / env.DT):].all()),
                "fixed_time": pose_errors(path[valid_steps], points[i, valid_steps], demo[:demo_step + 1], ref_points[i, :demo_step + 1])}
+        if foot_load is not None:
+            tail = foot_load[i, -round(1 / env.DT):]
+            row["foot_load_final_second_bw"] = float(np.mean(tail)) if not ended[i].any() else None
+            row["loaded_upright_last_second"] = bool(row["upright_last_second"] and (tail >= .5).mean() >= .9)
         if len(threshold):
             rise = int(threshold[0])
             phase = np.linspace(0, 1, 51)
@@ -200,10 +226,51 @@ def summarize(records):
             return None
         return {name: float(np.median([r[key][name] for r in rows])) for name in rows[0][key]}
 
-    return {"starts": len(records), "rose_in_5s": len(matched), "upright_last_second": sum(r["upright_last_second"] for r in records),
+    result = {"starts": len(records), "rose_in_5s": len(matched), "upright_last_second": sum(r["upright_last_second"] for r in records),
+            "all_demo_rise_s": float(np.median([r["demo_rise_s"] for r in records])) if records else None,
             "median_fixed_time": med_errors(records, "fixed_time"), "median_phase": med_errors(matched, "phase"),
             **{key: float(np.median([r[key] for r in matched])) if matched else None
                for key in ("demo_rise_s", "policy_rise_s", "rise_time_abs_error_s")}}
+    if records and "loaded_upright_last_second" in records[0]:
+        result["loaded_upright_last_second"] = sum(r["loaded_upright_last_second"] for r in records)
+    if records and "rise_and_settle" in records[0]:
+        result["median_rise_and_settle"] = med_errors(records, "rise_and_settle")
+    if records and "geometric_floor_proximity_2cm" in records[0]:
+        groups = {}
+        for part in ("hand", "knee", "foot"):
+            events = [r["geometric_floor_proximity_2cm"][f"{side}_{part}"]
+                      for r in records for side in ("left", "right")]
+            union = sum(e["either_frames"] for e in events)
+            same = sum(e["both_frames"] for e in events)
+            release = [e["sim_last_near_s"] - e["reference_last_near_s"] for e in events
+                       if e["sim_last_near_s"] is not None and e["reference_last_near_s"] is not None]
+            groups[part] = {"both_frames": same, "either_frames": union, "pooled_iou": same / union if union else None,
+                            "reference_frames": sum(e["reference_frames"] for e in events),
+                            "simulated_frames": sum(e["simulated_frames"] for e in events),
+                            "matched_sides": len(release),
+                            "median_last_near_lag_s": float(np.median(release)) if release else None}
+        result["geometric_floor_proximity_2cm"] = groups
+    return result
+
+
+def actor_spec(policy, normalizer):
+    """Verify the ordinary autonomous actor accepts four G1 sensor frames and returns joint actions."""
+    if isinstance(policy, G1LimbBlend):
+        return {"type": "gated_limb_blend"}
+    if (policy[0]["w"].shape[0] != env.OBS_DIM or policy[-1]["b"].shape != (env.J,) or
+            any(normalizer[key].shape != (env.OBS_DIM,) for key in ("mean", "var"))):
+        raise ValueError("Expected a standard G1 actor with a 384-dimensional observation and 29 joint actions")
+    return {"type": "single_actor", "input_width": env.OBS_DIM, "history_frames": env.HIST, "joint_actions": env.J}
+
+
+def add_world_scores(model, records, refs, paths, ended):
+    """Score all starts after the rollout; references never enter the policy call."""
+    from tools.score_g1_tracking import score_tracking
+
+    for row, demo, path, stops in zip(records, refs, paths[:len(records)], ended[:len(records)], strict=True):
+        score = score_tracking(model, demo, path, ended=stops)
+        row["rise_and_settle"] = score["rise_and_settle"]
+        row["geometric_floor_proximity_2cm"] = score["geometric_floor_proximity_2cm"]
 
 
 def preview(output, sequences, finish):
@@ -247,13 +314,18 @@ def main():
     parser.add_argument("--count", type=int, default=12, help="Maximum number of diagnostic clips, balanced across source takes and starting poses")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--gif", type=Path, help="Show the same supine recovery for each policy, in real time")
+    parser.add_argument("--support-friction", action="store_true", help="Use tangential hand and knee ground contacts for both policies")
+    parser.add_argument("--single-actor", action="store_true", help="Require an ordinary G1 actor export for each checkpoint")
+    parser.add_argument("--trajectories", type=Path, help="Save physical qpos and termination flags for synchronized comparisons")
     args = parser.parse_args()
     set_jax(".venv/cache/jax")
     cases, refs, qpos, qvel = reference_starts(args.reference, args.clips_dir, args.count)
-    sim = Sim(len(qpos), reset_floor=0., push=False, prob_shove=0., random_start=False, obs_noise=False)
+    sim = Sim(len(qpos), reset_floor=0., push=False, prob_shove=0., random_start=False, obs_noise=False,
+              g1_support_friction=args.support_friction)
     sim.obs_noise = np.zeros_like(sim.obs_noise)
-    rollout = rollout_function(sim, qpos, qvel)
+    rollout = rollout_function(sim, qpos, qvel, contact_loads=True)
     results = {}
+    trajectories = {"reference": refs, "dt_s": env.DT, "cases_json": json.dumps(cases)}
     panels = [("G1 AMP reference", refs[0])]
     finish = int(np.flatnonzero(upright(refs[0]))[0])
     for label, checkpoint in (("baseline", args.baseline), ("candidate", args.candidate)):
@@ -262,10 +334,18 @@ def main():
         cfg = json.loads((checkpoint.parent.parent / "config.json").read_text())
         if cfg.get("robot", "g1") != "g1":
             raise ValueError(f"{checkpoint}: expected a G1 policy")
-        paths, velocities, ended = map(np.asarray, rollout(*load(checkpoint), cfg.get("obs_clip", 10.)))
-        records, probes = compare_trajectories(sim, cases, refs, paths, velocities, ended)
+        policy, norm, ode = load(checkpoint)
+        spec = actor_spec(policy, norm)
+        if args.single_actor and spec["type"] != "single_actor":
+            raise ValueError(f"Expected a single autonomous actor in {checkpoint}")
+        paths, velocities, ended, loads = map(np.asarray, rollout(policy, norm, ode, cfg.get("obs_clip", 10.)))
+        records, probes = compare_trajectories(sim, cases, refs, paths, velocities, ended, loads)
+        trajectories[label + "_foot_load_bw"] = loads[:len(refs)]
+        add_world_scores(sim.m, records, refs, paths, ended)
+        trajectories[label + "_qpos"] = paths[:len(refs)]
+        trajectories[label + "_ended"] = ended[:len(refs)]
         meta = json.loads(checkpoint.with_suffix(".json").read_text())
-        results[label] = {"checkpoint": str(checkpoint), "iteration": meta["it"], "summary": summarize(records),
+        results[label] = {"checkpoint": str(checkpoint), "actor": spec, "iteration": meta["it"], "summary": summarize(records),
                           "locomotion_probes": probes, "trials": records}
         panels.append((f"{label.title()}    iteration {meta['it']}", first_episode(paths[0], ended[0])))
         if records[0]["rose_in_5s"]:
@@ -274,11 +354,14 @@ def main():
             finish = env.GETUP_STEPS
         print(label, json.dumps(results[label]["summary"]), flush=True)
     report = {"reference": str(args.clips_dir or args.reference), "initial_lift_m": 0.02, "dt_s": env.DT,
+              "support_friction": args.support_friction,
               "protocol": "Fixed same native G1 fallen states and velocities, nominal physics, standing command, no pushes or noise. "
                           "Success is the first up threshold before reset within 5 s. The final hold requires upright throughout seconds 5–6. "
+                          "Loaded hold additionally requires at least half body weight on the soles in 90% of those frames. "
                           "Fixed-time errors span demo onset to its first up threshold, freezing the last valid pre-reset pose on failure. "
                           "Phase errors use 51 equally spaced fractions of each trajectory's own onset-to-rise. Wrists and ankles are in the pelvis heading frame. "
-                          "Two separate nominal upright starts probe standing and walking for 6 s.",
+                          "Rise-and-settle errors use the reference clock through 0.5 s after reference rise, including failures. "
+                          "World-frame landmark errors use the original common world axes. Two upright starts probe standing and walking for 6 s.",
               **results}
     if args.candidate:
         shared = [i for i, (a, b) in enumerate(zip(results["baseline"]["trials"], results["candidate"]["trials"]))
@@ -286,6 +369,9 @@ def main():
         report["common_rises"] = {label: summarize([result["trials"][i] for i in shared]) for label, result in results.items()}
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+    if args.trajectories:
+        args.trajectories.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(args.trajectories, **trajectories)
     if args.gif:
         preview(args.gif, panels, min(len(refs[0]) - 1, finish + 25))
 

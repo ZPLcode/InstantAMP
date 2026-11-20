@@ -31,7 +31,7 @@ import numpy as np
 import warp as wp
 from mujoco import mjx
 
-from . import amp, env, resets, zenbot
+from . import amp, env, g1_getup, resets, zenbot
 from .kin import Kinematics
 from .rot import axis_angle_to_mat, mm3, mv3, quat_to_mat, tr3, yaw_mat
 
@@ -50,14 +50,16 @@ ZENBOT_XML = os.path.join(os.path.dirname(XML), "zenbot_23dof_43kg.xml")
 def robot_profile(name):
     if name == "g1":
         return env
+    if name == "g1_getup":
+        return g1_getup
     if name == "zenbot23_getup":
         return zenbot
-    raise ValueError(f"Unknown robot {name!r}; expected g1 or zenbot23_getup")
+    raise ValueError(f"Unknown robot {name!r}; expected g1, g1_getup or zenbot23_getup")
 
 
 def motion_dirs(robot):
-    if robot == "zenbot23_getup":
-        return ("data/zenbot23_getup/recovery",) * 2
+    if robot in ("g1_getup", "zenbot23_getup"):
+        return (f"data/{robot}/recovery",) * 2
     robot_profile(robot)
     return WALK_DIR, FLOOR_DIR
 
@@ -111,7 +113,10 @@ def build_scene(iterations: int = 10, ls_iterations: int = 20, ccd_iterations: i
     for g in robot.geoms:  # full collision
         if not g.name.endswith("_collision"):
             continue
-        if "_foot" in g.name:
+        if profile is g1_getup:
+            g.condim, g.priority = 3, 1
+            g.friction[0] = 1.0
+        elif "_foot" in g.name:
             g.condim, g.priority, g.friction = 3, 1, [0.6, g.friction[1], g.friction[2]]
         else:
             g.condim = 1
@@ -119,15 +124,15 @@ def build_scene(iterations: int = 10, ls_iterations: int = 20, ccd_iterations: i
                 # Match mjlab's full-collision G1. With equal priority the ground's
                 # three contact dimensions also allow a hand or knee to push tangentially.
                 g.priority = ground.priority
-    for i, name in enumerate(env.DOF):
+    for i, name in enumerate(profile.DOF):
         j = robot.joint(f"{name}_joint")
-        j.armature = float(env.ARMATURE[i])
+        j.armature = float(profile.ARMATURE[i])
         a = robot.add_actuator(name=name, target=f"{name}_joint")
         a.trntype = mujoco.mjtTrn.mjTRN_JOINT
         a.dyntype, a.gaintype, a.biastype = mujoco.mjtDyn.mjDYN_NONE, mujoco.mjtGain.mjGAIN_FIXED, mujoco.mjtBias.mjBIAS_AFFINE
-        a.gainprm[0], a.biasprm[1], a.biasprm[2] = float(env.KP[i]), -float(env.KP[i]), -float(env.KD[i])
+        a.gainprm[0], a.biasprm[1], a.biasprm[2] = float(profile.KP[i]), -float(profile.KP[i]), -float(profile.KD[i])
         a.inheritrange, a.ctrllimited = 0.0, False
-        a.forcelimited, a.forcerange = True, [-float(env.EFFORT[i]), float(env.EFFORT[i])]
+        a.forcelimited, a.forcerange = True, [-float(profile.EFFORT[i]), float(profile.EFFORT[i])]
     world.attach(robot, frame=world.worldbody.add_frame(), prefix="robot_")
     return world.compile()
 
@@ -202,7 +207,10 @@ class State(NamedTuple):
     key: jax.Array
     assist: jax.Array  # per-world curriculum force in newtons
     delay_steps: jax.Array  # per actuator group, in physics steps
-    reference_clip: jax.Array | None = None  # selected reset clip for phase-aligned Zenbot rewards
+    reference_clip: jax.Array | None = None  # training-only reference metadata, -1 for G1 walking resets
+    reference_start: jax.Array | None = None
+    reference_yaw: jax.Array | None = None
+    critic_obs: jax.Array | None = None
 
 
 class Transition(NamedTuple):
@@ -234,46 +242,64 @@ def unflatten(qpos, qvel):
     return qpos[..., :3], R, qvel[..., :3], mv3(R, qvel[..., 3:6]), qpos[..., 7:], qvel[..., 6:]
 
 
-def load_bank(directory: str, joints: int = env.J, first_only=False):
-    """Every frame of the walking clips in `directory` (npz of tools/convert_motions.py, quaternions x, y, z, w): pelvis height, quaternion
-    (w, x, y, z), world velocities, joints. Resets draw uniformly over all frames of all clips."""
+def load_bank(directory: str, joints: int = env.J, first_only=False, sample_clip_times=False):
+    """Load 50 Hz reset states in MJCF order. G1 recovery retains clip boundaries and root XY for reference resets."""
     files = sorted(glob.glob(os.path.join(directory, "*.npz")))
     assert files, f"no locomotion clips in {directory}; prepare the motion banks for the selected robot"
     cols = {k: [] for k in ("z", "quat", "v", "w", "q", "qd")}
+    lengths = []
+    if sample_clip_times:
+        cols["xy"] = []
     for f in files:
-        d = np.load(f)
-        assert int(d["fps"]) == 50, f
-        assert d["dof_pos"].shape[1] == joints, f
-        q = d["root_quat"]
-        for k, a in (("z", d["root_pos"][:, 2]), ("quat", np.concatenate([q[:, 3:], q[:, :3]], -1)), ("v", d["root_lin_vel"]), ("w", d["root_ang_vel"]),
-                     ("q", d["dof_pos"]), ("qd", d["dof_vel"])):  # fmt: skip
-            cols[k].append(a[:1] if first_only else a)
-    return {k: jnp.asarray(np.concatenate(v, 0), jnp.float32) for k, v in cols.items()}
+        with np.load(f) as d:
+            assert int(d["fps"]) == 50, f
+            assert d["dof_pos"].shape[1] == joints, f
+            if sample_clip_times:
+                cols["xy"].append(d["root_pos"][:, :2])
+                lengths.append(len(d["root_pos"]))
+            q = d["root_quat"]
+            for k, a in (("z", d["root_pos"][:, 2]), ("quat", np.concatenate([q[:, 3:], q[:, :3]], -1)), ("v", d["root_lin_vel"]), ("w", d["root_ang_vel"]),
+                         ("q", d["dof_pos"]), ("qd", d["dof_vel"])):  # fmt: skip
+                cols[k].append(a[:1] if first_only else a)
+    bank = {k: jnp.asarray(np.concatenate(v, 0), jnp.float32) for k, v in cols.items()}
+    if sample_clip_times:
+        if min(lengths) <= 10:
+            raise ValueError("G1 get-up resets need at least 0.2 seconds of animation")
+        bank["offsets"] = jnp.asarray(np.cumsum([0, *lengths[:-1]]), jnp.int32)
+        bank["lengths"] = jnp.asarray(lengths, jnp.int32)
+    return bank
 
 
 class Sim:
     def __init__(self, num_envs: int = 4096, nconmax: int = NCONMAX, njmax: int = NJMAX, walk_dir: str | None = None,
                  floor_dir: str | None = None, random_start: bool = True, seed: int = 0, reset_floor: float = 0.2,
-                 prob_shove: float = 0.0, push: bool = True, physics: bool = True, robot: str = "g1", amp_wrists: bool = True, assist_newtons=None, obs_noise=True, randomize_world=True, reference_weight=0., g1_style=False, getup_rise_weight=-0.25, g1_support_friction=False):  # fmt: skip
+                 prob_shove: float = 0.0, push: bool = True, physics: bool = True, robot: str = "g1", amp_wrists: bool = True, assist_newtons=None, obs_noise=True, randomize_world=True, reference_weight=0., g1_style=False, getup_rise_weight=-0.25, g1_support_friction=False, getup_reset_frames=20, g1_phase_amp=False):  # fmt: skip
         """physics=False: everything but MuJoCo Warp's model and data (no GPU): the scene, kinematics, reset banks and `_fresh`, for
         checks on the CPU."""
         self.N, self.random_start, self.seed = num_envs, random_start, seed
         self.reset_floor, self.prob_shove, self.push = reset_floor, prob_shove, push
         self.robot = profile = robot_profile(robot)
         self.J = len(profile.DOF)
-        self.recovery = profile is zenbot
-        self.history = zenbot.HIST if self.recovery else env.HIST
-        self.assist_newtons = zenbot.INITIAL_ASSIST if assist_newtons is None else assist_newtons
+        self.recovery = profile is not env
+        self.history = profile.HIST
+        self.assist_newtons = (profile.INITIAL_ASSIST if self.recovery else 0.) if assist_newtons is None else assist_newtons
         self.randomize_world = randomize_world
         self.noisy_obs = obs_noise
         self.weights = zenbot.WEIGHTS if self.recovery else env.WEIGHTS
         if g1_style:
             self.weights = {**self.weights, "rise": getup_rise_weight}
+        self.g1_phase_amp = bool(g1_phase_amp)
+        if self.g1_phase_amp and (profile is not env or not g1_style or reset_floor <= 0):
+            raise ValueError("G1 phase AMP requires g1_style and floor resets on the G1")
+        self.reference_reward = bool(reference_weight)
+        self.g1_reference = bool(g1_style and (self.reference_reward or self.g1_phase_amp) and profile is env)
         if reference_weight:
-            if not self.recovery or not np.isfinite(reference_weight) or reference_weight < 0:
-                raise ValueError("reference_weight requires a finite positive weight for Zenbot recovery")
+            if not (profile is zenbot or self.g1_reference) or not np.isfinite(reference_weight) or reference_weight < 0:
+                raise ValueError("reference_weight requires a finite positive weight and a recovery task")
+            if self.g1_reference and self.reset_floor <= 0:
+                raise ValueError("G1 reference rewards require recovery resets")
             self.weights = {**self.weights, "motion_reference": reference_weight}
-        self.terms = tuple(self.weights) if self.recovery else env.TERMS
+        self.terms = tuple(self.weights)
         self.episode_steps = 500 if self.recovery else env.MAX_EPISODE
         self.world_fields = WORLD_FIELDS + (("body_mass", "body_subtreemass") if self.recovery else ())
         self.frame_dim = 9 + 3 * self.J + (18 if self.recovery else 0)
@@ -294,12 +320,13 @@ class Sim:
         rng = m.jnt_range[1:]
         mid, half = rng.mean(-1), (rng[:, 1] - rng[:, 0]) / 2 * env.SOFT_LIMIT
         self.q_soft = np.stack([mid - half, mid + half], -1).astype(np.float32)
-        torso = "torso_link" if profile is env else zenbot.TORSO
-        keys = amp.KEY_BODIES if profile is env else zenbot.KEY_BODIES
+        torso = profile.TORSO if self.recovery else "torso_link"
+        keys = profile.KEY_BODIES if self.recovery else amp.KEY_BODIES
         self.torso = m.body("robot_" + torso).id
+        self.root_com = m.body_ipos[1].astype(np.float32)
         feet = [m.body("robot_" + name).id for name in keys[:2]]
         self.foot_geoms = np.asarray([g for g in range(m.ngeom) if m.geom_bodyid[g] in feet and m.geom_contype[g] > 0])
-        assert len(self.foot_geoms) == (env.N_FOOT_GEOMS if profile is env else 2)
+        assert len(self.foot_geoms) == (2 if profile is zenbot else env.N_FOOT_GEOMS)
         tb = [m.body(f"robot_{b}").id for b in profile.TERMINATION_BODIES]
         self.term_geoms = np.asarray([g for g in range(m.ngeom) if m.geom_bodyid[g] in tb and m.geom_contype[g] > 0])
         assert len(set(int(m.geom_bodyid[g]) for g in self.term_geoms)) == len(tb), "every termination body carries a collision geom"
@@ -315,15 +342,21 @@ class Sim:
         for g in self.foot_geoms:
             self.foot_side[g] = feet.index(int(m.geom_bodyid[g]))
         self.is_term = np.isin(np.arange(m.ngeom), self.term_geoms)
-        supports = [m.body("robot_" + b).id for b in keys]
+        supports = [m.body("robot_" + b).id for b in (profile.SUPPORT_BODIES if self.recovery else keys)]
         self.support_link = np.array([supports.index(b) if b in supports else -1 for b in m.geom_bodyid])
         self.floor_id = m.geom("floor").id
         self.robot_geom = np.asarray([m.body(int(m.geom_bodyid[g])).name.startswith("robot_") for g in range(m.ngeom)])
         walk_default, floor_default = motion_dirs(robot)
-        self.walk = load_bank((floor_dir or floor_default) if self.recovery else (walk_dir or walk_default), self.J, first_only=self.recovery)
-        self.reference = zenbot.RecoveryReference(floor_dir or floor_default, self.key_positions) if reference_weight else None
+        self.walk = load_bank((floor_dir or floor_default) if self.recovery else (walk_dir or walk_default), self.J, first_only=profile is zenbot,
+                              sample_clip_times=profile is g1_getup)
+        self.reference = None
+        if self.g1_reference:
+            from .g1_reference_reward import G1RecoveryReference
+            self.reference = G1RecoveryReference(floor_dir or floor_default, self.key_positions)
+        elif reference_weight:
+            self.reference = zenbot.RecoveryReference(floor_dir or floor_default, self.key_positions)
         self.floor = resets.load(floor_dir or floor_default, "floor", profile.UP_HEIGHT, env.UP_TILT, self.J,
-                                 first_frames=20 if g1_style else None) if reset_floor > 0 and not self.recovery else resets.empty(self.J)
+                                 first_frames=getup_reset_frames if g1_style else None, source_indices=self.g1_reference) if reset_floor > 0 and not self.recovery else resets.empty(self.J)
         if not physics:
             return
         self.mx = mjx.put_model(m, impl="warp")
@@ -362,6 +395,20 @@ class Sim:
     def command(self, command, rot):
         return jnp.zeros_like(command.vel) if self.recovery else env.command(command, rot)
 
+    def recovery_command(self, cmd, down_start):
+        """Use a standing command throughout a G1 phase-AMP episode drawn from the floor bank."""
+        if not self.g1_phase_amp:
+            return cmd
+        return cmd._replace(vel=jnp.where(down_start[:, None], 0., cmd.vel),
+                            is_heading=cmd.is_heading & ~down_start, is_standing=cmd.is_standing | down_start)
+
+    def recovery_timeout(self, clip, start, elapsed):
+        """End floor-born phase-AMP rollouts one second after the native clip finishes."""
+        if not self.g1_phase_amp:
+            return jnp.zeros_like(elapsed, dtype=bool)
+        length = self.reference.lengths[jnp.maximum(clip, 0)]
+        return (clip >= 0) & (start >= 0) & (start < length) & (elapsed >= length - start + round(1. / env.DT))
+
     def obs_frame(self, state, action, command, key):
         if self.recovery:
             rot, ang, key_pos = self.recovery_features(state)
@@ -370,6 +417,33 @@ class Sim:
                 x += self.obs_noise * jax.random.uniform(key, x.shape, minval=-1., maxval=1.)
             return x
         return env.obs_frame(state, action, command, key, self.robot.DEFAULT_Q, self.obs_noise)
+
+    def push_actor(self, history, frame, fresh=None):
+        if self.robot is g1_getup:
+            return g1_getup.push_history(history, frame, g1_getup.ACTOR_TERMS, fresh)
+        if history is None:
+            return jnp.tile(frame, (1, self.history))
+        return env.push_frame(history, frame, fresh)
+
+    def reference_velocity(self, qpos, qvel):
+        """IsaacLab writes the reference linear velocity at the pelvis COM. MuJoCo stores it at the free joint."""
+        if self.robot is not g1_getup:
+            return qvel
+        rot = quat_to_mat(qpos[..., 3:7])
+        shift = mv3(rot, jnp.cross(qvel[..., 3:6], self.root_com))
+        return qvel.at[..., :3].add(-shift)
+
+    def push_critic(self, history, state, action, fresh=None):
+        pos, rotation, velocity, _, q, qd = state
+        rot6, gyro, points = self.recovery_features(state)
+        velocity_b = mv3(tr3(rotation), velocity) + jnp.cross(gyro, self.root_com)
+        frame = jnp.concatenate((velocity_b, gyro, rot6, pos[:, 2:3], q, qd, action, points), -1)
+        return g1_getup.push_history(history, frame, g1_getup.CRITIC_TERMS, fresh)
+
+    def estimated_torque(self, state, target):
+        if self.robot is g1_getup:
+            return g1_getup.actuator_torque(state[4], state[5], target)
+        return zenbot.actuator_ctrl(state[4], state[5], target[..., -self.J:])
 
     def is_up(self, height, rotation):
         return env.is_up(height, rotation, self.robot.UP_HEIGHT)
@@ -388,14 +462,26 @@ class Sim:
         pos, rot, _, _, q, _ = state
         return zenbot.RecoveryReference.pose(pos, rot, q, self.key_positions(pos, rot, q))
 
-    def reward_terms(self, *args, torque=None, clip=None, step=None):
+    def reward_terms(self, *args, torque=None, joint_acc=None, clip=None, step=None, reference_start=None, reference_yaw=None):
         if self.recovery:
-            terms = zenbot.reward_terms(args[0], args[1], args[3], args[4], torque, self.q_soft, env.DT)
+            terms = zenbot.reward_terms(args[0], args[1], args[3], args[4], torque, self.q_soft, env.DT,
+                                        up_height=self.robot.UP_HEIGHT, target_height=self.robot.RISE_HEIGHT,
+                                        default_q=self.robot.DEFAULT_Q, joint_acc=joint_acc,
+                                        com_offset=self.root_com if self.robot is g1_getup else None)
             if self.reference is not None:
                 terms["motion_reference"] = self.reference.score(self.reference_pose(args[1]), clip, step)
             return terms
-        return env.reward_terms(*args, wrist_idx=self.robot.WRIST_IDX, default_q=self.robot.DEFAULT_Q,
-                                rise_height=self.robot.RISE_HEIGHT)
+        terms = env.reward_terms(*args, wrist_idx=self.robot.WRIST_IDX, default_q=self.robot.DEFAULT_Q,
+                                 rise_height=self.robot.RISE_HEIGHT)
+        if self.g1_phase_amp:
+            active = self.reference.active(clip, reference_start, step)
+            for name in ("track_lin", "track_ang", "body_ang_vel_xy"):
+                terms[name] = jnp.where(active, 0., terms[name])
+        if self.g1_reference and self.reference_reward:
+            state = args[1]
+            points = self.key_positions(state[0], state[1], state[4])
+            terms["motion_reference"] = self.reference.score(state, points, clip, reference_start, reference_yaw, step)
+        return terms
 
     def amp_frame(self, state, key_pos=None):
         if self.recovery:
@@ -404,8 +490,8 @@ class Sim:
         return amp.frame(state, self.key_positions(state[0], state[1], state[4]), self.amp_joints)
 
     def control_targets(self, action, bias, history, context):
-        if self.robot is env:
-            return env.joint_target(action, bias)
+        if self.robot is not zenbot:
+            return self.robot.DEFAULT_Q + self.robot.ACTION_SCALE * action - bias
         # A 3–7 physics-step delay can reach either of the previous two policy
         # commands. The previous actions precede the 18 key-body coordinates.
         frames = history.reshape(*history.shape[:-1], self.history, self.frame_dim)
@@ -455,22 +541,31 @@ class Sim:
         u = jax.random.uniform(key, (self.N,), minval=env.PUSH_INTERVAL[0], maxval=env.PUSH_INTERVAL[1])
         return (u / env.DT).astype(jnp.int32)
 
-    def _fresh(self, key, world: World, clip=None):
+    def _fresh(self, key, world: World, clip=None, return_source=False):
         """Fresh start states for every env (`_reset` applies them where an episode ended): a walking frame (no noise, the clip's
         heading), or with probability reset_floor a not-up frame of a get-up clip (random heading, roll / pitch / joint / velocity
         noise); prob_shove of the starts that are up get a kick of the velocities."""
         N, J = self.N, self.J
         kw, kf, ku, ks, kk1, kk2 = jax.random.split(key, 6)
-        i = jax.random.randint(kw, (N,), 0, world.walk["z"].shape[0]) if clip is None else clip
         wb = world.walk
-        q = jnp.clip(wb["q"][i], self.q_soft[:, 0], self.q_soft[:, 1])
-        qpos = jnp.concatenate((jnp.zeros((N, 2)), wb["z"][i][:, None], wb["quat"][i], q), -1)
+        if self.robot is g1_getup:
+            # Uniform clip, then uniform 50 Hz source time with a full 0.2 s window ahead.
+            track = jax.random.randint(kw, (N,), 0, len(wb["lengths"]))
+            i = wb["offsets"][track] + jax.random.randint(kf, (N,), 0, wb["lengths"][track] - 10)
+        else:
+            i = jax.random.randint(kw, (N,), 0, len(wb["z"])) if clip is None else clip
+        q = wb["q"][i] if self.recovery else jnp.clip(wb["q"][i], self.q_soft[:, 0], self.q_soft[:, 1])
+        xy = wb["xy"][i] if self.robot is g1_getup else jnp.zeros((N, 2))
+        qpos = jnp.concatenate((xy, wb["z"][i][:, None], wb["quat"][i], q), -1)
         qvel = jnp.concatenate((wb["v"][i], mv3(tr3(quat_to_mat(wb["quat"][i])), wb["w"][i]), wb["qd"][i]), -1)
         if self.recovery:
-            qpos = qpos.at[:, 2].add(0.02).at[:, 7:].set(wb["q"][i])
-            return qpos, qvel, self.is_up(qpos[:, 2], quat_to_mat(qpos[:, 3:7]))
+            qpos = qpos.at[:, 2].add(self.robot.RESET_LIFT)
+            return qpos, self.reference_velocity(qpos, qvel), self.is_up(qpos[:, 2], quat_to_mat(qpos[:, 3:7]))
         if self.reset_floor > 0:
-            z, quat, v, w, fq, fqd, _ = resets.states(kf, world.floor, N, "floor", self.q_soft[:, 0], self.q_soft[:, 1])
+            sample = resets.states(kf, world.floor, N, "floor", self.q_soft[:, 0], self.q_soft[:, 1], return_source=return_source)
+            if return_source:
+                sample, (source_clip, source_frame, source_yaw) = sample
+            z, quat, v, w, fq, fqd, _ = sample
             fpos = jnp.concatenate((jnp.zeros((N, 2)), z[:, None], quat, fq), -1)
             fvel = jnp.concatenate((v, mv3(tr3(quat_to_mat(quat)), w), fqd), -1)
             floor = jax.random.uniform(ku, (N,)) < self.reset_floor
@@ -478,27 +573,39 @@ class Sim:
         was_up = self.is_up(qpos[:, 2], quat_to_mat(qpos[:, 3:7]))
         if self.prob_shove > 0:
             shove = was_up & (jax.random.uniform(ks, (N,)) < self.prob_shove)
+            if self.g1_phase_amp:
+                shove &= ~floor
             kick = jnp.concatenate((jax.random.uniform(kk1, (N, 6), minval=-1.0, maxval=1.0) * jnp.asarray(env.SHOVE_ROOT),
                                     env.SHOVE_JOINT * jax.random.uniform(kk2, (N, J), minval=-1.0, maxval=1.0)), -1)  # fmt: skip
             qvel = qvel + jnp.where(shove[:, None], kick, 0.0)  # (the root's angular part is in the body frame, as MuJoCo's)
+        if return_source:
+            source = (jnp.where(floor, source_clip, -1), source_frame, source_yaw)
+            return (qpos, qvel, was_up), source
         return qpos, qvel, was_up
 
     def _reset(self, s: State, done, key) -> State:
         """Reset the envs where `done`: start state (`_fresh`), command drawn anew, last action zero, push schedule restarted."""
         kf, kc, kp = jax.random.split(key, 3)
         clip = None
-        if self.reference is not None:
-            clip = jax.random.randint(jax.random.split(kf, 6)[0], (self.N,), 0, len(self.reference.files))
-            s = s._replace(reference_clip=jnp.where(done, clip, s.reference_clip))
-        qpos, qvel, was_up = self._fresh(kf, s.world, clip)
+        if self.g1_reference:
+            (qpos, qvel, was_up), (clip, start, yaw) = self._fresh(kf, s.world, return_source=True)
+            s = s._replace(reference_clip=jnp.where(done, clip, s.reference_clip),
+                           reference_start=jnp.where(done, start, s.reference_start),
+                           reference_yaw=jnp.where(done, yaw, s.reference_yaw))
+        else:
+            if self.reference is not None:
+                clip = jax.random.randint(jax.random.split(kf, 6)[0], (self.N,), 0, len(self.reference.files))
+                s = s._replace(reference_clip=jnp.where(done, clip, s.reference_clip))
+            qpos, qvel, was_up = self._fresh(kf, s.world, clip)
         on = done[:, None]
         d = s.data.replace(qpos=jnp.where(on, qpos, s.data.qpos), qvel=jnp.where(on, qvel, s.data.qvel), qacc_warmstart=jnp.where(on, 0.0, s.data.qacc_warmstart))
-        cmd = env.where_cmd(done, env.sample_cmd(kc, self.N), s.cmd)
+        down = jnp.where(done, clip >= 0 if self.g1_phase_amp else ~was_up, s.down)
+        cmd = self.recovery_command(env.where_cmd(done, env.sample_cmd(kc, self.N), s.cmd), down)
         if self.robot is zenbot:
             delays = jax.random.randint(jax.random.fold_in(key, 9), s.delay_steps.shape, 3, 8)
             s = s._replace(delay_steps=jnp.where(on, delays, s.delay_steps))
         return s._replace(data=d, a_last=jnp.where(on, 0.0, s.a_last), a_ode=jnp.where(on, 0.0, s.a_ode), cmd=cmd, t=jnp.where(done, 0, s.t),
-                          was_up=jnp.where(done, was_up, s.was_up), down=jnp.where(done, ~was_up, s.down), push_t=jnp.where(done, 0, s.push_t),
+                          was_up=jnp.where(done, was_up, s.was_up), down=down, push_t=jnp.where(done, 0, s.push_t),
                           push_at=jnp.where(done, self._push_interval(kp), s.push_at), ep_sums=jnp.where(on, 0.0, s.ep_sums))  # fmt: skip
 
     def init(self, key) -> State:
@@ -509,16 +616,19 @@ class Sim:
         z, zi, zb = jnp.zeros((N,), jnp.float32), jnp.zeros((N,), jnp.int32), jnp.zeros((N,), bool)
         cmd = env.Cmd(jnp.zeros((N, 3)), z, zb, zb, z)
         s = State(data, world, jnp.zeros((N, self.obs_dim)), jnp.zeros((N, J)), jnp.zeros((N, J)), cmd, jnp.zeros((N, 3)), zi, jnp.ones((N,), bool),
-                  jnp.zeros((N,), bool), zi, zi, jnp.zeros((N, len(self.terms))), key, jnp.full((N,), self.assist_newtons, jnp.float32), jnp.zeros((N, 5 if self.recovery else 0), jnp.int32))  # fmt: skip
+                  jnp.zeros((N,), bool), zi, zi, jnp.zeros((N, len(self.terms))), key, jnp.full((N,), self.assist_newtons, jnp.float32), jnp.zeros((N, 5 if self.robot is zenbot else 0), jnp.int32))  # fmt: skip
         if self.reference is not None:
             s = s._replace(reference_clip=zi)
+            if self.g1_reference:
+                s = s._replace(reference_start=zi, reference_yaw=z)
         s = self._reset(s, jnp.ones((N,), bool), k_reset)
         if self.random_start and not self.recovery:  # episodes then end at different times (a get-up start keeps its full time to rise)
             s = s._replace(t=jnp.where(s.down, 0, jax.random.randint(k_t, (N,), 0, env.MAX_EPISODE)))
         S = unflatten(s.data.qpos, s.data.qvel)
         c_obs = self.command(s.cmd, S[1])
         frame = self.obs_frame(S, s.a_last, c_obs, k_obs)
-        return s._replace(c_obs=c_obs, obs=jnp.tile(frame, (1, self.history)))
+        critic_obs = self.push_critic(None, S, s.a_last) if self.robot is g1_getup else None
+        return s._replace(c_obs=c_obs, obs=self.push_actor(None, frame), critic_obs=critic_obs)
 
     # ------------------------------------------------------------------ physics
     def contact_stats(self, data):
@@ -543,7 +653,7 @@ class Sim:
         if self.recovery:
             support = jnp.asarray(self.support_link)
             link = jnp.maximum(support[g0], support[g1])
-            loads = jnp.zeros((N, len(zenbot.KEY_BODIES))).at[w, jnp.maximum(link, 0)].add(
+            loads = jnp.zeros((N, len(self.robot.SUPPORT_BODIES))).at[w, jnp.maximum(link, 0)].add(
                 jnp.where(valid & floor & (link >= 0), normal, 0))
         return found, hit, touch, loads
 
@@ -559,15 +669,17 @@ class Sim:
             if self.recovery:
                 # Only upward ground reaction on ankles, knees or hands enables assistance.
                 loads = self.contact_stats(d)[3]
-                scale = jnp.clip((zenbot.RISE_HEIGHT - d.qpos[:, 2]) / (zenbot.RISE_HEIGHT - 0.48), 0., 1.)
+                scale = jnp.clip((self.robot.RISE_HEIGHT - d.qpos[:, 2]) / (self.robot.RISE_HEIGHT - self.robot.FULL_FORCE_HEIGHT), 0., 1.)
                 force = assist * scale * (loads > 1.).any(-1) * (~fresh | (i > 0))
                 d = d.replace(xfrc_applied=d.xfrc_applied.at[:, self.torso, 2].set(force))
+            qd0 = d.qvel[:, self.va]
             d = step(mx, d, self.robot.actuator_ctrl(d.qpos[:, self.qa], d.qvel[:, self.va], tgt))
             found, hit, touch, loads = self.contact_stats(d)
-            return (d, hits + hit), (found, touch, loads)
+            acc = (d.qvel[:, self.va] - qd0) / env.SIM_DT if self.robot is g1_getup else None
+            return (d, hits + hit), (found, touch, loads, acc)
 
-        (data, hits), (found, touch, loads) = jax.lax.scan(sub, (data, jnp.zeros((self.N,))), jnp.arange(env.DECIMATION))
-        return data, found[-1], hits, touch[-1], loads[-1] if self.recovery else None
+        (data, hits), (found, touch, loads, acc) = jax.lax.scan(sub, (data, jnp.zeros((self.N,))), jnp.arange(env.DECIMATION))
+        return data, found[-1], hits, touch[-1], loads[-1] if self.recovery else None, acc[-1] if acc is not None else None
 
     # ------------------------------------------------------------------ one policy step
     def step(self, s: State, action, clean=None):
@@ -575,7 +687,7 @@ class Sim:
         key, k_reset, k_cmd, k_obs, k_push, k_push_at = jax.random.split(s.key, 6)
         a = action.astype(jnp.float32)
         target = self.control_targets(a, s.world.bias, s.obs, self.context(s))
-        data, contact, hits, touch, loads = self.physics(s.world, s.data, target, s.assist, s.t == 0)
+        data, contact, hits, touch, loads, joint_acc = self.physics(s.world, s.data, target, s.assist, s.t == 0)
         S0, S1 = unflatten(s.data.qpos, s.data.qvel), unflatten(data.qpos, data.qvel)
         t = s.t + 1
         v = self.view_state(S1)
@@ -585,9 +697,10 @@ class Sim:
         was_up1 = s.was_up | up1
         if self.recovery:
             terminated = diverged
-        timeout = t >= self.episode_steps
+        timeout = (t >= self.episode_steps) | self.recovery_timeout(s.reference_clip, s.reference_start, t)
         terms = self.reward_terms(S0, S1, v.kin, a, s.a_last, s.c_obs, ~was_up1, terminated.astype(jnp.float32), contact, hits, self.q_soft,
-                                  torque=data.ctrl, clip=s.reference_clip, step=t)
+                                  torque=data.actuator_force if self.robot is g1_getup else data.ctrl,
+                                  joint_acc=joint_acc, clip=s.reference_clip, step=t, reference_start=s.reference_start, reference_yaw=s.reference_yaw)
         parts = self.weighted(terms)
         parts = jnp.where(diverged[:, None], 0.0, jnp.stack([parts[k] for k in self.terms], -1))
         reward = parts.sum(-1)
@@ -601,27 +714,32 @@ class Sim:
                  "down_done": (fin * s.down).sum(), "down_up": (fin * s.down * was_up1).sum(), "up_frac": was_up1.mean(),
                  "self_hits": hits.mean(), "foot_contact": contact.mean()}  # fmt: skip
         s1 = s._replace(data=data, a_last=a, a_ode=a if clean is None else clean.astype(jnp.float32), t=t, was_up=was_up1, ep_sums=ep_sums)
-        if self.reference is not None:
-            valid = (t < self.reference.lengths[s.reference_clip]) & ~diverged
+        if self.reference_reward:
+            valid = (self.reference.active(s.reference_clip, s.reference_start, t) if self.g1_reference
+                     else t < self.reference.lengths[s.reference_clip]) & ~diverged
             stats["reference_score_sum"] = jnp.where(valid, terms["motion_reference"], 0.).sum()
             stats["reference_frames"] = valid.sum()
         if self.recovery:
             height_score = ep_sums[:, self.terms.index("target_base_height")] / (self.episode_steps * env.DT)
             avg = (height_score * fin).sum() / jnp.maximum(fin.sum(), 1)
             dec = done & (avg > 0.6 * self.weights["target_base_height"])
-            s1 = s1._replace(assist=jnp.maximum(0., s.assist - dec * zenbot.ASSIST_DECREMENT))
+            s1 = s1._replace(assist=jnp.maximum(0., s.assist - dec * self.robot.ASSIST_DECREMENT))
             stats.update(assist_n=s.assist.mean(), foot_load=loads[:, :2].sum(-1))
         s1 = self._reset(s1, done, k_reset)
-        cmd = env.tick(s1.cmd, k_cmd)
+        cmd = self.recovery_command(env.tick(s1.cmd, k_cmd), s1.down)
         push_t = s1.push_t + 1
-        push = (push_t == s1.push_at) & (self.push and not self.recovery)
+        push_due = (push_t == s1.push_at) & (self.push and not self.recovery)
+        push = push_due
+        if self.g1_phase_amp:
+            push &= ~self.reference.active(s1.reference_clip, s1.reference_start, s1.t)
         qvel = s1.data.qvel  # a push overwrites the root's world xy velocity
         qvel = qvel.at[:, :2].set(jnp.where(push[:, None], env.PUSH_VEL * jax.random.uniform(k_push, (N, 2), minval=-1.0, maxval=1.0), qvel[:, :2]))
-        s1 = s1._replace(data=s1.data.replace(qvel=qvel), push_t=jnp.where(push, 0, push_t), push_at=jnp.where(push, self._push_interval(k_push_at), s1.push_at))
+        s1 = s1._replace(data=s1.data.replace(qvel=qvel), push_t=jnp.where(push_due, 0, push_t), push_at=jnp.where(push_due, self._push_interval(k_push_at), s1.push_at))
         stats["pushes"] = push.sum().astype(jnp.float32)
         S2 = unflatten(s1.data.qpos, s1.data.qvel)
         c_obs = self.command(cmd, S2[1])
-        obs = env.push_frame(s.obs, self.obs_frame(S2, s1.a_last, c_obs, k_obs), done)
-        s2 = s1._replace(obs=obs, cmd=cmd, c_obs=c_obs, key=key)
+        obs = self.push_actor(s.obs, self.obs_frame(S2, s1.a_last, c_obs, k_obs), done)
+        critic_obs = self.push_critic(s.critic_obs, S2, s1.a_last, done) if self.robot is g1_getup else None
+        s2 = s1._replace(obs=obs, critic_obs=critic_obs, cmd=cmd, c_obs=c_obs, key=key)
         return s2, Transition(s.data.qpos, s.data.qvel, target, data.qpos, data.qvel, reward, terminated, timeout & ~terminated, diverged, parts,
                               contact, v.clearance, stats)  # fmt: skip

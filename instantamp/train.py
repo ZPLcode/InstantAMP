@@ -19,6 +19,8 @@ updated from collected observations, fixed inside an update).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import argparse
 import dataclasses
 import gc
@@ -35,7 +37,7 @@ import jax  # noqa: E402
 import jax.numpy as jnp
 import numpy as np
 
-from . import amp, critic, env, nets, optim
+from . import amp, critic, env, g1_getup, nets, optim
 from . import buffer as rb
 from .sim import Sim, motion_dirs, unflatten
 
@@ -146,6 +148,7 @@ class Config:
     mm_bf16: str = "imag"  # bf16 matmul outputs: imag | all | none
     log_every: int = 50  # iterations per log line
     ckpt_minutes: float = 2.0
+    ckpt_iterations: int = 0  # positive: checkpoint on this iteration interval instead of elapsed minutes
     seed: int = 0
     log_dir: str = ""
     jax_cache: str = "~/.cache/instantamp/jax"
@@ -156,6 +159,8 @@ class Config:
     init_g1_full: str = ""  # initialize this recipe from a legacy G1 ckpt/full/NNNN.npz
 
     def __post_init__(self):
+        if self.ckpt_iterations < 0:
+            raise ValueError("ckpt_iterations must be nonnegative")
         if (self.g1_style and self.robot != "g1") or (self.init_g1_full and not self.g1_style):
             raise ValueError("The G1 recovery recipe and its initializer require --robot g1 --g1_style 1")
         walk, floor = motion_dirs(self.robot)
@@ -163,7 +168,7 @@ class Config:
         self.amp_dir = self.amp_dir or walk
         self.floor_dir = self.floor_dir or floor
         self.amp_getup_dir = self.amp_getup_dir or (self.floor_dir if self.g1_style else floor)
-        self.log_dir = self.log_dir or ("runs/instantamp" if self.robot == "g1" else "runs/zenbot23_getup")
+        self.log_dir = self.log_dir or ("runs/instantamp" if self.robot == "g1" else f"runs/{self.robot}")
 
 
 @dataclasses.dataclass
@@ -180,7 +185,15 @@ class G1StyleConfig(Config):
     pi_lr: float = 0.00008
     getup_reward_scale: float = 20.
     getup_disc_lr: float = 0.0005
+    g1_getup_prior: str = "native"  # native | legged | legged_time (same 85-D LSGAN plus one native clock input)
+    g1_phase_share: float = 0.  # share of recovery style from a discriminator paired to the native clip clock
+    g1_phase_heading: int = 0  # include torso orientation relative to the reset heading in the phase classifier
+    g1_feature_share: float = 0.  # optional matched-window similarity in the phase discriminator's first hidden layer
+    g1_time_negatives: float = 0.  # probability of a distinct, wrong-time expert negative in the phase discriminator
     getup_duration_s: float = 4.
+    reference_weight: float = 0.  # auxiliary pose reward on the reset clip clock, training only
+    getup_reset_frames: int = 20  # number of eligible opening frames in each recovery clip
+    g1_support_friction: int = 0  # lateral support for hand and knee contacts with the floor
     getup_rise_weight: float = -0.25
     getup_style_ramp: int = 0  # ramp only the new recovery head over these iterations
     getup_hold_score: float = 0.  # expert score fraction after a window of settled standing, or zero to keep scoring every window
@@ -188,6 +201,25 @@ class G1StyleConfig(Config):
 
     def __post_init__(self):
         super().__post_init__()
+        if self.g1_getup_prior not in ("native", "legged", "legged_time"):
+            raise ValueError("g1_getup_prior must be native, legged or legged_time")
+        if self.g1_getup_prior != "native" and (self.amp_frames != 10 or self.amp_w <= 0 or not self.amp_getup
+                or self.reset_floor <= 0 or self.reference_weight or self.g1_phase_share or self.getup_hold_score
+                or Path(self.amp_getup_dir).resolve() != Path(self.floor_dir).resolve()):
+            raise ValueError("Legged G1 AMP needs matching segmented resets and demos, one 10-frame recovery discriminator, and zero reference_weight")
+        if not 0 <= self.g1_phase_share <= 1 or (self.g1_phase_share and
+                (not self.amp_getup or self.amp_w <= 0 or self.reset_floor <= 0 or self.getup_hold_score)):
+            raise ValueError("Phase AMP requires active recovery AMP, floor resets, and a learned standing score")
+        if (not 0 <= self.g1_feature_share < 1 or not 0 <= self.g1_time_negatives < 1
+                or self.g1_phase_heading not in (0, 1)
+                or (self.g1_phase_heading or self.g1_feature_share or self.g1_time_negatives) and not self.g1_phase_share):
+            raise ValueError("G1 feature matching and time-shift negatives require an active phase discriminator")
+        if self.g1_phase_share and Path(self.amp_getup_dir).resolve() != Path(self.floor_dir).resolve():
+            raise ValueError("Phase AMP requires the same segmented native bank for resets and expert windows")
+        if self.getup_reset_frames < 1 or self.reference_weight < 0 or not np.isfinite(self.reference_weight):
+            raise ValueError("Expected a positive getup_reset_frames and a finite nonnegative reference_weight")
+        if self.reference_weight and not self.reset_floor > 0:
+            raise ValueError("Aligned recovery rewards require floor resets")
         if not np.isfinite(self.getup_duration_s) or self.getup_duration_s <= 0:
             raise ValueError("getup_duration_s must be finite and positive")
         if self.init_g1_full and (self.amp_w <= 0 or not self.critic):
@@ -199,9 +231,8 @@ class G1StyleConfig(Config):
 
 
 @dataclasses.dataclass
-class ZenbotGetUpConfig(Config):
-    """legged_lab ZenbotGetUpEnvCfg task with the InstantAMP world model and hybrid policy optimizer."""
-    robot: str = "zenbot23_getup"
+class RecoveryConfig(Config):
+    """LeggedLab get-up tasks trained with the InstantAMP world model and hybrid policy optimizer."""
     reset_floor: float = 1.
     prob_shove: float = 0.
     push: int = 0
@@ -213,7 +244,6 @@ class ZenbotGetUpConfig(Config):
     amp_ramp: int = 0
     amp_lr: float = 1e-3
     amp_style_scale: float = 50.
-    reference_weight: float = 5.0  # per second while the selected native recovery clip is playing
     critic_hidden: str = "512,256,128"
     ppo_len: int = 24
     warmup_steps: int = 40
@@ -221,13 +251,36 @@ class ZenbotGetUpConfig(Config):
     minutes: float = 0.
 
 
+@dataclasses.dataclass
+class ZenbotGetUpConfig(RecoveryConfig):
+    robot: str = "zenbot23_getup"
+    reference_weight: float = 5.0  # per second while the selected native recovery clip is playing
+
+
+@dataclasses.dataclass
+class G1GetUpConfig(RecoveryConfig):
+    task: str = g1_getup.TASK_ID
+    robot: str = "g1_getup"
+    max_iterations: int = 500_000
+    ckpt_iterations: int = 50
+
+    def __post_init__(self):
+        self.amp_dir = self.amp_dir or self.floor_dir
+        super().__post_init__()
+
+
 class InstantAMP:
     def __init__(self, cfg: Config):
         self.cfg = c = cfg
+        self.paired = bool(getattr(c, "g1_phase_share", 0.))
+        self.legged = getattr(c, "g1_getup_prior", "native") != "native"
+        self.recovery_clock = self.paired or self.legged
         set_jax(c.jax_cache)
         self.sim = Sim(c.num_envs, c.nconmax, c.njmax, c.walk_dir, c.floor_dir, bool(c.random_start), c.seed, c.reset_floor, c.prob_shove, bool(c.push),
                        robot=c.robot, amp_wrists=bool(c.amp_wrists), reference_weight=getattr(c, "reference_weight", 0.),
-                       g1_style=bool(c.g1_style), getup_rise_weight=getattr(c, "getup_rise_weight", -0.25))
+                       g1_style=bool(c.g1_style), getup_rise_weight=getattr(c, "getup_rise_weight", -0.25),
+                       g1_support_friction=bool(getattr(c, "g1_support_friction", 0)), getup_reset_frames=getattr(c, "getup_reset_frames", 20),
+                       g1_phase_amp=self.recovery_clock)
         self.J = self.JS = self.sim.J  # joints (actions, targets) and the world model's q, qd
         self.ode = bool(c.ode)
         self.ode_dmax = c.ode_dmax if c.ode_dmax > 0 else None
@@ -240,7 +293,13 @@ class InstantAMP:
             if self.getup:
                 from .getup_amp import GetupDemos
 
-                self.getup_demos = GetupDemos(c.amp_getup_dir, self.sim, c.amp_frames, segmented=bool(c.g1_style))
+                self.getup_demos = GetupDemos(c.amp_getup_dir, self.sim, c.amp_frames, segmented=bool(c.g1_style), legged=self.legged)
+                if self.legged:
+                    from .getup_amp import LeggedRecoveryPrior
+                    self.legged_prior = LeggedRecoveryPrior(self.sim, self.getup_demos, c.g1_getup_prior == "legged_time")
+                if self.paired:
+                    from .g1_phase_amp import G1PhaseDemos
+                    self.phase_demos = G1PhaseDemos(self.sim, self.getup_demos, heading_features=bool(c.g1_phase_heading))
             self.amp_envs = np.nonzero(~((np.arange(c.num_envs) * c.det_share) % 1.0 >= c.det_share))[0].astype(np.int32)
         self.use_critic = bool(c.critic)
         self.ppo = c.ppo_frac > 0
@@ -276,9 +335,16 @@ class InstantAMP:
         if self.amp:
             carry["amp"] = amp.init(jax.random.fold_in(ks[3], 7), c.amp_frames, frame_dim=self.sim.amp_dim)
             if self.getup:
-                carry["amp_up"] = amp.init(jax.random.fold_in(ks[3], 13), c.amp_frames, frame_dim=self.getup_demos.frames.shape[-1])
+                key_up = jax.random.fold_in(ks[3], 13)
+                carry["amp_up"] = (self.legged_prior.init(key_up) if self.legged else
+                                   amp.init(key_up, c.amp_frames, frame_dim=self.getup_demos.frames.shape[-1]))
+        if self.paired:
+            carry["amp_phase"] = self.phase_demos.init(jax.random.fold_in(ks[3], 21))
+            carry["amp_up"]["norm"] = nets.rn_update(carry["amp_up"]["norm"], self.getup_demos.frames)
         if self.use_critic:
             self.critic_dim = 13 + 2 * self.JS + 3 + J + self.xi_dim + 2
+            if self.sim.robot is g1_getup:
+                self.critic_dim = e.critic_obs.shape[-1]
             carry["critic"] = critic.init(jax.random.fold_in(ks[3], 11), self.critic_dim, widths(c.critic_hidden))
         if c.g1_style and c.getup_anchor:
             carry["anchor"] = {"pi": jax.tree.map(jnp.copy, pi), "obs_norm": nets.rn_init(self.sim.obs_dim)}
@@ -308,8 +374,12 @@ class InstantAMP:
                "r": tr.reward}  # fmt: skip
         if self.sim.reference is not None:
             rec["reference_clip"] = s.reference_clip
+            if self.sim.g1_reference:
+                rec.update(reference_start=s.reference_start, reference_yaw=s.reference_yaw)
         if self.cfg.g1_style:
             rec["down_start"] = s.down
+        if self.sim.robot is g1_getup:
+            rec["obs_critic"] = s.critic_obs
         if self.ppo and self.sim.recovery:
             rec.update(a=a, mu=mu)
         elif self.ppo:  # the action taken, the mean it was drawn around, and the unweighted tracking term (the locomotion style's gate)
@@ -394,9 +464,13 @@ class InstantAMP:
             start["cmd"] = env.Cmd(**start["cmd"])
             return start
         fresh = jax.random.uniform(k_u, (B,)) < c.cmd_fresh
+        if self.recovery_clock:
+            fresh &= ~start["down_start"]
         cmd = env.sample_cmd(k_c, B)
         old = env.Cmd(start["cmd"]["vel"], start["cmd"]["heading"], start["cmd"]["is_heading"] > 0, start["cmd"]["is_standing"] > 0, start["cmd"]["time_left"])
         start["cmd"] = env.where_cmd(fresh, cmd, old)
+        if self.recovery_clock:
+            start["cmd"] = self.sim.recovery_command(start["cmd"], start["down_start"])
         S0 = unflatten(start["s_qpos"], start["s_qvel"])
         c_new = env.command(start["cmd"], S0[1])
         # a fresh command replaces the command channels of the newest observation frame (the policy sees it from the start)
@@ -432,6 +506,10 @@ class InstantAMP:
         return hard + soft - jax.lax.stop_gradient(soft)
 
     def disc_frame(self, state):
+        if getattr(self, "legged", False):
+            return self.getup_demos.policy_frames(state)
+        if getattr(self, "paired", False):
+            return self.phase_demos.frame(state)
         if self.cfg.g1_style:
             from .getup_amp import getup_frame
             return getup_frame(self.sim, state)
@@ -457,7 +535,23 @@ class InstantAMP:
             return score * st["ramp"] if c.getup_style_ramp else score
         return amp.style(st, amp.score(st["net"], st["norm"], windows), self.cfg.amp_style_scale)
 
-    def imagine(self, pi, wm, wm_b, obs_norm, start, keys, amp_st=None, critic_st=None, amp_up_st=None):
+    def paired_style(self, native, paired, windows, clip, source, yaw, elapsed):
+        c = self.cfg
+        if self.legged:
+            score = self.legged_prior.style(native, windows[..., self.sim.amp_dim:], clip, source, elapsed, c.getup_reward_scale)
+            return score * native["ramp"] if c.getup_style_ramp else score
+        ordinary = self.getup_style(native, windows[..., :self.phase_demos.base_dim])
+        conditioned, valid = self.phase_demos.condition_robot(windows, clip, source, yaw, elapsed)
+        matched = amp.recovery_style(paired, conditioned, c.getup_reward_scale)
+        if c.g1_feature_share:
+            feature_score, _ = self.phase_demos.matched_feature_reward(paired, windows, clip, source, yaw, elapsed,
+                                                                      scale=c.getup_reward_scale)
+            matched = (1-c.g1_feature_share)*matched + c.g1_feature_share*feature_score
+        if c.getup_style_ramp:
+            matched *= native["ramp"]
+        return jnp.where(valid, (1-c.g1_phase_share)*ordinary + c.g1_phase_share*matched, 0.)
+
+    def imagine(self, pi, wm, wm_b, obs_norm, start, keys, amp_st=None, critic_st=None, amp_up_st=None, phase_st=None):
         c, B, sim = self.cfg, self.B_im, self.sim
         bf16 = c.mm_bf16 in ("imag", "all")
         S0 = unflatten(start["s_qpos"], start["s_qvel"])
@@ -472,7 +566,7 @@ class InstantAMP:
         zeros = jnp.zeros((B,))
 
         def step(carry, k):
-            S, a_last, a_ode, hist, cmd, c_obs, t, up = carry
+            S, a_last, a_ode, hist, cmd, c_obs, t, up, critic_hist = carry
             k_o, k_c = jax.random.split(k)
             a = self.act(pi, obs_norm, hist, a_ode, out_bf16=bf16)
             v = sim.view_state(S)
@@ -482,12 +576,14 @@ class InstantAMP:
             t1 = t + 1
             up1 = up | self.sim.is_up(v1.height, S1[1])  # (up: whether the robot had been up before this step, as in the simulator)
             d = jnp.where(up, self.termination(v1.clearance), self.termination_down(t1, v1, S1[1]))
+            if self.recovery_clock:
+                d = jnp.maximum(d, sim.recovery_timeout(start["reference_clip"], start["reference_start"], t1))
             if sim.recovery:
                 d = (t1 >= sim.episode_steps).astype(jnp.float32)
             recovering = ~up1
             terms = sim.reward_terms(S, S1, v1.kin, a, a_last, c_obs, recovering, d, sim.soft_contact(v1.soles), zeros, sim.q_soft,
-                                     torque=sim.robot.actuator_ctrl(S[4], S[5], target[..., -sim.J:]) if sim.recovery else None,
-                                     clip=start.get("reference_clip"), step=t1)
+                                     torque=sim.estimated_torque(S, target) if sim.recovery else None,
+                                     clip=start.get("reference_clip"), step=t1, reference_start=start.get("reference_start"), reference_yaw=start.get("reference_yaw"))
             r = sum(sim.weighted(terms).values())
             if use_amp:  # the gates of the two styles at this step: the locomotion one while up, the get-up one while not yet up
                 frame1 = self.disc_frame(S1)
@@ -496,22 +592,31 @@ class InstantAMP:
                 g_loco = jnp.ones_like(upf) if sim.recovery else {"track_shift": moving * upf * (c.amp_track_lo + terms["track_lin"]), "moving": moving * upf,
                           "track": moving * terms["track_lin"], "none": upf}[c.amp_gate]  # fmt: skip
                 g_up = self.getup_gate(up1, start.get("down_start"), t1)
+                if self.recovery_clock:
+                    g_up = sim.reference.active(start["reference_clip"], start["reference_start"], t1).astype(jnp.float32)
                 if c.g1_style:
                     g_loco *= 1. - g_up
                 gate = jnp.stack((g_loco, g_up), -1)
             else:
                 frame1, gate = jnp.zeros((B, 1)), jnp.zeros((B, 2))
             cmd1 = env.tick(cmd, k_c)
+            if self.recovery_clock:
+                cmd1 = sim.recovery_command(cmd1, start["down_start"])
             c1 = sim.command(cmd1, S1[1])
-            hist1 = env.push_frame(hist, sim.obs_frame(S1, a, c1, k_o))
-            cin1 = self.critic_in(S1, v1.height, a, c1, xi, up1, t1, start.get("down_start")) if use_critic else zeros[:, None]
-            return (S1, a, a, hist1, cmd1, c1, t1, up1), (r, d, frame1, gate, cin1, recovering.astype(jnp.float32))
+            hist1 = sim.push_actor(hist, sim.obs_frame(S1, a, c1, k_o))
+            if critic_hist is not None:
+                critic_hist = sim.push_critic(critic_hist, S1, a)
+                cin1 = critic_hist
+            else:
+                cin1 = self.critic_in(S1, v1.height, a, c1, xi, up1, t1, start.get("down_start")) if use_critic else zeros[:, None]
+            return (S1, a, a, hist1, cmd1, c1, t1, up1, critic_hist), (r, d, frame1, gate, cin1, recovering.astype(jnp.float32))
 
         if c.imag_remat == "dots":
             step = jax.checkpoint(step, policy=jax.checkpoint_policies.dots_with_no_batch_dims_saveable)
         elif c.imag_remat == "full":
             step = jax.checkpoint(step)
-        init = (S0, start["a_last"], start["a_ode"], start["obs"], start["cmd"], start["c_obs"], start["t"], start["was_up"] > 0)
+        init = (S0, start["a_last"], start["a_ode"], start["obs"], start["cmd"], start["c_obs"], start["t"], start["was_up"] > 0,
+                start.get("obs_critic") if use_critic else None)
         _, (r, d, frames, gate, cins, rec) = jax.lax.scan(step, init, keys, unroll=c.imag_unroll)
         if use_amp:
             F = c.amp_frames
@@ -522,7 +627,13 @@ class InstantAMP:
             mix = gate[..., 0] * style
             up_full = 0.0  # amp_getup_full: the get-up style at full scale, outside the ramp
             if amp_up_st is not None:
-                style_up = jnp.swapaxes(self.getup_style(amp_up_st, wins), 0, 1)
+                if self.recovery_clock:
+                    elapsed = start["t"][:, None] + jnp.arange(1, c.horizon+1)
+                    score = self.paired_style(amp_up_st, phase_st, wins, start["reference_clip"][:, None],
+                                              start["reference_start"][:, None], start["reference_yaw"][:, None], elapsed)
+                else:
+                    score = self.getup_style(amp_up_st, wins)
+                style_up = jnp.swapaxes(score, 0, 1)
                 if c.amp_getup_full:
                     up_full = gate[..., 1] * style_up
                 else:
@@ -540,7 +651,7 @@ class InstantAMP:
         aux = {"G": G.mean(), "r": (alive_before * r).sum(0).mean() / c.horizon, "surv": alive[-1].mean(), "rec_im": rec.mean()}
         if use_critic:
             v0 = sim.view_state(S0)
-            cin0 = self.critic_in(S0, v0.height, start["a_last"], start["c_obs"], xi, start["was_up"] > 0, start["t"], start.get("down_start"))
+            cin0 = start["obs_critic"] if "obs_critic" in start else self.critic_in(S0, v0.height, start["a_last"], start["c_obs"], xi, start["was_up"] > 0, start["t"], start.get("down_start"))
             v_end = critic.value(critic_st, cins[-1])
             G = G + c.gamma**c.horizon * alive[-1] * v_end
             aux["v_end"] = v_end.mean()
@@ -571,7 +682,7 @@ class InstantAMP:
         if self.amp:
             feats = self.disc_frame(S1).reshape(T - 1, n, -1)
             idx = jnp.arange(L)[:, None] + jnp.arange(F)[None, :]  # the window of transition k: post-step frames k .. k + F - 1 of the rows
-            if c.g1_style:
+            if c.g1_style or sim.robot is g1_getup:
                 # Match imagination: fill missing pre-episode history with the reset pose.
                 first = idx[:, -1:] - w["t"][tr]
                 rows0 = jnp.maximum(first, 0)
@@ -588,6 +699,8 @@ class InstantAMP:
             g_loco = jnp.ones_like(upf) if sim.recovery else {"track_shift": moving * upf * (c.amp_track_lo + w["rlin"][tr]), "moving": moving * upf,
                       "track": moving * w["rlin"][tr], "none": upf}[c.amp_gate]  # fmt: skip
             g_up = self.getup_gate(upf, w["down_start"][tr] if c.g1_style else None, w["t"][tr] + 1)
+            if self.recovery_clock:
+                g_up = sim.reference.active(w["reference_clip"][tr], w["reference_start"][tr], w["t"][tr]+1).astype(jnp.float32)
             if c.g1_style:
                 g_loco *= 1. - g_up
             mix = g_loco * self.style(carry["amp"], wins[..., :sim.amp_dim]).reshape(n, L).T
@@ -595,7 +708,13 @@ class InstantAMP:
             up_full = 0.0
             if self.getup:  # (amp_getup_full: the get-up style at full scale, outside the ramp, as in imagination)
                 score_up = self.style if sim.recovery else self.getup_style  # legacy Zenbot PPO uses its main reward map for both heads
-                recovery_reward = g_up * score_up(carry["amp_up"], wins).reshape(n, L).T
+                if self.recovery_clock:
+                    timing = [w[k][tr].T.reshape(-1) for k in ("reference_clip", "reference_start", "reference_yaw", "t")]
+                    score = self.paired_style(carry["amp_up"], carry.get("amp_phase"), wins,
+                                              *timing[:3], timing[-1]+1)
+                else:
+                    score = score_up(carry["amp_up"], wins)
+                recovery_reward = g_up * score.reshape(n, L).T
                 if c.amp_getup_full:
                     up_full = recovery_reward
                 else:
@@ -604,7 +723,7 @@ class InstantAMP:
             r = (1 - c.amp_lerp) * r + c.amp_lerp * env.DT * styled if c.amp_lerp > 0 else r + c.amp_w * env.DT * styled
         st = slice(F - 1, T)  # the L + 1 states s_0 .. s_L
         S = unflatten(flat(w["s_qpos"][st]), flat(w["s_qvel"][st]))
-        cin = self.critic_in(S, sim.view_state(S).height, flat(w["a_last"][st]), flat(w["c_obs"][st]), flat(w["xi"][st]),
+        cin = flat(w["obs_critic"][st]) if "obs_critic" in w else self.critic_in(S, sim.view_state(S).height, flat(w["a_last"][st]), flat(w["c_obs"][st]), flat(w["xi"][st]),
                              flat(w["was_up"][st]) > 0, flat(w["t"][st]), flat(w["down_start"][st]) if c.g1_style else None)  # fmt: skip
         V = critic.value(carry["critic"], cin).reshape(L + 1, n)
         done, term = w["done"][tr], w["term"][tr]
@@ -627,7 +746,14 @@ class InstantAMP:
             out["anchor_mu"] = self.act(teacher["pi"], teacher["obs_norm"], out["obs"], out["a_ode"])
             out["down"] = flat(w["was_up"][tr]) == 0
             out["early"] = flat(w["t"][tr]) * env.DT < 2.
-        return out, {"ppo_r": (r * mask).sum() / jnp.maximum(mask.sum(), 1.0)}
+            if self.recovery_clock:
+                active = flat(sim.reference.active(w["reference_clip"][tr], w["reference_start"][tr], w["t"][tr]+1))
+                out["preserve_baseline"] = ~active
+        stats = {"ppo_r": (r * mask).sum() / jnp.maximum(mask.sum(), 1.0)}
+        if self.recovery_clock:
+            scored = g_up * mask * (w["t"][tr]+1 >= F-1)
+            stats["real_getup_amp_per_active_step"] = (recovery_reward * scored).sum() / jnp.maximum(scored.sum(), 1.) * env.DT * c.amp_lerp
+        return out, stats
 
     def ppo_loss(self, pi, obs_norm, b):
         """PPO's clipped surrogate of the live policy on the real batch: Gaussian actions of fixed std action_noise around the mean."""
@@ -643,6 +769,8 @@ class InstantAMP:
         if "anchor_mu" in b:
             # Balance rare recovery states against the long upright episodes. Permit more exploration during the opening.
             kl = jnp.sum(jnp.square(mu - b["anchor_mu"]), axis=-1) / (2 * c.action_noise**2)
+            if "preserve_baseline" in b:
+                m = m * b["preserve_baseline"]
             down = m * b["down"]
             upright = m * ~b["down"]
             opening = jnp.where(b["early"], 0.35, 1.)
@@ -656,7 +784,7 @@ class InstantAMP:
         c = self.cfg
         (_, aux), grads = jax.value_and_grad(self.imagine, has_aux=True)(carry["pi"], carry["wm"], carry["wm_b"], carry["obs_norm"], start,
                                                                          jax.random.split(key, c.horizon), carry.get("amp"), carry.get("critic"),
-                                                                         carry.get("amp_up"))  # fmt: skip
+                                                                         carry.get("amp_up"), carry.get("amp_phase"))  # fmt: skip
         if ppo_b is not None:  # g = g_bptt + ppo_w |g_bptt| / |g_ppo| g_ppo
             # the PPO gradient of each half of the PPO envs (even / odd), their mean the batch's: the cosine of the halves measures the
             # PPO gradient's signal against its noise, its cosine with the BPTT gradient whether the two point the same way
@@ -718,6 +846,33 @@ class InstantAMP:
             st, aux = amp.train_step(st, self.demos.sample(k_d, c.amp_batch), feats, ok.astype(jnp.float32), k_g, c.amp_lr, recovery=sim.recovery)
             return st, {**aux, "usable": ok.mean()}
 
+        def paired_update(states, key):
+            from .g1_phase_amp import update_paired
+            native, paired = states
+            kw, kd, kg, kp = jax.random.split(key, 4)
+            w = rb.sample_windows(carry["buf"], kw, c.amp_batch, F, recent=c.amp_recent, envs=self.amp_envs,
+                                  recovery_lengths=sim.reference.lengths)
+            raw = self.disc_frame(unflatten(w["s_qpos"], w["s_qvel"]))
+            timing = [w[name][:, -1] for name in ("reference_clip", "reference_start", "reference_yaw", "t")]
+            expert, robot, valid = self.phase_demos.paired_windows(raw, *timing)
+            valid &= w["mask"][:, -1] > 0
+            def update_native(st):
+                return amp.train_step(st, self.getup_demos.sample(kd, c.amp_batch), raw[..., :self.phase_demos.base_dim],
+                                      valid.astype(jnp.float32), kg, c.getup_disc_lr, recovery=True)
+            def skip(st):
+                return st, {k: jnp.zeros(()) for k in ("d_demo", "d_robot", "gp")}
+            native, stats = jax.lax.cond(valid.any(), update_native, skip, native)
+            if c.g1_time_negatives:
+                kt, km = jax.random.split(jax.random.fold_in(kp, 1))
+                offsets = jnp.array([-25, -12, 12, 25])
+                drift = jax.random.choice(kt, offsets, (len(valid),))
+                shifted, distinct = self.phase_demos.time_shifted_expert(timing[0], timing[1], timing[-1], drift)
+                use_shifted = valid & distinct & jax.random.bernoulli(km, c.g1_time_negatives, (len(valid),))
+                robot = jnp.where(use_shifted[:, None, None], shifted, robot)
+                stats["shifted_fraction"] = use_shifted.sum() / jnp.maximum(valid.sum(), 1)
+            paired, aux = update_paired(paired, expert, robot, valid, kp, c.getup_disc_lr)
+            return (native, paired), {**stats, "usable": valid.mean(), "phase_demo": aux["d_demo"], "phase_robot": aux["d_robot"]}
+
         def one_up(st, k):  # the get-up prior: windows in which the robot has not been up, against not-up windows of the get-up clips
             k_w, k_d, k_g = jax.random.split(k, 3)
             w = rb.sample_windows(carry["buf"], k_w, c.amp_batch, F, recent=c.amp_recent, envs=self.amp_envs)
@@ -730,6 +885,20 @@ class InstantAMP:
                                      recovery=bool(c.g1_style))
             return st, {**aux, "usable": ok.mean()}
 
+        def legged_update(st, key):
+            from .g1_phase_amp import update_paired
+            kw, kd = jax.random.split(key)
+            w = rb.sample_windows(carry["buf"], kw, c.amp_batch, F, recent=c.amp_recent, envs=self.amp_envs,
+                                  recovery_lengths=sim.reference.lengths)
+            state = unflatten(w["s_qpos"], w["s_qvel"])
+            raw = self.getup_demos.policy_frames(state)[..., sim.amp_dim:]
+            # These are *pre-step* physical states. Their last tick is t, not t+1.
+            timing = [w[k][:, -1] for k in ("reference_clip", "reference_start", "t")]
+            demo, robot, valid = self.legged_prior.pair(raw, *timing)
+            valid &= w["mask"][:, -1] > 0
+            st, aux = update_paired(st, demo, robot, valid, kd, c.getup_disc_lr)
+            return st, {**aux, "usable": valid.mean()}
+
         key, k, k2 = jax.random.split(carry["key"], 3)
         st, aux = jax.lax.scan(one, carry["amp"], jax.random.split(k, c.amp_disc_steps))
         ramp = jnp.clip((carry["it"] - c.amp_delay) / float(c.amp_ramp), 0., 1.) if c.amp_ramp else (carry["it"] >= c.amp_delay).astype(jnp.float32)
@@ -737,7 +906,17 @@ class InstantAMP:
         out = {**carry, "amp": {**st, "ramp": ramp}, "key": key}
         stats = {"amp_d_demo": aux["d_demo"], "amp_d_robot": aux["d_robot"], "amp_gp": aux["gp"], "amp_usable": aux["usable"], "amp_ramp": ramp}
         if self.getup:
-            st2, aux2 = jax.lax.scan(one_up, carry["amp_up"], jax.random.split(k2, c.amp_disc_steps))
+            disc_keys = jax.random.split(k2, c.amp_disc_steps)
+            if self.paired:
+                (st2, out["amp_phase"]), aux2 = jax.lax.scan(paired_update, (carry["amp_up"], carry["amp_phase"]), disc_keys)
+                stats["phase_demo"] = aux2["phase_demo"].mean()
+                stats["phase_robot"] = aux2["phase_robot"].mean()
+                if c.g1_time_negatives:
+                    stats["phase_shifted_fraction"] = aux2["shifted_fraction"].mean()
+            elif self.legged:
+                st2, aux2 = jax.lax.scan(legged_update, carry["amp_up"], disc_keys)
+            else:
+                st2, aux2 = jax.lax.scan(one_up, carry["amp_up"], disc_keys)
             aux2 = jax.tree.map(lambda x: x[-1], aux2)
             if c.g1_style and c.getup_style_ramp:
                 st2 = {**st2, "ramp": jnp.clip((carry["it"] - c.wm_only_iters) / c.getup_style_ramp, 0., 1.)}
@@ -776,6 +955,9 @@ class InstantAMP:
         if "anchor" in carry:
             stat_keys += ("anchor_kl",)
 
+        if self.recovery_clock and self.ppo:
+            stat_keys += ("real_getup_amp_per_active_step",)
+
         def skip(sub):
             return sub, {k: jnp.zeros((), jnp.float32) for k in stat_keys}
 
@@ -795,7 +977,7 @@ class InstantAMP:
             return dict(zip(lowered, ex.map(lambda low: low.compile(), lowered.values())))
 
 
-FULL_KEYS = ("pi", "avg", "wm", "wm_b", "obs_norm", "opt_pi", "opt_wm", "amp", "amp_up", "critic", "it", "env_steps", "gn_ema", "wm_ema", "nonfinite", "anchor")
+FULL_KEYS = ("pi", "avg", "wm", "wm_b", "obs_norm", "opt_pi", "opt_wm", "amp", "amp_up", "critic", "it", "env_steps", "gn_ema", "wm_ema", "nonfinite", "anchor", "amp_phase")
 
 
 def save_full(path, carry):
@@ -815,7 +997,7 @@ def load_full(carry, path):
 def initialize_g1_style(carry, path):
     """Start from a trained G1's averaged actor, dynamics, critic and walking prior."""
     # Legacy G1 checkpoints used the walking feature width for both discriminators.
-    legacy = {k: v for k, v in carry.items() if k != "anchor"}
+    legacy = {k: v for k, v in carry.items() if k not in ("anchor", "amp_phase")}
     old = load_full({**legacy, "amp_up": carry["amp"]}, path)
     source = {k: old[k] for k in ("avg", "obs_norm", "wm", "wm_b", "amp", "critic")}
     if "anchor" in carry:
@@ -842,10 +1024,19 @@ def save_policy(path, carry, meta, ode=None):
 def parse(argv=None) -> Config:
     p = argparse.ArgumentParser(description="InstantAMP: train a humanoid velocity-tracking policy with AMP through a learned world model.")
     select = argparse.ArgumentParser(add_help=False)
-    select.add_argument("--robot", choices=("g1", "zenbot23_getup"), default="g1")
+    select.add_argument("--robot", choices=("g1", "g1_getup", "zenbot23_getup"))
+    select.add_argument("--task", choices=(g1_getup.TASK_ID,))
     select.add_argument("--g1_style", type=int, choices=(0, 1), default=0)
     chosen = select.parse_known_args(argv)[0]
-    recipe = G1StyleConfig if chosen.g1_style else (ZenbotGetUpConfig if chosen.robot == "zenbot23_getup" else Config)
+    if chosen.task and chosen.robot not in (None, "g1_getup"):
+        p.error(f"{chosen.task} requires the g1_getup profile")
+    if chosen.task or chosen.robot == "g1_getup":
+        recipe = G1GetUpConfig
+    else:
+        recipe = G1StyleConfig if chosen.g1_style else (ZenbotGetUpConfig if chosen.robot == "zenbot23_getup" else Config)
+    if recipe is not G1GetUpConfig:
+        p.add_argument("--task", choices=(g1_getup.TASK_ID,), default=argparse.SUPPRESS,
+                       help="select the LeggedLab G1 get-up task")
     for f in dataclasses.fields(recipe):
         p.add_argument(f"--{f.name}", type=type(f.default), default=f.default)
     return recipe(**vars(p.parse_args(argv)))
@@ -879,7 +1070,10 @@ def main(argv=None):
     while True:
         cs, ls = [], []
         remaining = cfg.max_iterations - int(carry["it"]) if cfg.max_iterations else cfg.log_every
-        for _ in range(min(remaining, cfg.log_every)):
+        block = min(remaining, cfg.log_every)
+        if cfg.ckpt_iterations:
+            block = min(block, cfg.ckpt_iterations - int(carry["it"]) % cfg.ckpt_iterations)
+        for _ in range(block):
             carry, cst = progs["collect"](carry)
             ast = {}
             if "amp" in progs:
@@ -898,7 +1092,7 @@ def main(argv=None):
               **{k: float(np.mean([x[k] for x in ls])) for k in ls[0]}, **{k: float(v) for k, v in ev.items()}}  # fmt: skip
         if xs.sim.recovery:
             st["assist_n"] = float(np.mean([x["assist_n"] for x in cs]))
-        if xs.sim.reference is not None:
+        if xs.sim.reference_reward:
             frames = sum(int(x["reference_frames"]) for x in cs)
             if frames:
                 st["reference_pose_score"] = sum(float(x["reference_score_sum"]) for x in cs) / frames
@@ -909,7 +1103,7 @@ def main(argv=None):
         metrics = (f"height {st['rew_target_base_height']:.3f} assist {st['assist_n']:.1f} N" if xs.sim.recovery else
                    f"lin {st['rew_track_lin']:.3f} ang {st['rew_track_ang']:.3f}")
         print(f"it {it} | {train_s / 60:.2f} min | {env_steps / 1e6:.1f}M | len {st['ep_len']:.0f} fell {st['fell']:.2f} {metrics} r {st['reward']:.4f} | up {st['up_frac']:.2f} get-ups {st['down_up']:.0f}/{st['down_done']:.0f} | wm {st['wm']:.4f} e8 {st['wm8']:.4f} | "
-              f"G {st['G']:.3f} r_im {st['r']:.4f} surv {st['surv']:.3f} gn {st['gn']:.2f} | {cfg.log_every / max(train_s - prev_s, 1e-9):.1f} it/s"
+              f"G {st['G']:.3f} r_im {st['r']:.4f} surv {st['surv']:.3f} gn {st['gn']:.2f} | {block / max(train_s - prev_s, 1e-9):.1f} it/s"
               + (f" | h_err {st['h_err8'] * 100:.1f}/{st['h_errK'] * 100:.1f} cm term env {st['fall_env']:.3f} wm {st['fall_wm']:.3f}" if cfg.wm_eval else "")
               + (f" | amp d {st['amp_d_demo']:.2f}/{st['amp_d_robot']:.2f} r {st['r_amp']:.4f} use {st['amp_usable']:.2f} ramp {st['amp_ramp']:.2f}" if xs.amp else "")
               + (f" | getup d {st['ampg_d_demo']:.2f}/{st['ampg_d_robot']:.2f} use {st['ampg_usable']:.2f}" if xs.amp and xs.getup else "")
@@ -919,7 +1113,9 @@ def main(argv=None):
               + (f" | diverged {st['diverged']:.0f}" if st["diverged"] else ""), flush=True)  # fmt: skip
         prev_s, prev_env = train_s, env_steps
         finished = (cfg.minutes > 0 and train_s >= 60 * cfg.minutes) or (cfg.max_iterations > 0 and it >= cfg.max_iterations)
-        if train_s - last_ckpt >= 60 * cfg.ckpt_minutes or finished:
+        checkpoint_due = (it % cfg.ckpt_iterations == 0 if cfg.ckpt_iterations else
+                          train_s - last_ckpt >= 60 * cfg.ckpt_minutes)
+        if checkpoint_due or finished:
             save_full(os.path.join(cfg.log_dir, "ckpt", "full", f"{n_ckpt:04d}"), carry)
             save_policy(os.path.join(cfg.log_dir, "ckpt", f"{n_ckpt:04d}"), jax.device_get(xs.export(carry)),
                         {"it": it, "train_s": train_s, "env_steps": env_steps}, ode=(xs.ode_dmax, xs.ode_amax) if xs.ode else None)  # fmt: skip

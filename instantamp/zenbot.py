@@ -42,6 +42,8 @@ UP_HEIGHT, RISE_HEIGHT = 0.58, 0.68
 MASS = 43.0678308
 INITIAL_ASSIST = 200 * MASS / 33.341142
 ASSIST_DECREMENT = INITIAL_ASSIST / 20
+FULL_FORCE_HEIGHT, RESET_LIFT = 0.48, 0.02
+SUPPORT_BODIES = KEY_BODIES
 HIST = 5
 # URDF cylinders imported as capsules by the reference get-up task (radius and half-length).
 CAPSULES = {**dict.fromkeys(("left_hip_yaw_Link", "right_hip_yaw_Link"), (0.07, 0.055)),
@@ -64,20 +66,21 @@ WEIGHTS = {"joint_acc_l2": -1e-7, "action_rate_l2": -0.005, "joint_torques_l2": 
 class RecoveryReference:
     """Phase-aligned poses for the native Zenbot clips used to initialize episodes."""
 
-    def __init__(self, directory, key_positions):
+    def __init__(self, directory, key_positions, joints=len(DOF)):
+        self.joints = joints
         self.files = sorted(Path(directory).glob("*.npz"))
         poses, lengths = [], []
         for path in self.files:
             with np.load(path) as clip:
                 pos, q = clip["root_pos"], clip["dof_pos"]
-                if float(clip["fps"]) != 50 or not len(pos) or q.shape != (len(pos), len(DOF)):
-                    raise ValueError(f"Expected a 50 Hz Zenbot reference in {path}")
+                if float(clip["fps"]) != 50 or not len(pos) or q.shape != (len(pos), self.joints):
+                    raise ValueError(f"Expected a 50 Hz recovery reference in {path}")
                 rot = quat_to_mat(clip["root_quat"][:, [3, 0, 1, 2]])
                 points = clip["key_body_pos"] if "key_body_pos" in clip else key_positions(pos, rot, q)
                 poses.append(self.pose(pos, rot, q, points))
                 lengths.append(len(pos))
         if not lengths:
-            raise ValueError(f"No Zenbot references in {directory}")
+            raise ValueError(f"No recovery references in {directory}")
         self.poses = jnp.concatenate(poses)
         self.offsets = jnp.asarray(np.cumsum([0, *lengths[:-1]]), dtype=jnp.int32)
         self.lengths = jnp.asarray(lengths, dtype=jnp.int32)
@@ -93,8 +96,8 @@ class RecoveryReference:
         delta = pose - self.poses[index]
         height = delta[..., 0] ** 2
         tilt = (delta[..., 1:4] ** 2).sum(-1)
-        joints = (delta[..., 4:4 + len(DOF)] ** 2).mean(-1)
-        landmarks = delta[..., 4 + len(DOF):].reshape(*height.shape, len(KEY_BODIES), 3)
+        joints = (delta[..., 4:4 + self.joints] ** 2).mean(-1)
+        landmarks = delta[..., 4 + self.joints:].reshape(*height.shape, len(KEY_BODIES), 3)
         points = (landmarks ** 2).sum(-1).mean(-1)
         return (height, tilt, joints, points), (step >= 0) & (step < self.lengths[clip])
 
@@ -106,17 +109,20 @@ class RecoveryReference:
         return jnp.where(active, score, 0.)
 
 
-def reward_terms(state, next_state, action, last_action, torque, limits, dt):
+def reward_terms(state, next_state, action, last_action, torque, limits, dt, *,
+                 up_height=UP_HEIGHT, target_height=RISE_HEIGHT, default_q=DEFAULT_Q, joint_acc=None, com_offset=None):
     from .rot import mv3, tr3
 
     pos, rot, vel, ang, q, qd = next_state
+    if com_offset is not None:
+        vel = vel + jnp.cross(ang, mv3(rot, com_offset))
     z = pos[..., 2]
-    standing = z > UP_HEIGHT
+    standing = z > up_height
     square = lambda x: jnp.square(x).sum(-1)
-    return {"joint_acc_l2": square((qd - state[5]) / dt), "action_rate_l2": square(action - last_action),
+    return {"joint_acc_l2": square((qd - state[5]) / dt if joint_acc is None else joint_acc), "action_rate_l2": square(action - last_action),
             "joint_torques_l2": square(torque), "joint_pos_limits": (jnp.maximum(limits[:, 0] - q, 0) + jnp.maximum(q - limits[:, 1], 0)).sum(-1),
             "ang_vel_xy": standing * jnp.exp(-2 * square(mv3(tr3(rot), ang)[..., :2])),
             "lin_vel_xy": standing * jnp.exp(-5 * square(mv3(tr3(rot), vel)[..., :2])),
             "target_orientation": standing * jnp.exp(-5 * square(rot[..., 2, :2])),
-            "target_base_height": standing * jnp.exp(-20 * jnp.abs(z - RISE_HEIGHT)),
-            "target_joint_deviation_l2": standing * square(q - DEFAULT_Q)}
+            "target_base_height": standing * jnp.exp(-20 * jnp.abs(z - target_height)),
+            "target_joint_deviation_l2": standing * square(q - default_q)}

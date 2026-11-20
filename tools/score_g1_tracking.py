@@ -90,14 +90,28 @@ def _landmarks_and_clearance(model, poses):
     geoms, radii, half_lengths = _collider_dimensions(model)
     parts = ["left_foot", "right_foot", "left_hand", "right_hand"]
     group = [[j for j,g in enumerate(geoms) if model.geom(int(g)).name.startswith("robot_" + part)] for part in parts]
+    # The G1 has a shin capsule attached to each knee, with a proximal end cap
+    # offset slightly from the joint. Use this cap only: the distal shin can
+    # brush the ground long before a knee lands.
+    shins = np.array([model.geom("robot_" + side + "_shin_collision").id for side in ("left", "right")])
+    proximal = []
+    for g in shins:
+        rotation = np.empty(9)
+        mujoco.mju_quat2Mat(rotation, model.geom_quat[g])
+        offset = rotation.reshape(3, 3)[:, 2] * model.geom_size[g, 1]
+        endpoints = [model.geom_pos[g] + offset, model.geom_pos[g] - offset]
+        proximal.append(min(endpoints, key=np.linalg.norm))
+    proximal = np.stack(proximal)
     positions = np.empty((len(poses), len(ids), 3))
-    gaps = np.empty((len(poses), len(parts)))
+    gaps = np.empty((len(poses), len(parts) + 2))
     for i, pose in enumerate(poses):
         data.qpos[:] = pose
         mujoco.mj_kinematics(model, data)
         positions[i] = data.xpos[ids]
         height = data.geom_xpos[geoms, 2] - radii - half_lengths * np.abs(data.geom_xmat[geoms, 8])
-        gaps[i] = [height[indices].min() for indices in group]
+        gaps[i, :4] = [height[indices].min() for indices in group]
+        z_offset = (data.xmat[ids[-2:], 6:9] * proximal).sum(-1)
+        gaps[i, 4:] = data.xpos[ids[-2:], 2] + z_offset - model.geom_size[shins, 0]
     return positions, gaps
 
 
@@ -110,8 +124,16 @@ def _yaw_local(points, qpos):
                      offset[..., 2]), axis=-1)
 
 
+def _body_local(points, qpos):
+    rotations = np.empty((len(qpos), 9))
+    for quat, matrix in zip(np.ascontiguousarray(qpos[:, 3:7], float), rotations):
+        mujoco.mju_quat2Mat(matrix, quat)
+    return np.einsum("tij,tki->tkj", rotations.reshape(-1, 3, 3), points - qpos[:, None, :3])
+
+
 def _pose_metrics(ref, sim, ref_points, sim_points):
     relative_ref, relative_sim = _yaw_local(ref_points, ref), _yaw_local(sim_points, sim)
+    body_ref, body_sim = _body_local(ref_points, ref), _body_local(sim_points, sim)
     rms = lambda x: float(np.sqrt(np.mean(np.square(x))))
     length_rmse = lambda x: rms(np.linalg.norm(x, axis=-1))
     sign = np.where(np.sum(sim[:, 3:7] * ref[:, 3:7], axis=-1) < 0, -1., 1.)
@@ -125,6 +147,7 @@ def _pose_metrics(ref, sim, ref_points, sim_points):
         "joint_rmse_rad": rms(sim[:, 7:] - ref[:, 7:]),
     }
     for name, sl in (("ankle", slice(0, 2)), ("wrist", slice(2, 4)), ("knee", slice(4, 6))):
+        result[name + "_body_rmse_cm"] = 100 * length_rmse(body_sim[:, sl] - body_ref[:, sl])
         result[name + "_world_rmse_cm"] = 100 * length_rmse(sim_points[:, sl] - ref_points[:, sl])
         result[name + "_heading_rmse_cm"] = 100 * length_rmse(relative_sim[:, sl] - relative_ref[:, sl])
     return result
@@ -156,13 +179,17 @@ def score_tracking(model, reference_qpos, simulated_qpos, dt=env.DT, ended=None,
     rp, ref_clear = _landmarks_and_clearance(model, ref)
     ap, sim_clear = _landmarks_and_clearance(model, actual)
     proximity = {}
-    for j, part in enumerate(("left_foot", "right_foot", "left_hand", "right_hand")):
+    for j, part in enumerate(("left_foot", "right_foot", "left_hand", "right_hand", "left_knee", "right_knee")):
         ref_low = ref_clear[:, j] <= 0.02
         sim_low = sim_clear[:, j] <= 0.02
         either = np.count_nonzero(ref_low | sim_low)
         proximity[part] = {
             "reference_frames": int(ref_low.sum()),
             "simulated_frames": int(sim_low.sum()),
+            "both_frames": int((ref_low & sim_low).sum()),
+            "either_frames": int(either),
+            "reference_last_near_s": float(np.flatnonzero(ref_low)[-1] * dt) if ref_low.any() else None,
+            "sim_last_near_s": float(np.flatnonzero(sim_low)[-1] * dt) if sim_low.any() else None,
             "intersection_over_union": float(np.count_nonzero(ref_low & sim_low) / either) if either else None,
         }
     hold_steps = round(0.5 / dt)

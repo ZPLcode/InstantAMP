@@ -23,6 +23,8 @@ The clips are not part of the repository: AMASS's and LAFAN1's licenses apply to
 import argparse
 import glob
 import os
+import tempfile
+from pathlib import Path
 import pickle
 import sys
 
@@ -113,6 +115,49 @@ def lab_dof_names(path):
         elif on and line.strip() and not line.strip().startswith("#"):
             break
     return names
+
+
+def convert_recovery_clip(path, pos, wxyz, joints, order, fps, landmarks=None):
+    if joints.shape != (len(pos), len(order)) or pos.shape[1:] != (3,) or wxyz.shape != (len(pos), 4):
+        raise ValueError(f"Invalid motion dimensions: {path}")
+    if len(pos) < 2 or fps <= 0 or not all(np.isfinite(a).all() for a in (pos, wxyz, joints)):
+        raise ValueError(f"Invalid motion values: {path}")
+    norm = np.linalg.norm(wxyz, axis=1, keepdims=True)
+    if (norm < 1e-6).any():
+        raise ValueError(f"Zero quaternion: {path}")
+    quat = (wxyz / norm)[:, [1, 2, 3, 0]]
+    # Maintain a continuous quaternion lift for the finite-difference angular velocities.
+    signs = np.where((quat[1:] * quat[:-1]).sum(1) < 0, -1, 1)
+    quat[1:] *= np.cumprod(signs)[:, None]
+    joints = joints[:, order]
+    # legged_lab differentiates at the native rate, repeats the last velocity,
+    # then interpolates velocities when querying the motion at simulation time.
+    delta = qmul_xyzw(quat[1:], quat[:-1] * [-1, -1, -1, 1])
+    sin_half = np.linalg.norm(delta[:, :3], axis=1, keepdims=True)
+    angle = 2 * np.arctan2(sin_half, delta[:, 3:4])
+    ang = delta[:, :3] * (fps * angle / np.maximum(sin_half, 1e-12))
+    vel = np.concatenate((np.diff(pos, axis=0) * fps, ang, np.diff(joints, axis=0) * fps), -1)
+    features = [joints, np.concatenate((vel, vel[-1:]))]
+    if landmarks is not None:
+        if landmarks.shape != (len(pos), 6, 3) or not np.isfinite(landmarks).all():
+            raise ValueError(f"Invalid recovery landmarks: {path}")
+        features.append(landmarks.reshape(len(pos), -1))
+    pos, quat, values = resample(pos, quat, np.concatenate(features, -1), fps)
+    j = len(order)
+    motion = dict(fps=OUT_FPS, root_pos=pos, root_quat=quat, dof_pos=values[:, :j],
+                  root_lin_vel=values[:, j:j+3], root_ang_vel=values[:, j+3:j+6], dof_vel=values[:, j+6:2*j+6])
+    if landmarks is not None:
+        motion["key_body_pos"] = values[:, 2*j+6:].reshape(len(pos), 6, 3)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as tmp:
+        staged = Path(tmp.name)
+        try:
+            np.savez(tmp, **{k: np.asarray(v, np.float32) for k, v in motion.items()})
+            tmp.flush()
+            os.replace(staged, path)
+        finally:
+            staged.unlink(missing_ok=True)
+    return len(pos)
 
 
 def convert_amp(src, dst):

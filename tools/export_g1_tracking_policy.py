@@ -101,6 +101,23 @@ def fit_case(data):
     return gains
 
 
+def replay(model, policy, case, height_offset=0., velocity_offset=0.):
+    """Execute a selected feedback policy in independent native MuJoCo physics."""
+    robot = mujoco.MjData(model)
+    robot.qpos[:], robot.qvel[:] = policy.qpos[case, 0], policy.qvel[case, 0]
+    robot.qpos[2] += height_offset
+    robot.qvel[0] += velocity_offset
+    mujoco.mj_forward(model, robot)
+    path = [robot.qpos.copy()]
+    for tick in range(policy.targets.shape[1]):
+        target = policy.target(case, tick, robot.qpos, robot.qvel)
+        for _ in range(env.DECIMATION):
+            robot.ctrl[:] = env.actuator_ctrl(robot.qpos[7:], robot.qvel[6:], target, xp=np)
+            mujoco.mj_step(model, robot)
+        path.append(robot.qpos.copy())
+    return np.stack(path)
+
+
 def physically_evaluate(policy, source):
     model = build_scene(g1_support_friction=policy.support_friction)
     trials = []
@@ -108,19 +125,7 @@ def physically_evaluate(policy, source):
                   "opposite_velocity": (-.005, -.08)}
     for i, name in enumerate(policy.names):
         for label, (height_offset, velocity_offset) in conditions.items():
-            robot = mujoco.MjData(model)
-            robot.qpos[:], robot.qvel[:] = policy.qpos[i, 0], policy.qvel[i, 0]
-            robot.qpos[2] += height_offset
-            robot.qvel[0] += velocity_offset
-            mujoco.mj_forward(model, robot)
-            path = [robot.qpos.copy()]
-            for tick in range(policy.targets.shape[1]):
-                target = policy.target(i, tick, robot.qpos, robot.qvel)
-                for _ in range(env.DECIMATION):
-                    robot.ctrl[:] = env.actuator_ctrl(robot.qpos[7:], robot.qvel[6:], target, xp=np)
-                    mujoco.mj_step(model, robot)
-                path.append(robot.qpos.copy())
-            path = np.stack(path)
+            path = replay(model, policy, i, height_offset, velocity_offset)
             end = 1 + int(source["reference_end"][i])
             result = score_tracking(model, source["reference"][i, :end], path)
             result.update(clip=name, mode=label, max_abs_qpos_vs_plan=float(np.max(np.abs(path - policy.qpos[i]))))

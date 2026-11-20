@@ -24,11 +24,9 @@ from instantamp.inference import load, policy_output
 from instantamp.reference_mpc import PlanningConfig, build_planner, servo_target
 from instantamp.sim import Sim, build_scene, unflatten
 from instantamp.train import set_jax
-from tools.evaluate_g1_style import STARTS_30HZ, TAKE, preview
+from tools.evaluate_g1_style import ENDS_30HZ, STARTS_30HZ, TAKE, preview
 from tools.score_g1_tracking import load_native_reference, score_tracking
 
-# End frames of the same source segments used in legged_lab's 11-clip recovery benchmark.
-ENDS_30HZ = (565, 785, 936, 1140, 1320, 1461, 1684, 1916, 2210, 2391, 4962)
 
 
 def read_cases(clip, fixed, bank):

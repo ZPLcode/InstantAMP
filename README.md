@@ -120,6 +120,81 @@ To use your own clips, convert them with [`tools/convert_motions.py`](tools/conv
 `.npz` clip holds `fps` (50), `root_pos`, `root_quat` (x, y, z, w), `root_lin_vel`, `root_ang_vel` (world frame), `dof_pos` and
 `dof_vel` (29 joints in the order of `instantamp/env.py`'s `DOF`).
 
+## LeggedLab G1 get-up
+
+Run `LeggedLab-Isaac-AMP-G1-GET-UP-v0` from the InstantAMP repository root. Prepare the ten
+positive-weight clips from a local LeggedLab checkout once. Only the preparation step needs
+`joblib`. The trainer and evaluator read the converted 50 Hz bank in `data/g1_getup/recovery`.
+
+```bash
+.venv/bin/python -m pip install joblib
+.venv/bin/python -m tools.prepare_g1_getup ../legged_lab
+.venv/bin/python -m instantamp.train --task LeggedLab-Isaac-AMP-G1-GET-UP-v0
+.venv/bin/python -m instantamp.evaluate runs/g1_getup --last 1
+```
+
+The task uses 29 joints, 200 Hz MuJoCo Warp physics, 50 Hz policy control and 10-second episodes.
+Each reset samples a clip uniformly and a time on its 50 Hz grid, restores the pose and velocities,
+and adds 0.10 m to the root height. Joint targets use the source default pose plus 0.25 times the action.
+The standing reward activates above 0.65 m and targets 0.75 m. Torso assistance starts at 200 N,
+requires ground support on a wrist, knee or ankle, and fades from full force at 0.55 m to zero
+at 0.75 m. When the resetting environments exceed 60% of the maximum mean height reward,
+their assistance drops by 10 N.
+
+The actor takes five noisy observations (570 values). The critic takes five clean observations
+including body-frame linear velocity and root height (590 values). The LSGAN discriminator sees ten
+85-value frames, with six pelvis-relative landmarks. Task and style rewards have equal weight and
+the style scale is 50. The target framework uses its bundled G1 MJCF, a single sliding-friction
+coefficient per contact material, MJCF joint order, and the InstantAMP ODE actor trained through
+world-model rollouts and real PPO updates. Checkpoints use the InstantAMP format. The default
+run uses 4,096 environments and a 500,000-iteration limit. Use `--max_iterations` to bound a run.
+
+Evaluation sets assistance to zero and scores 15 fixed fallen starts. Success requires a pelvis
+height in (0.65, 0.85] m and a tilt below 30 degrees throughout the final second, with the feet
+supporting at least half of body weight on at least 45 of its 50 steps.
+
+## Train the G1 baseline on recovery style
+
+Start with a full 29-joint G1 InstantAMP checkpoint. The following recipe fine-tunes its actor with the
+original world model, imagination gradients, real PPO updates and walking discriminator. It adds an AMP
+discriminator that compares recovery windows at the same point in a native 50 Hz demonstration. The
+reference clip, frame and reset transformation are training metadata. The deployed ODE actor uses its
+standard four sensor frames (384 inputs) to control 29 joints.
+
+```bash
+python tools/prepare_g1_rises.py --lead-in-frames 40 --dst data/recovery/g1_rises_leadin40
+python -m instantamp.train --robot g1 --g1_style 1 --num_envs 4096 \
+  --init_g1_full runs/g1_4096_20261120_01/ckpt/full/0011.npz \
+  --floor_dir data/recovery/g1_rises_leadin40/train --g1_support_friction 1 \
+  --g1_phase_share .75 --reference_weight 0 --getup_reward_scale 38 --getup_disc_lr .00018 \
+  --getup_style_ramp 120 --getup_rise_weight -.05 --getup_anchor .9 --getup_reset_frames 50 \
+  --reset_floor .85 --imag_down .72 --pi_lr .000055 --pi_updates 2 --ppo_frac .20 --ppo_w 1.15 \
+  --ppo_len 16 --pi_batch 512 --wm_batch 640 --amp_batch 640 --buffer_steps 100 \
+  --wm_only_iters 100 --pi_ema .978 --env_steps 4 --log_every 50 --ckpt_minutes .85 \
+  --max_iterations 3000 --minutes 0 --log_dir runs/g1_phase_amp
+```
+
+Of the rise-style reward, 75% comes from the phase-conditioned discriminator and 25% from the
+unconditioned recovery discriminator. Positive examples are recorded G1 movements. Negative
+examples come from the simulated policy. Pose tracking has weight zero in this recipe.
+Fallen resets use a standing velocity command and the source recovery plus one second of balancing.
+Walking resets continue to train locomotion. Hand and knee contacts use tangential friction.
+
+Evaluate checkpoints on the 61 training clips before selecting one. Omitting `--clips-dir`
+evaluates the 11 fixed starts from the take excluded from this fine-tuning bank. The original baseline
+used that take in its larger, unsegmented motion corpus. The scorer applies the same contact settings
+to both actors and measures wrist and ankle trajectories on the native clock. It reports a separate
+one-second, foot-loaded standing check.
+
+```bash
+python tools/evaluate_g1_style.py BASELINE.npz CANDIDATE.npz --single-actor --support-friction \
+  --clips-dir data/recovery/g1_rises_leadin40/train --count 61 --out runs/g1_phase_amp/train61.json
+python tools/evaluate_g1_style.py BASELINE.npz CANDIDATE.npz --single-actor --support-friction \
+  --out runs/g1_phase_amp/fixed11.json --trajectories runs/g1_phase_amp/fixed11.npz
+python tools/render_g1_comparison.py runs/g1_phase_amp/fixed11.npz runs/g1_phase_amp/fixed11.json \
+  runs/g1_phase_amp/fixed11.mp4 --show-hold
+```
+
 ## G1 recovery style
 
 The G1 recovery experiment uses the original 29-joint actor and native 50 Hz motions.
@@ -203,6 +278,8 @@ trials its median wrist and ankle errors were 6.3 and 5.5 cm.
 ```bash
 OPENBLAS_NUM_THREADS=1 .venv/bin/python tools/export_g1_tracking_policy.py \
   runs/g1_reference_check/trajectories_000.npz --out runs/g1_getup_feedback
+.venv/bin/python tools/track_g1_reference.py feedback runs/g1_getup_feedback/policy.npz \
+  fallAndGetUp1_subject1_458_565 --out runs/g1_feedback_replay.npz
 ```
 
 ```python
