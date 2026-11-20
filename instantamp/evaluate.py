@@ -16,7 +16,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from . import env, nets
+from . import env, nets, zenbot
+from .rot import mv3, quat_to_mat, tr3
 from .sim import Sim, unflatten
 
 
@@ -31,6 +32,60 @@ def load(path, which="avg"):
     return layers, norm, ode
 
 
+def fallen_starts(directory):
+    """Repeatable legged_lab evaluation poses at 0 and 0.5 s, below 0.5 m including the lift."""
+    names, poses, velocities = [], [], []
+    for path in sorted(glob.glob(os.path.join(directory, "*.npz"))):
+        with np.load(path) as clip:
+            for sec in (0., 0.5):
+                i = round(sec * float(clip["fps"]))
+                if i >= len(clip["root_pos"]) or clip["root_pos"][i, 2] + 0.02 > 0.5:
+                    continue
+                quat = clip["root_quat"][i, [3, 0, 1, 2]]
+                ang = mv3(tr3(quat_to_mat(quat)), clip["root_ang_vel"][i])
+                poses.append(np.r_[0., 0., clip["root_pos"][i, 2] + 0.02, quat, clip["dof_pos"][i]])
+                velocities.append(np.r_[clip["root_lin_vel"][i], ang, clip["dof_vel"][i]])
+                names.append((os.path.basename(path), sec))
+    if not names:
+        raise ValueError(f"No fallen evaluation starts in {directory}")
+    return names, jnp.asarray(np.stack(poses), jnp.float32), jnp.asarray(np.stack(velocities), jnp.float32)
+
+
+def evaluate_recovery(cfg, paths, args):
+    names, poses, velocities = fallen_starts(cfg["floor_dir"])
+    sim = Sim(len(names), cfg["nconmax"], cfg["njmax"], floor_dir=cfg["floor_dir"], robot=cfg["robot"],
+              random_start=False, assist_newtons=0., obs_noise=False, randomize_world=False)
+    steps = sim.episode_steps
+    hold = round(1. / env.DT)
+
+    def run(pi, norm, ode):
+        s = sim.init(jax.random.PRNGKey(42))
+        data = s.data.replace(qpos=poses, qvel=velocities)
+        frame = sim.obs_frame(unflatten(poses, velocities), s.a_last, s.c_obs, None)
+        s = s._replace(data=data, obs=jnp.tile(frame, (1, sim.history)))
+        def step(state, _):
+            out = nets.pi_apply(pi, jnp.clip(nets.rn_apply(norm, state.obs), -args.obs_clip, args.obs_clip))
+            act = nets.ode_step(out, state.a_ode, *ode) if ode is not None else out
+            state, tr = sim.step(state, act)
+            height = tr.qpos1[:, 2]
+            upright = quat_to_mat(tr.qpos1[:, 3:7])[:, 2, 2] > np.cos(np.pi / 6)
+            posture = (height > zenbot.UP_HEIGHT) & (height <= 2 * zenbot.RISE_HEIGHT - zenbot.UP_HEIGHT) & upright
+            loaded = tr.stats["foot_load"] >= 0.5 * zenbot.MASS * 9.81
+            return state, (posture, loaded, tr.terminated)
+        _, (posture, loaded, ended) = jax.lax.scan(step, s, None, length=steps)
+        return posture[-hold:].all(0) & (loaded[-hold:].sum(0) >= np.ceil(0.9 * hold)) & ~ended.any(0)
+
+    run_j = jax.jit(run, static_argnums=(2,))
+    with open(os.path.join(args.run, "eval.jsonl"), "w") as stream:
+        for path in paths:
+            passed = np.asarray(run_j(*load(path, args.which)))
+            result = {"ckpt": os.path.basename(path), "assist_n": 0., "duration_s": steps * env.DT,
+                      "successes": int(passed.sum()), "total": len(passed), "getup_rate": float(passed.mean()),
+                      "starts": [{"clip": name, "offset_s": sec, "success": bool(ok)} for (name, sec), ok in zip(names, passed)]}
+            stream.write(json.dumps(result) + "\n")
+            print(f"{result['ckpt']} | unassisted get-up {passed.sum()}/{len(passed)}", flush=True)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("run")
@@ -41,11 +96,16 @@ def main(argv=None):
     p.add_argument("--obs_clip", type=float, default=10.0)
     a = p.parse_args(argv)
     cfg = json.load(open(os.path.join(a.run, "config.json")))
-    sim = Sim(a.n, cfg.get("nconmax", 64), cfg.get("njmax", 640), cfg["walk_dir"], cfg["floor_dir"], True, 123, cfg["reset_floor"], cfg["prob_shove"],
-              bool(cfg["push"]))  # fmt: skip
     ckpts = sorted(glob.glob(os.path.join(a.run, "ckpt", "*.npz")))
     if a.last:
         ckpts = ckpts[-a.last :]
+
+    if not ckpts:
+        raise ValueError(f"No policy checkpoints in {a.run}")
+    if cfg.get("robot") == "zenbot23_getup":
+        return evaluate_recovery(cfg, ckpts, a)
+    sim = Sim(a.n, cfg.get("nconmax", 64), cfg.get("njmax", 640), cfg["walk_dir"], cfg["floor_dir"], True, 123, cfg["reset_floor"], cfg["prob_shove"],
+              bool(cfg["push"]), robot=cfg.get("robot", "g1"))  # fmt: skip
 
     def run(pi, norm, ode, key):
         def body(carry, k):
@@ -58,11 +118,11 @@ def main(argv=None):
             yaw = env.heading(S1[1])
             v = S1[2]
             vb = jnp.stack((jnp.cos(yaw) * v[:, 0] + jnp.sin(yaw) * v[:, 1], -jnp.sin(yaw) * v[:, 0] + jnp.cos(yaw) * v[:, 1]), -1)
-            upright = s.was_up & env.is_up(S1[0][:, 2], S1[1])
+            upright = s.was_up & sim.is_up(S1[0][:, 2], S1[1])
             err = jnp.linalg.norm(vb - s.c_obs[:, :2], axis=-1)
             fin = (tr.terminated | tr.truncated).astype(jnp.float32)
             up_ep, down_ep = fin * ~s.down, fin * s.down
-            rose = s.was_up | env.is_up(S1[0][:, 2], S1[1])
+            rose = s.was_up | sim.is_up(S1[0][:, 2], S1[1])
             acc = {"parts": acc["parts"] + tr.parts.sum(0), "steps": acc["steps"] + a.n,
                    "ep_up": acc["ep_up"] + up_ep.sum(), "fall_up": acc["fall_up"] + (up_ep * tr.terminated).sum(),
                    "ep_down": acc["ep_down"] + down_ep.sum(), "rose": acc["rose"] + (down_ep * rose).sum(),

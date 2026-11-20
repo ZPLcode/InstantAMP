@@ -26,13 +26,20 @@ import sys  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from instantamp import env, nets  # noqa: E402
 from instantamp.evaluate import load  # noqa: E402
-from instantamp.sim import XML, Sim, unflatten  # noqa: E402
+from instantamp.sim import XML, ZENBOT_XML, Sim, unflatten  # noqa: E402
 
 MESH_DIR = os.path.join(os.path.dirname(XML), "meshes")
 W, H, FPS = 640, 400, 25
 
 
-def visual_model():
+def visual_model(robot="g1", mesh_dir=None):
+    if robot == "zenbot23_getup":
+        spec = mujoco.MjSpec.from_file(ZENBOT_XML)
+        spec.meshdir = os.path.abspath(mesh_dir or "data/zenbot23_getup/meshes")
+        for mesh in spec.meshes:
+            mesh.file = os.path.basename(mesh.file)
+        spec.visual.global_.offwidth, spec.visual.global_.offheight = W, H
+        return spec.compile()
     assert os.path.isdir(MESH_DIR), "no meshes in assets/meshes: run bash tools/download_meshes.sh"
     spec = mujoco.MjSpec.from_file(XML)
     spec.meshdir = MESH_DIR
@@ -55,7 +62,7 @@ def rollout(run, ckpt, n, seconds, seed):
     cfg = json.load(open(os.path.join(run, "config.json")))
     pi, norm, ode = load(ckpt)
     sim = Sim(n, cfg.get("nconmax", 64), cfg.get("njmax", 640), cfg["walk_dir"], cfg["floor_dir"], True, seed, cfg["reset_floor"],
-              cfg["prob_shove"], bool(cfg["push"]))  # fmt: skip
+              cfg["prob_shove"], bool(cfg["push"]), robot=cfg.get("robot", "g1"), assist_newtons=0., obs_noise=cfg.get("robot", "g1") == "g1")  # fmt: skip
 
     @jax.jit
     def go(s, key):
@@ -116,6 +123,7 @@ def render(m, qpos, lines, title, path):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("run")
+    p.add_argument("--mesh_dir", help="visual mesh directory for Zenbot")
     p.add_argument("--ckpt", default="")
     p.add_argument("--n", type=int, default=64)
     p.add_argument("--walk_s", type=float, default=10.0)
@@ -130,13 +138,21 @@ def main():
     T = int(max(a.walk_s, a.getup_s) / env.DT)
     q, v, done, term, cobs, was_up, down = rollout(a.run, ckpt, a.n, max(a.walk_s, a.getup_s), a.seed)
     vel, wz = body_velocity(q, v)
-    m = visual_model()
+    cfg = json.load(open(os.path.join(a.run, "config.json")))
+    m = visual_model(cfg.get("robot", "g1"), a.mesh_dir)
     tag = f"{os.path.basename(os.path.normpath(a.run))} ckpt {name} ({meta['train_s'] / 60:.0f} min)"
 
     def lines_for(e, n_steps):
         return [[f"cmd   vx {cobs[i, e, 0]:+.2f}  vy {cobs[i, e, 1]:+.2f}  wz {cobs[i, e, 2]:+.2f}",
                  f"robot vx {vel[i, e, 0]:+.2f}  vy {vel[i, e, 1]:+.2f}  wz {wz[i, e]:+.2f}",
                  "up" if was_up[i, e] else "getting up"] for i in range(n_steps)]  # fmt: skip
+
+    if cfg.get("robot") == "zenbot23_getup":
+        n = int(a.getup_s / env.DT)
+        e = 0
+        labels = [[f"pelvis height {q[i, e, 2]:.2f} m", "assistance 0 N"] for i in range(n)]
+        render(m, q[:n, e], labels, f"get-up | {tag}", f"{out}_getup.gif")
+        return
 
     # walking: an env that starts up and is not reset during the clip, with the largest commanded speed
     n_w = int(a.walk_s / env.DT)

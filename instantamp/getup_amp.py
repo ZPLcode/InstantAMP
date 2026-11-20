@@ -15,7 +15,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from . import amp, env
 from .rot import quat_to_mat
 
 
@@ -27,13 +26,15 @@ class GetupDemos:
         for f in files:
             d = np.load(f)
             assert int(d["fps"]) == 50, f
+            if d["dof_pos"].shape[1] != sim.J:
+                raise ValueError(f"{f}: expected {sim.J} joint columns")
             x, y, z, w = d["root_quat"].T
             R = quat_to_mat(jnp.stack([w, x, y, z], -1))
             p, q, qd = jnp.asarray(d["root_pos"]), jnp.asarray(d["dof_pos"]), jnp.asarray(d["dof_vel"])
             S = (p, R, None, jnp.asarray(d["root_ang_vel"]), q, qd)
-            feats.append(amp.frame(S, sim.key_positions(p, R, q)))
-            down = ~np.asarray(env.is_up(d["root_pos"][:, 2], np.asarray(R)))
-            ok = np.lib.stride_tricks.sliding_window_view(down, frames).all(-1)  # windows of not-up frames only
+            feats.append(sim.amp_frame(S))
+            down = ~np.asarray(sim.is_up(d["root_pos"][:, 2], np.asarray(R)))
+            ok = np.lib.stride_tricks.sliding_window_view(down, frames).all(-1) if len(down) >= frames else np.empty(0, bool)  # windows of not-up frames only
             starts.append(n + np.nonzero(ok)[0])
             n += len(x)
         self.frames = jnp.concatenate(feats, 0)

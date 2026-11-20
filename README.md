@@ -120,6 +120,38 @@ To use your own clips, convert them with [`tools/convert_motions.py`](tools/conv
 `.npz` clip holds `fps` (50), `root_pos`, `root_quat` (x, y, z, w), `root_lin_vel`, `root_ang_vel` (world frame), `dof_pos` and
 `dof_vel` (29 joints in the order of `instantamp/env.py`'s `DOF`).
 
+## Zenbot 23-DoF get-up
+
+The `zenbot23_getup` task uses the 43.0678308 kg articulation from
+`motion_train/robolab/data/robots/roboparty/zenbot`. Recovery demonstrations and task settings come from the local
+`legged_lab` configuration `tasks/locomotion/amp/config/zenbot/zenbot_get_up_env_cfg.py` and its G1 get-up base class.
+
+```bash
+python tools/prepare_zenbot.py /path/to/motion_train --legged-lab /path/to/legged_lab --meshes
+python -m instantamp.train --robot zenbot23_getup --num_envs 4096
+python -m instantamp.evaluate runs/zenbot23_getup --last 1
+python tools/render.py runs/zenbot23_getup --out runs/zenbot23_getup/preview
+```
+
+Preparation verifies the MJCF and clip checksums against the `get_up_frax` manifest, maps named joints into MuJoCo hinge order,
+and resamples the 11 selected 30 Hz recoveries to 50 Hz. Meshes are optional for training.
+Resets sample the clips equally, center the pelvis in XY and start at the first frame with a 2 cm lift. Each episode lasts 10 s.
+The 23 delayed PD motors accept joint offsets scaled by 0.25 rad, with an independently sampled 3–7 physics-step delay per actuator group.
+The training colliders use the source URDF capsule dimensions and sole boxes. The actor sees five 96-value frames including the ankle,
+knee and hand positions in the pelvis frame. The discriminator sees ten 73-value frames in the same landmark order.
+
+The nine get-up reward terms follow the reference weights. Standing terms activate above 0.58 m and target a pelvis height of 0.68 m.
+World-up torso assistance starts at 258.35 N. It requires more than 1 N of upward ground support on an ankle, knee or hand,
+fades linearly from 0.48 to 0.68 m and drops by 12.92 N for the resetting environments when their mean episode height reward
+exceeds 60% of its maximum. The reference-style discriminator uses LSGAN, a 1024/512 leaky-ReLU network, a style scale of 50 and
+a task/style mix of 0.5. One discriminator covers the entire recovery including the standing phase.
+
+The policy optimizer remains InstantAMP's imagined rollouts, world-model gradients and real PPO minibatches.
+The real torque penalty reads the last physics substep. Imagination estimates it from delayed targets and predicted joint state.
+The default limit is 100,000 InstantAMP iterations, with one real step per environment per iteration.
+The reference PPO runner collects 24 real steps per environment per iteration. Set `--minutes` or `--max_iterations` for a shorter run.
+Evaluation measures unassisted recovery over the final second on fixed fallen starts.
+
 ## Training
 
 ```bash

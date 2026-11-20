@@ -117,7 +117,12 @@ def wm_init(key, in_dim: int, out_dim: int, hidden):
 
 def wm_inputs(S, h, soles, tgt, xi):
     """The network's input: the invariant state, the sole clearances, the PD error of the target (joint target minus q, of the actuated joints) and xi."""
-    return jnp.concatenate((invariant_features(S, h), soles, tgt - S[4][..., : tgt.shape[-1]], xi), -1)  # (the actuated joints come first in q)
+    q = S[4]
+    if tgt.shape[-1] > q.shape[-1]:  # one delayed target per physics substep
+        error = (tgt.reshape(*q.shape[:-1], -1, q.shape[-1]) - q[..., None, :]).reshape(tgt.shape)
+    else:
+        error = tgt - q[..., :tgt.shape[-1]]
+    return jnp.concatenate((invariant_features(S, h), soles, error, xi), -1)
 
 
 def _drift(S, v1, w1, qd1, dt):

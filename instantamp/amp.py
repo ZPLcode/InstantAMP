@@ -23,7 +23,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from . import env, nets, optim
+from . import nets, optim
 from .rot import mv3, quat_to_mat, tr3, yaw_mat
 
 WRIST = (19, 20, 21, 26, 27, 28)  # the G1's wrist roll, pitch and yaw in action order
@@ -47,10 +47,11 @@ DRIFT = 1e-3
 SCORE_FLOOR = 0.5  # smallest half-gap in the style reward
 
 
-def frame(S, key_pos):
+def frame(S, key_pos, joints=None):
     """Frame features (.., FRAME_DIM) of states S = (p, R, v, w, q, qd) (world-frame w) and the key bodies' world positions (.., 4, 3)."""
+    joints = KEPT if joints is None else joints
     p, R, _, w, q, qd = S
-    return jnp.concatenate((q[..., KEPT], qd[..., KEPT], mv3(tr3(R), w), -R[..., 2, :], mv3(tr3(yaw_mat(R))[..., None, :, :], key_pos - p[..., None, :]).reshape(*p.shape[:-1], -1)), -1)
+    return jnp.concatenate((q[..., joints], qd[..., joints], mv3(tr3(R), w), -R[..., 2, :], mv3(tr3(yaw_mat(R))[..., None, :, :], key_pos - p[..., None, :]).reshape(*p.shape[:-1], -1)), -1)
 
 
 class Demos:
@@ -65,29 +66,39 @@ class Demos:
             assert int(d["fps"]) == 50, f
             x, y, z, w = d["root_quat"].T  # (x, y, z, w) -> the rotation matrix
             R = quat_to_mat(jnp.stack([w, x, y, z], -1))
-            assert d["dof_pos"].shape[1] == env.J, f
+            assert d["dof_pos"].shape[1] == sim.J, f
             q, qd = jnp.asarray(d["dof_pos"]), jnp.asarray(d["dof_vel"])
             S = (jnp.asarray(d["root_pos"]), R, None, jnp.asarray(d["root_ang_vel"]), q, qd)
-            feats.append(frame(S, sim.key_positions(S[0], R, q)))
+            feats.append(sim.amp_frame(S, d.get("key_body_pos")))
             starts.append(np.arange(n, n + len(x) - frames + 1))
             n += len(x)
         self.frames = jnp.concatenate(feats, 0)
         self.starts = jnp.asarray(np.concatenate(starts), jnp.int32)
         self.window = frames
+        self.clip_lengths = jnp.array([len(a) for a in starts]) if sim.recovery else None
+        if self.clip_lengths is not None:
+            if min(map(len, starts)) < 1:
+                raise ValueError("A get-up clip is shorter than the discriminator window")
+            self.clip_offsets = jnp.array([a[0] for a in starts])
 
     def sample(self, key, B):
         """B windows (B, frames, FRAME_DIM) uniform over the windows of all clips."""
         i = self.starts[jax.random.randint(key, (B,), 0, len(self.starts))]
+        if self.clip_lengths is not None:
+            kc, kt = jax.random.split(key)
+            clip = jax.random.randint(kc, (B,), 0, len(self.clip_lengths))
+            i = self.clip_offsets[clip] + jax.random.randint(kt, (B,), 0, self.clip_lengths[clip])
         return self.frames[i[:, None] + jnp.arange(self.window)]
 
 
 # ---------------------------------------------------------------- the critic
-def init(key, frames: int, hidden=(1024, 512)):
+def init(key, frames: int, hidden=(1024, 512), frame_dim=None):
     """The critic's parameters (an MLP with ELU on the flattened window, one output), the running normalizer of the frames, the running
     mean scores of the demos and the robot, and the optimizer state."""
-    layers = nets.mlp_init(key, [frames * FRAME_DIM, *hidden, 1])
+    frame_dim = FRAME_DIM if frame_dim is None else frame_dim
+    layers = nets.mlp_init(key, [frames * frame_dim, *hidden, 1])
     mask = jax.tree.map(lambda _: False, layers)
-    return {"net": layers, "norm": nets.rn_init(FRAME_DIM), "mu": jnp.zeros((2,)), "opt": optim.init(layers, mask), "ramp": jnp.zeros(())}
+    return {"net": layers, "norm": nets.rn_init(frame_dim), "mu": jnp.zeros((2,)), "opt": optim.init(layers, mask), "ramp": jnp.zeros(())}
 
 
 NORM_CLIP = 10.0  # the normalized frames are clipped, so that an extreme imagined state cannot overflow the critic or its gradient
@@ -135,12 +146,37 @@ def loss(net, norm, demo, robot, wt, key):
     return total, {"d_demo": d_demo.mean(), "d_robot": d_robot, "gp": gp}
 
 
-def train_step(st, demo, robot, wt, key, lr: float):
+def recovery_style(st, window, scale):
+    x = normalize(st["norm"], window).reshape(*window.shape[:-2], -1)
+    d = nets.mlp_apply(st["net"], x, jax.nn.leaky_relu)[..., 0]
+    return scale * jnp.maximum(1. - 0.25 * (d - 1.)**2, 0.)
+
+
+def recovery_loss(net, norm, demo, robot, wt, key):
+    def predict(row):
+        return nets.mlp_apply(net, row, jax.nn.leaky_relu)[..., 0]
+
+    xd = normalize(norm, demo).reshape(len(demo), -1)
+    xr = normalize(norm, robot).reshape(len(robot), -1)
+    dd, dr = predict(xd), predict(xr)
+    n = jnp.maximum(wt.sum(), 1.)
+    gp = 10. * jnp.square(jax.vmap(jax.grad(predict))(xd)).sum(-1).mean()
+    loss = 0.5 * (jnp.square(dd - 1).mean() + (wt * (dr + 1)**2).sum() / n) + gp
+    return loss, {"d_demo": dd.mean(), "d_robot": (wt * dr).sum() / n, "gp": gp}
+
+
+def train_step(st, demo, robot, wt, key, lr: float, recovery=False):
     """One critic step on a batch of demo and robot windows; the robot windows with weight 0 take no part."""
-    (_, aux), grads = jax.value_and_grad(loss, has_aux=True)(st["net"], st["norm"], demo, robot, wt, key)
+    (_, aux), grads = jax.value_and_grad(recovery_loss if recovery else loss, has_aux=True)(st["net"], st["norm"], demo, robot, wt, key)
     grads, _ = optim.clip_by_global_norm(grads, 1.0)
-    net, opt = optim.step(st["net"], grads, st["opt"], jax.tree.map(lambda _: False, st["net"]), lr, betas=(0.5, 0.9))
+    if recovery:
+        # Coupled Adam weight decay, following the reference trunk and head parameter groups.
+        grads = [{k: g + (0.1 if i == len(grads)-1 else 0.001) * st["net"][i][k] for k, g in layer.items()}
+                 for i, layer in enumerate(grads)]
+    net, opt = optim.step(st["net"], grads, st["opt"], jax.tree.map(lambda _: False, st["net"]), lr, betas=(0.9, 0.999) if recovery else (0.5, 0.9))
     norm = nets.rn_update(st["norm"], robot.reshape(-1, robot.shape[-1]), weights=jnp.repeat(wt, robot.shape[1]))
+    if recovery:
+        norm = nets.rn_update(norm, demo.reshape(-1, demo.shape[-1]))
     first = (st["mu"][0] == 0) & (st["mu"][1] == 0)
     now = jnp.stack([aux["d_demo"], aux["d_robot"]])
     live = wt.sum() > 0  # no usable robot window: the scores of this step say nothing about the robot

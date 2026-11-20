@@ -173,25 +173,30 @@ def tick(c: Cmd, key) -> Cmd:
 HIST = 4
 FRAME_DIM = 3 + 3 + 3 + 3 * J  # base angular velocity, projected gravity, command, q - q0, qd, last action
 OBS_DIM = HIST * FRAME_DIM  # 384
-_NOISE = np.concatenate([np.full(3, 0.2), np.full(3, 0.05), np.zeros(3), np.full(J, 0.01), np.full(J, 0.5), np.zeros(J)]).astype(np.float32)
+def observation_noise(joints):
+    return np.concatenate([np.full(3, 0.2), np.full(3, 0.05), np.zeros(3), np.full(joints, 0.01),
+                           np.full(joints, 0.5), np.zeros(joints)]).astype(np.float32)
 
 
-def obs_frame(S, a_last, cmd, key=None):
+_NOISE = observation_noise(J)
+
+
+def obs_frame(S, a_last, cmd, key=None, default_q=DEFAULT_Q, noise=_NOISE):
     """One frame of the actor observation, unscaled: the pelvis IMU's angular velocity (pelvis frame), gravity in the pelvis frame, the
     command, q - q0, qd, the last raw action. key: add uniform noise (+-0.2, +-0.05, 0, +-0.01, +-0.5, 0)."""
     _, R, _, w, q, qd = S
-    x = jnp.concatenate((mv3(tr3(R), w), -R[..., 2, :], cmd, q - DEFAULT_Q, qd, a_last), -1)
+    x = jnp.concatenate((mv3(tr3(R), w), -R[..., 2, :], cmd, q - default_q, qd, a_last), -1)
     if key is not None:
-        x = x + _NOISE * jax.random.uniform(key, x.shape, minval=-1.0, maxval=1.0)
+        x = x + noise * jax.random.uniform(key, x.shape, minval=-1.0, maxval=1.0)
     return x
 
 
 def push_frame(hist, frame, fresh=None):
     """The history (N, HIST * FRAME_DIM) with `frame` appended; where `fresh`, every slot is the frame (backfilled after a reset)."""
-    rolled = jnp.concatenate((hist[:, FRAME_DIM:], frame), -1)
+    rolled = jnp.concatenate((hist[:, frame.shape[-1]:], frame), -1)
     if fresh is None:
         return rolled
-    return jnp.where(fresh[:, None], jnp.tile(frame, (1, HIST)), rolled)
+    return jnp.where(fresh[:, None], jnp.tile(frame, (1, hist.shape[-1] // frame.shape[-1])), rolled)
 
 
 # ------------------------------------------------------------------ terminations and get-up recovery
@@ -209,13 +214,13 @@ TERMINATION_BODIES = ("pelvis", "left_hip_roll_link", "left_hip_yaw_link", "righ
                       "left_wrist_pitch_link", "left_wrist_yaw_link", "right_wrist_pitch_link", "right_wrist_yaw_link")  # fmt: skip
 
 
-def is_up(height, R):
-    return (height > UP_HEIGHT) & (1 - R[..., 2, 2] < UP_TILT)
+def is_up(height, R, up_height=UP_HEIGHT):
+    return (height > up_height) & (1 - R[..., 2, 2] < UP_TILT)
 
 
-def soft_up(height, R):
+def soft_up(height, R, up_height=UP_HEIGHT):
     """Smooth version of is_up (the gradient of the get-up deadline in imagination)."""
-    return jax.nn.sigmoid((height - UP_HEIGHT) / 0.02) * jax.nn.sigmoid((UP_TILT - (1 - R[..., 2, 2])) / 0.04)
+    return jax.nn.sigmoid((height - up_height) / 0.02) * jax.nn.sigmoid((UP_TILT - (1 - R[..., 2, 2])) / 0.04)
 
 
 # ------------------------------------------------------------------ pushes and shoves
@@ -255,7 +260,8 @@ class Kin(NamedTuple):
     foot_v: jax.Array  # (N, 2, 3) world velocities of the left_foot / right_foot sites
 
 
-def reward_terms(S0, S1, kin: Kin, a, a_prev, cmd, recovering, terminated, contact, collisions, q_soft):
+def reward_terms(S0, S1, kin: Kin, a, a_prev, cmd, recovering, terminated, contact, collisions, q_soft,
+                 wrist_idx=WRIST_IDX, default_q=DEFAULT_Q, rise_height=RISE_HEIGHT):
     """Unweighted terms of one step, read on the state S1 after it. cmd: the command the policy saw; recovering (N,): the robot has not
     been up in this episode; terminated (N,) in [0, 1]; contact (N, 2) foot-ground contact in [0, 1]; collisions (N,) the number of
     substeps with a self-collision above 10 N; q_soft (J, 2) the soft joint limits."""
@@ -269,7 +275,7 @@ def reward_terms(S0, S1, kin: Kin, a, a_prev, cmd, recovering, terminated, conta
     body_w = mv3(tr3(R1), w1)
     ang = jnp.exp(-(jnp.square(w1[:, 2] - cmd[:, 2]) * (3.14**2 / TRACK_ANG_STD**2) + jnp.sum(jnp.square(body_w[:, :2]), -1)) / 3.14**2)
     root_rot = jnp.exp(-jnp.sum(jnp.square(body_w[:, :2]), -1) / 3.14**2)
-    low = 1 - jnp.clip(S1[0][:, 2] / RISE_HEIGHT, 0.0, 1.0)
+    low = 1 - jnp.clip(S1[0][:, 2] / rise_height, 0.0, 1.0)
     tilt = jnp.clip(1 - R1[:, 2, 2], 0.0, 1.0)
     acc = (qd1 - S0[5]) / DT
     lim = jnp.sum(jnp.clip(q_soft[:, 0] - q1, 0.0, None) + jnp.clip(q1 - q_soft[:, 1], 0.0, None), -1)
@@ -278,7 +284,7 @@ def reward_terms(S0, S1, kin: Kin, a, a_prev, cmd, recovering, terminated, conta
     return {"track_lin": (1 - rec) * lin, "track_ang": (1 - rec) * ang, "rise": rec * (2.0 * low + 2.0 * tilt), "body_ang_vel_xy": (1 - rec) * root_rot,
             "termination": terminated, "joint_acc": jnp.sum(jnp.square(acc), -1), "joint_limits": lim,
             "action_rate": jnp.sum(jnp.square(a - a_prev), -1), "foot_slip": slip, "self_collision": collisions,
-            "wrist_pose": jnp.sum(jnp.square(q1[:, WRIST_IDX] - DEFAULT_Q[list(WRIST_IDX)]), -1)}  # fmt: skip
+            "wrist_pose": jnp.sum(jnp.square(q1[:, wrist_idx] - default_q[list(wrist_idx)]), -1)}  # fmt: skip
 
 
 def weighted(terms):

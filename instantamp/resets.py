@@ -52,7 +52,7 @@ def _centered_mean(x, n=CMD_WINDOW):
     return (c[n:] - c[:-n]) / n
 
 
-def load(directory: str, kind: str, up_height: float, up_tilt: float):
+def load(directory: str, kind: str, up_height: float, up_tilt: float, joints: int | None = None):
     """The bank of the clips in `directory`. kind "walk": every frame; "floor": the frames that are not up (pelvis at or below
     up_height, or tilted by up_tilt or more)."""
     files = sorted(glob.glob(os.path.join(directory, "*.npz")))
@@ -61,6 +61,8 @@ def load(directory: str, kind: str, up_height: float, up_tilt: float):
     for f in files:
         d = np.load(f)
         assert int(d["fps"]) == 50, f
+        if joints is not None and d["dof_pos"].shape[1] != joints:
+            raise ValueError(f"{f}: expected {joints} joint columns")
         quat, z = d["root_quat"], d["root_pos"][:, 2]
         keep = np.ones(len(z), bool)
         if kind == "floor":
@@ -69,6 +71,8 @@ def load(directory: str, kind: str, up_height: float, up_tilt: float):
         cmd = _centered_mean(_heading_velocity(quat, d["root_lin_vel"], d["root_ang_vel"]))
         for k, a in (("z", z), ("quat", _wxyz(quat)), ("v", d["root_lin_vel"]), ("w", d["root_ang_vel"]), ("q", d["dof_pos"]), ("qd", d["dof_vel"]), ("cmd", cmd)):
             cols[k].append(a[keep])
+    if not any(len(z) for z in cols["z"]):
+        raise ValueError(f"No {kind} reset frames in {directory}")
     return {k: jnp.asarray(np.concatenate(v, 0), jnp.float32) for k, v in cols.items()}
 
 
