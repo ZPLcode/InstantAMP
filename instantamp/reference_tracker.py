@@ -145,11 +145,7 @@ def motor_control(q, qd, action):
     friction = env.FS * np.tanh(qd / env.VA) + env.FD * qd
     requested = source_torque + friction
     native_target = q + (requested + env.KD * qd) / env.KP
-    limit = np.minimum(np.where(qd * requested > 0, env.Y1, env.Y2), env.EFFORT)
-    speed_scale = np.clip(1 - np.maximum(np.abs(qd) - env.X1, 0.) / (env.X2 - env.X1), 0., 1.)
-    limit = limit * speed_scale
-    torque = np.clip(requested, -limit, limit) - friction
-    return native_target, q + (torque + env.KD * qd) / env.KP
+    return native_target, env.actuator_ctrl(q, qd, native_target, xp=np)
 
 
 def track(motions, policy, steps, *, support_friction=True, lift=0.02):

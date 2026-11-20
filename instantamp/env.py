@@ -102,21 +102,21 @@ def joint_target(a, bias):
     return DEFAULT_Q + ACTION_SCALE * a - bias
 
 
-def actuator_torque(q, qd, target):
+def actuator_torque(q, qd, target, *, xp=jnp):
     """Unitree actuator: PD torque, clipped by the torque-speed curve (Y1 when torque and velocity agree, Y2 when they oppose, both capped
     by the effort limit, falling linearly to 0 between X1 and X2), minus the friction Fs tanh(qd / Va) + Fd qd."""
     tau = KP * (target - q) - KD * qd
-    lim = jnp.minimum(jnp.where(qd * tau > 0, Y1, Y2), EFFORT)
-    slope = jnp.clip(-lim / jnp.maximum(X2 - X1, 1e-6) * (jnp.abs(qd) - X1) + lim, 0.0, None)
-    lim = jnp.where(jnp.abs(qd) < X1, lim, slope)
-    tau = jnp.clip(tau, -lim, lim)
-    return tau - (FS * jnp.tanh(qd / VA) + FD * qd)
+    lim = xp.minimum(xp.where(qd * tau > 0, Y1, Y2), EFFORT)
+    slope = xp.clip(-lim / xp.maximum(X2 - X1, 1e-6) * (xp.abs(qd) - X1) + lim, 0.0, None)
+    lim = xp.where(xp.abs(qd) < X1, lim, slope)
+    tau = xp.clip(tau, -lim, lim)
+    return tau - (FS * xp.tanh(qd / VA) + FD * qd)
 
 
-def actuator_ctrl(q, qd, target):
+def actuator_ctrl(q, qd, target, *, xp=jnp):
     """The control of MuJoCo's position actuator (gain kp, bias -kp q - kd qd) that yields `actuator_torque`: q + (tau + kd qd) / kp.
     The actuator's force range (+- effort) clamps the result, and the implicitfast integrator treats its -kd qd term implicitly."""
-    return q + (actuator_torque(q, qd, target) + KD * qd) / KP
+    return q + (actuator_torque(q, qd, target, xp=xp) + KD * qd) / KP
 
 
 # ------------------------------------------------------------------ commands (mjlab UniformVelocityCommand)

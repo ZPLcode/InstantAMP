@@ -191,6 +191,29 @@ second. Median across-trial RMS errors were 2.3 cm in pelvis height, 5.7° in
 pelvis orientation, 6.2 cm at the wrists and 5.5 cm at the ankles in the world
 frame. The largest rise-time difference was a single 20 ms control step.
 
+For repeated execution of a planned clip, export the nominal joint targets and
+a time-varying state-feedback gain for each 20 ms control step. The exported
+controller uses NumPy at execution time and takes the measured floating-base
+and joint state in the plan's coordinate system. A new clip needs its own plan.
+The exported eleven-clip bank stood up and held stance on all eleven nominal
+starts. It also held stance on all 22 validation starts with paired initial
+height and horizontal speed offsets of ±5 mm and ±0.08 m/s. Across the nominal
+trials its median wrist and ankle errors were 6.3 and 5.5 cm.
+
+```bash
+OPENBLAS_NUM_THREADS=1 .venv/bin/python tools/export_g1_tracking_policy.py \
+  runs/g1_reference_check/trajectories_000.npz --out runs/g1_getup_feedback
+```
+
+```python
+from instantamp.timed_feedback import TimedFeedbackPolicy
+
+policy = TimedFeedbackPolicy.load("runs/g1_getup_feedback/policy.npz")
+case = policy.names.index("fallAndGetUp1_subject1_458_565")
+# qpos and qvel come from the robot at this control step.
+joint_target = policy.target(case, tick, qpos, qvel)
+```
+
 The repository also supports the LAFAN1 anchor-conditioned SuperMimic G1 neural
 policy if that checkpoint is available locally. Its inputs are ten reference
 frames, the robot's sensor history and the reference torso pose relative to the
