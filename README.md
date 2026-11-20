@@ -162,6 +162,47 @@ from 56.7 to 55.6 cm, and joint error from 0.704 to 0.683 rad. The reference too
 2.34 s to rise at the median. The original and exported policies took 0.82 and
 0.80 s. The comparison uses nominal physics and zero assistance.
 
+### Following a specific G1 get-up
+
+For a specified sequence of poses at 50 Hz, run the reference controller from
+the repository root. Use the native G1 checkpoint to take over balance after
+the last reference frame. Choose a new output directory for each run.
+
+```bash
+.venv/bin/python tools/plan_g1_reference.py --fixed --out runs/g1_reference_check --gif
+# A single native G1 get-up, starting on the floor and ending in stance
+.venv/bin/python tools/plan_g1_reference.py --clip path/to/getup.npz \
+  --balance runs/g1_4096_20261120_01/ckpt/0011.npz --out runs/g1_one_reference
+```
+
+At each replan, 200 batched MuJoCo Warp predictions start from the measured state.
+They evaluate 0.48 s of joint, pelvis and landmark tracking. A separate native
+MuJoCo simulation executes three 20 ms control steps, then supplies its new state.
+The robot uses its original motor torque and speed limits. Hand and knee contacts
+with the floor can carry tangential force. The opt-in contact setting is scoped
+to the reference task. The simulation initializes the floating base once.
+
+The output NPZ contains the reference and simulated poses, velocities, 50 Hz
+joint targets, and the actual actuator inputs for each 5 ms substep. The JSON
+report compares trajectories at equal times from the fallen start through 0.5 s
+after the reference first reaches the standing threshold. For the eleven fixed
+starts, all eleven stood up unassisted and stayed upright throughout the final
+second. Median across-trial RMS errors were 2.3 cm in pelvis height, 5.7° in
+pelvis orientation, 6.2 cm at the wrists and 5.5 cm at the ankles in the world
+frame. The largest rise-time difference was a single 20 ms control step.
+
+The repository also supports the LAFAN1 anchor-conditioned SuperMimic G1 neural
+policy if that checkpoint is available locally. Its inputs are ten reference
+frames, the robot's sensor history and the reference torso pose relative to the
+current torso. The export step uses the source checkout's PyTorch environment.
+
+```bash
+python tools/track_g1_reference.py export /path/to/ckpt_latest.pt g1_reference_actor.npz
+.venv/bin/python tools/track_g1_reference.py run g1_reference_actor.npz \
+  data/recovery/lafan1/fallAndGetUp1_subject1.npz --start 763 --end 942 \
+  --seconds 6 --out runs/g1_actor_reference.npz
+```
+
 ## Zenbot 23-DoF get-up
 
 The `zenbot23_getup` task uses the 43.0678308 kg articulation from

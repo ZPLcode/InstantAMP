@@ -62,9 +62,12 @@ def motion_dirs(robot):
     return WALK_DIR, FLOOR_DIR
 
 
-def build_scene(iterations: int = 10, ls_iterations: int = 20, ccd_iterations: int = 50, robot_name: str = "g1") -> mujoco.MjModel:
+def build_scene(iterations: int = 10, ls_iterations: int = 20, ccd_iterations: int = 50, robot_name: str = "g1",
+                g1_support_friction: bool = False) -> mujoco.MjModel:
     """The compiled scene: the floor and the robot (prefix "robot_"), without visual geoms, meshes or sensors."""
     profile = robot_profile(robot_name)
+    if g1_support_friction and robot_name != "g1":
+        raise ValueError("g1_support_friction requires the G1 model")
     world = mujoco.MjSpec()
     world.copy_during_attach = True
     o = world.option
@@ -112,6 +115,10 @@ def build_scene(iterations: int = 10, ls_iterations: int = 20, ccd_iterations: i
             g.condim, g.priority, g.friction = 3, 1, [0.6, g.friction[1], g.friction[2]]
         else:
             g.condim = 1
+            if g1_support_friction:
+                # Match mjlab's full-collision G1. With equal priority the ground's
+                # three contact dimensions also allow a hand or knee to push tangentially.
+                g.priority = ground.priority
     for i, name in enumerate(env.DOF):
         j = robot.joint(f"{name}_joint")
         j.armature = float(env.ARMATURE[i])
@@ -247,7 +254,7 @@ def load_bank(directory: str, joints: int = env.J, first_only=False):
 class Sim:
     def __init__(self, num_envs: int = 4096, nconmax: int = NCONMAX, njmax: int = NJMAX, walk_dir: str | None = None,
                  floor_dir: str | None = None, random_start: bool = True, seed: int = 0, reset_floor: float = 0.2,
-                 prob_shove: float = 0.0, push: bool = True, physics: bool = True, robot: str = "g1", amp_wrists: bool = True, assist_newtons=None, obs_noise=True, randomize_world=True, reference_weight=0., g1_style=False, getup_rise_weight=-0.25):  # fmt: skip
+                 prob_shove: float = 0.0, push: bool = True, physics: bool = True, robot: str = "g1", amp_wrists: bool = True, assist_newtons=None, obs_noise=True, randomize_world=True, reference_weight=0., g1_style=False, getup_rise_weight=-0.25, g1_support_friction=False):  # fmt: skip
         """physics=False: everything but MuJoCo Warp's model and data (no GPU): the scene, kinematics, reset banks and `_fresh`, for
         checks on the CPU."""
         self.N, self.random_start, self.seed = num_envs, random_start, seed
@@ -277,7 +284,7 @@ class Sim:
         if self.recovery:
             self.amp_dim = 9 + 2 * len(self.amp_joints) + 18
             self.obs_noise = np.repeat([0.2, 0.05, 0.01, 1.5, 0.0, 0.08], [3, 6, self.J, self.J, self.J, 18]).astype(np.float32)
-        self.m = m = build_scene(robot_name=robot)
+        self.m = m = build_scene(robot_name=robot, g1_support_friction=g1_support_friction)
         assert m.nu == self.J and m.nq == 7 + self.J
         assert tuple(m.joint(m.actuator_trnid[i, 0]).name.removeprefix("robot_").removesuffix("_joint") for i in range(m.nu)) == profile.DOF
         joint_ids = m.actuator_trnid[:, 0]
