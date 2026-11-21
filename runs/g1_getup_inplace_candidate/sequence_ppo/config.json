@@ -1,0 +1,20 @@
+{
+  "base": "runs/g1_getup_inplace_candidate/hand_sequence30/ckpt/0000.npz",
+  "out": "runs/g1_getup_inplace_candidate/sequence_ppo",
+  "discriminator": "runs/g1_getup_polish/style/amp6_rate3/discriminator/000060.npz",
+  "motions": "data/g1_getup/recovery",
+  "envs": 4,
+  "steps": 350,
+  "iterations": 12,
+  "seed": 508791,
+  "scale": 0.06,
+  "std": 0.16,
+  "lr": 0.00015,
+  "reference_motion_weight": 3.0,
+  "rise_duration_scale": 1.35,
+  "ground_support_weight": 7.0,
+  "base_sha256": "3727d689f0bb9add42625e5e9d01c45cf6f1fd9abe31c1704ddcd6e484095360",
+  "action_rate_multiplier": 3.0,
+  "assist_n": 0.0,
+  "learner": "native_ppo_amp"
+}

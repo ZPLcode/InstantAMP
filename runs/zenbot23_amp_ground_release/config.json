@@ -1,0 +1,8 @@
+{
+  "robot": "zenbot23_getup",
+  "floor_dir": "data/zenbot23_getup/recovery",
+  "assist_newtons": 0.0,
+  "algorithm": "native_PPO_AMP",
+  "cache_source": "runs/zenbot23_inplace/anchored_recovery/ckpt/0000.npz",
+  "matched_nominal_plans": 17
+}

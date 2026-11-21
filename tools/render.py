@@ -13,6 +13,7 @@ import argparse
 import glob
 import json
 import os
+from pathlib import Path
 
 os.environ.setdefault("MUJOCO_GL", "egl")
 import jax  # noqa: E402
@@ -25,8 +26,8 @@ import sys  # noqa: E402
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from instantamp import env, nets  # noqa: E402
-from instantamp.inference import load, policy_output  # noqa: E402
-from instantamp.sim import XML, ZENBOT_XML, Sim, unflatten  # noqa: E402
+from instantamp.inference import G1StandController, load, policy_memory, policy_step, reset_policy_memory  # noqa: E402
+from instantamp.sim import XML, ZENBOT_XML, Sim, build_scene, unflatten  # noqa: E402
 
 MESH_DIR = os.path.join(os.path.dirname(XML), "meshes")
 W, H, FPS = 640, 400, 25
@@ -61,20 +62,26 @@ def visual_model(robot="g1", mesh_dir=None):
 def rollout(run, ckpt, n, seconds, seed):
     cfg = json.load(open(os.path.join(run, "config.json")))
     pi, norm, ode = load(ckpt)
-    sim = Sim(n, cfg.get("nconmax", 64), cfg.get("njmax", 640), cfg["walk_dir"], cfg["floor_dir"], True, seed, cfg["reset_floor"],
+    controller = isinstance(pi, G1StandController)
+    sim = Sim(n, cfg.get("nconmax", 64), cfg.get("njmax", 640), cfg["walk_dir"], cfg["floor_dir"], not controller, seed, cfg["reset_floor"],
               cfg["prob_shove"], bool(cfg["push"]), robot=cfg.get("robot", "g1"), assist_newtons=0., obs_noise=cfg.get("robot", "g1") == "g1",
               g1_style=bool(cfg.get("g1_style", 0)), getup_rise_weight=cfg.get("getup_rise_weight", -0.25),
               g1_support_friction=bool(cfg.get("g1_support_friction", 0)), getup_reset_frames=cfg.get("getup_reset_frames", 20),
               g1_phase_amp=bool(cfg.get("g1_phase_share", 0.)))  # fmt: skip
 
+    if controller:
+        sim.episode_steps = round(seconds / env.DT) + 1
+
     @jax.jit
     def go(s, key):
-        def body(s, k):
-            out = policy_output(pi, norm, s.obs, cfg.get("obs_clip", 10.))
+        def body(carry, k):
+            s, memory = carry
+            out, memory = policy_step(pi, norm, s.obs, memory, cfg.get("obs_clip", 10.))
             s1, tr = sim.step(s, nets.ode_step(out, s.a_ode, *ode) if ode is not None else out)
-            return s1, (tr.qpos1, tr.qvel1, tr.terminated | tr.truncated, tr.terminated, s.c_obs, s.was_up, s.down)
+            done = tr.terminated | tr.truncated
+            return (s1, reset_policy_memory(memory, done)), (tr.qpos1, tr.qvel1, done, tr.terminated, s.c_obs, s.was_up, s.down)
 
-        return jax.lax.scan(body, s, jax.random.split(key, int(seconds / env.DT)))
+        return jax.lax.scan(body, (s, policy_memory(pi, s.obs)), jax.random.split(key, int(seconds / env.DT)))
 
     _, out = go(sim.init(jax.random.PRNGKey(seed)), jax.random.PRNGKey(seed + 1))
     return [np.asarray(x) for x in out]
@@ -122,9 +129,47 @@ def render(m, qpos, lines, title, path):
     print(f"wrote {path} ({len(frames)} frames)")
 
 
+def render_evaluated_trial(archive, trial, out):
+    """Replay the exact post-step states saved by the fixed-start evaluator."""
+    with np.load(archive, allow_pickle=False) as data:
+        robot = str(data["robot"])
+        if not 0 <= trial < len(data["clips"]):
+            raise ValueError(f"trial must be in [0, {len(data['clips'])-1}]")
+        if not np.isclose(data["dt"], env.DT):
+            raise ValueError("Unexpected trajectory control rate")
+        clip = str(data["clips"][trial])
+        offset = float(data["offsets_s"][trial])
+        status = "passed" if data["success"][trial] else "failed"
+        title = f"Get-up trial {trial} | {data['checkpoint']} ({data['which']})"
+        qpos = data["qpos"][:, trial]
+        loads = data["foot_load_bw"][:, trial]
+        ended = np.flatnonzero(data["terminated"][:, trial])
+        if len(ended):
+            qpos = qpos[:ended[0]+2]  # include the terminal physical pose
+        lines = [
+            [f"{clip} from {offset:g} s | assistance {float(data['assist_n']):g} N",
+             f"{i * env.DT:.2f} s | pelvis {pose[2]:.2f} m" + (f" | foot load {loads[i-1]:.2f} BW" if i else ""),
+             f"Final standing check: {status}"]
+            for i, pose in enumerate(qpos)
+        ]
+    if robot == "g1_getup" and not os.path.isdir(MESH_DIR):
+        model = build_scene(robot_name=robot)
+        # The physics model's collision geoms belong to a hidden viewer group.
+        model.geom_group[:] = 0
+        model.geom_rgba[:, :] = [0.45, 0.70, 0.89, 1.0]
+        model.geom_rgba[model.geom("floor").id] = [0.24, 0.27, 0.30, 1.0]
+        model.vis.global_.offwidth, model.vis.global_.offheight = W, H
+    else:
+        model = visual_model(robot)
+    path = Path(out) if out else Path(archive).with_name(f"{Path(archive).stem}_trial{trial:02}.gif")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    render(model, qpos, lines, title, path)
+
+
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("run")
+    p.add_argument("run", help="training run directory or a recovery .npz from evaluate --trajectories")
+    p.add_argument("--trial", type=int, default=0, help="zero-based fixed trial to render from an evaluation archive")
     p.add_argument("--mesh_dir", help="visual mesh directory for Zenbot")
     p.add_argument("--ckpt", default="")
     p.add_argument("--n", type=int, default=64)
@@ -133,6 +178,8 @@ def main():
     p.add_argument("--seed", type=int, default=3)
     p.add_argument("--out", default="")
     a = p.parse_args()
+    if Path(a.run).is_file():
+        return render_evaluated_trial(a.run, a.trial, a.out)
     ckpt = os.path.join(a.run, "ckpt", a.ckpt + ".npz") if a.ckpt else sorted(glob.glob(os.path.join(a.run, "ckpt", "*.npz")))[-1]
     name = os.path.basename(ckpt)[:-4]
     meta = json.load(open(ckpt[:-4] + ".json"))
@@ -142,7 +189,9 @@ def main():
     vel, wz = body_velocity(q, v)
     cfg = json.load(open(os.path.join(a.run, "config.json")))
     m = visual_model(cfg.get("robot", "g1"), a.mesh_dir)
-    tag = f"{os.path.basename(os.path.normpath(a.run))} ckpt {name} ({meta['train_s'] / 60:.0f} min)"
+    tag = f"{os.path.basename(os.path.normpath(a.run))} ckpt {name}"
+    if "train_s" in meta:
+        tag += f" ({meta['train_s'] / 60:.0f} min)"
 
     def lines_for(e, n_steps):
         return [[f"cmd   vx {cobs[i, e, 0]:+.2f}  vy {cobs[i, e, 1]:+.2f}  wz {cobs[i, e, 2]:+.2f}",

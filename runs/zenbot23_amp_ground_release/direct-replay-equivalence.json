@@ -1,0 +1,277 @@
+[
+  {
+    "before": "runs/zenbot23_inplace/anchored_recovery/previous_held/181729_00.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/existing_samples/181729_00.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_inplace/anchored_recovery/previous_held/193789_05.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/existing_samples/193789_05.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_inplace/anchored_recovery/previous_held/207517_12.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/existing_samples/207517_12.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_inplace/anchored_recovery/final_held/259339_16.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/existing_samples/259339_16.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_inplace/anchored_recovery/final_held/273541_14.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/existing_samples/273541_14.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_inplace/anchored_recovery/final_held/298477_08.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/existing_samples/298477_08.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_inplace/anchored_recovery/final_push/316859_05.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/existing_push/316859_05.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_inplace/anchored_recovery/final_push/337169_08.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/existing_push/337169_08.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_00.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_00.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_01.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_01.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_02.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_02.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_03.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_03.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_04.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_04.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_05.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_05.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_06.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_06.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_07.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_07.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_08.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_08.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_09.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_09.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_10.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_10.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_11.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_11.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_12.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_12.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_13.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_13.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_14.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_14.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_15.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_15.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  },
+  {
+    "before": "runs/zenbot23_ground_sequence_release/nominal/42_16.npz",
+    "after": "runs/zenbot23_inplace/expanded_recovery/published_nominal/42_16.npz",
+    "max_errors": {
+      "qpos": 0.0,
+      "qvel": 0.0,
+      "feet_xy": 0.0,
+      "loads": 0.0,
+      "support_load_bw": 0.0
+    }
+  }
+]

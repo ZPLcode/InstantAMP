@@ -1,0 +1,179 @@
+{
+  "checkpoint_sha256": "76c8458f7822eb36a27c86039b5e7c4be81a6d01dd87912483472420f095e1d7",
+  "definition": "After the last sustained palm contact starting before standing, each foot bears at least 5% body weight, feet together at least 50%, and palms less than 5% for 120 ms. Observation ends 0.5 s after first upright.",
+  "total": 17,
+  "required": 15,
+  "palm_before_extension_and_weight_transferred": 15,
+  "cases": [
+    {
+      "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+      "offset_s": 0.0,
+      "reset_sha256": "52b6dcf57c74af593e996ff73574b58a15ec477bdd46708ebddb3afa0ba86cb7",
+      "reference_requires_palm": true,
+      "palm_onset_s": 1.1,
+      "leg_extension_s": 1.94,
+      "foot_transfer_s": 2.98,
+      "first_stand_s": 2.96
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1400_1480.npz",
+      "offset_s": 0.0,
+      "reset_sha256": "c246f534b7382878fb23c62cf91739331e85da0fe0c5b22aabb05d89536786c3",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.08,
+      "leg_extension_s": 1.44,
+      "foot_transfer_s": 1.7,
+      "first_stand_s": 2.22
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+      "offset_s": 0.0,
+      "reset_sha256": "269798fbdc5f9047526fbd328e30d1dfb16cb8343b30f63de0fb1768acc71396",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.86,
+      "leg_extension_s": 2.86,
+      "foot_transfer_s": 3.3000000000000003,
+      "first_stand_s": 3.7
+    },
+    {
+      "clip": "fallAndGetUp1_subject5_2500_2600.npz",
+      "offset_s": 0.0,
+      "reset_sha256": "c48186232ba82a9f0bac562dbb8da2dd38747cb912f9fad36d9e2523265c2352",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.12,
+      "leg_extension_s": 2.96,
+      "foot_transfer_s": 3.18,
+      "first_stand_s": 3.38
+    },
+    {
+      "clip": "fallAndGetUp2_subject2_850_1050.npz",
+      "offset_s": 0.0,
+      "reset_sha256": "db36d79458a7a1bbcf4399dee05bbb8d9c702379e43f5bc2f0178265a5d98d97",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.12,
+      "leg_extension_s": 6.98,
+      "foot_transfer_s": 6.94,
+      "first_stand_s": 7.22
+    },
+    {
+      "clip": "fallAndGetUp2_subject3_900_1000.npz",
+      "offset_s": 0.0,
+      "reset_sha256": "7882089e834866af09b4ac826c77f2d40c1969dbd82e92fab0956105f8731144",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.44,
+      "leg_extension_s": 3.0,
+      "foot_transfer_s": 2.7800000000000002,
+      "first_stand_s": 3.46
+    },
+    {
+      "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+      "offset_s": 0.0,
+      "reset_sha256": "c5e05506271ce209c79909af8ffa9c6bfedbdecd99779fa7d86bda2ceca16fc8",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.08,
+      "leg_extension_s": 0.8,
+      "foot_transfer_s": 0.68,
+      "first_stand_s": 1.56
+    },
+    {
+      "clip": "fallAndGetUp6_subject1_1630_1690.npz",
+      "offset_s": 0.0,
+      "reset_sha256": "7968de9ce3c75bc8b6a819ed371d30a1e9c94f54bcebee9225689775ac452504",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.12,
+      "leg_extension_s": 0.8200000000000001,
+      "foot_transfer_s": 1.54,
+      "first_stand_s": 1.7
+    },
+    {
+      "clip": "fallAndGetUp6_subject1_530_600.npz",
+      "offset_s": 0.0,
+      "reset_sha256": "a1511710328d1f46b5688c03cf8a85c08b5935406a7b2ba6ec4889c8a89831bf",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.28,
+      "leg_extension_s": 0.5,
+      "foot_transfer_s": 0.68,
+      "first_stand_s": 1.1400000000000001
+    },
+    {
+      "clip": "fallAndGetUp6_subject1_650_700.npz",
+      "offset_s": 0.0,
+      "reset_sha256": "b4d3f405b6c0d4dd14a23f3a868719fc17eced7b67b562be44fd3fefd274f508",
+      "reference_requires_palm": false,
+      "palm_onset_s": null,
+      "leg_extension_s": 0.8,
+      "foot_transfer_s": null,
+      "first_stand_s": 0.7000000000000001
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+      "offset_s": 0.5,
+      "reset_sha256": "f3a4767fe8e48ea95513411b6dc6f285ad8338965d975e0d96b68c4edcb2056d",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.24,
+      "leg_extension_s": 1.08,
+      "foot_transfer_s": 1.84,
+      "first_stand_s": 2.2
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1400_1480.npz",
+      "offset_s": 0.5,
+      "reset_sha256": "a11445ed68c431e4284f311d508ad33f6b2fc5eeba09b1ce3bc28befd1244cd6",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.14,
+      "leg_extension_s": 0.66,
+      "foot_transfer_s": 1.48,
+      "first_stand_s": 1.5
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+      "offset_s": 0.5,
+      "reset_sha256": "2bfbeae32012abda77a02a6e4b89f377ebdf269808158a039402a4ef721d6c9c",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.54,
+      "leg_extension_s": 2.14,
+      "foot_transfer_s": 2.7600000000000002,
+      "first_stand_s": 2.82
+    },
+    {
+      "clip": "fallAndGetUp1_subject5_2500_2600.npz",
+      "offset_s": 0.5,
+      "reset_sha256": "3647bce7fb6e73721eea81170cdae1f6c6172e7db75c2cd27110f0c0b91413d9",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.14,
+      "leg_extension_s": 2.14,
+      "foot_transfer_s": 2.5,
+      "first_stand_s": 2.8000000000000003
+    },
+    {
+      "clip": "fallAndGetUp2_subject2_850_1050.npz",
+      "offset_s": 0.5,
+      "reset_sha256": "ea4ccf888e8a0b2634762c0b3c5dac4ceea0a4f88abaf832b08c2f04ae554a2c",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.12,
+      "leg_extension_s": 4.9,
+      "foot_transfer_s": 6.12,
+      "first_stand_s": 6.34
+    },
+    {
+      "clip": "fallAndGetUp2_subject3_900_1000.npz",
+      "offset_s": 0.5,
+      "reset_sha256": "06e8513a890d29a381c49ed3ecd19cf332de0632c6d2874995ac43a8d0f5e97c",
+      "reference_requires_palm": true,
+      "palm_onset_s": 0.08,
+      "leg_extension_s": 2.06,
+      "foot_transfer_s": 1.86,
+      "first_stand_s": 2.54
+    },
+    {
+      "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+      "offset_s": 0.5,
+      "reset_sha256": "ad9f9fc31438e9e2d995cbf19debf21a44d2fe60ac62bc2e658516c604c29632",
+      "reference_requires_palm": false,
+      "palm_onset_s": null,
+      "leg_extension_s": 0.2,
+      "foot_transfer_s": null,
+      "first_stand_s": 0.72
+    }
+  ]
+}

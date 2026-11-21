@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from instantamp import env
+from instantamp.sim import robot_profile
 from instantamp.train import InstantAMP, initialize_g1_style, load_full, parse, save_full
 
 
@@ -17,7 +18,8 @@ def reward_model(*args):
     # Only exercise the reward functions; a GPU physics model is unnecessary.
     trainer = InstantAMP.__new__(InstantAMP)
     trainer.cfg = parse(list(args))
-    trainer.sim = SimpleNamespace(recovery=trainer.cfg.robot == "zenbot23_getup")
+    profile = robot_profile(trainer.cfg.robot)
+    trainer.sim = SimpleNamespace(recovery=profile is not env, robot=profile)
     return trainer
 
 

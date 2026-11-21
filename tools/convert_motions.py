@@ -117,7 +117,7 @@ def lab_dof_names(path):
     return names
 
 
-def convert_recovery_clip(path, pos, wxyz, joints, order, fps, landmarks=None):
+def convert_recovery_clip(path, pos, wxyz, joints, order, fps, landmarks=None, *, keep_native=False):
     if joints.shape != (len(pos), len(order)) or pos.shape[1:] != (3,) or wxyz.shape != (len(pos), 4):
         raise ValueError(f"Invalid motion dimensions: {path}")
     if len(pos) < 2 or fps <= 0 or not all(np.isfinite(a).all() for a in (pos, wxyz, joints)):
@@ -142,9 +142,11 @@ def convert_recovery_clip(path, pos, wxyz, joints, order, fps, landmarks=None):
         if landmarks.shape != (len(pos), 6, 3) or not np.isfinite(landmarks).all():
             raise ValueError(f"Invalid recovery landmarks: {path}")
         features.append(landmarks.reshape(len(pos), -1))
-    pos, quat, values = resample(pos, quat, np.concatenate(features, -1), fps)
+    values = np.concatenate(features, -1)
+    if not keep_native:
+        pos, quat, values = resample(pos, quat, values, fps)
     j = len(order)
-    motion = dict(fps=OUT_FPS, root_pos=pos, root_quat=quat, dof_pos=values[:, :j],
+    motion = dict(fps=fps if keep_native else OUT_FPS, root_pos=pos, root_quat=quat, dof_pos=values[:, :j],
                   root_lin_vel=values[:, j:j+3], root_ang_vel=values[:, j+3:j+6], dof_vel=values[:, j+6:2*j+6])
     if landmarks is not None:
         motion["key_body_pos"] = values[:, 2*j+6:].reshape(len(pos), 6, 3)

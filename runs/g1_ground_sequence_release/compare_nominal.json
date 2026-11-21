@@ -1,0 +1,36 @@
+{
+  "original": {
+    "trials": 17,
+    "rose_without_retry_or_refall": 14,
+    "throughout_stable": 4,
+    "median_full_max_cm": 68.76099637244735,
+    "median_max_loaded_ankle_cm": 78.60543046495152,
+    "median_reset_to_end_net_cm": 111.62396097955653,
+    "median_ground_joint_rmse_deg": 25.203729397209493,
+    "reference_palm_required": 15,
+    "required_with_physical_palm_before_extension": 15,
+    "median_pelvis_vertical_speed_p95_m_s": 1.007749277418223,
+    "median_knee_extension_speed_p95_deg_s": 301.2764359999466,
+    "median_palm_duration_s": 1.3,
+    "median_reference_palm_duration_s": 1.12,
+    "median_rise_duration_ratio": 1.5777777777777777,
+    "transfer": 9
+  },
+  "current": {
+    "trials": 17,
+    "rose_without_retry_or_refall": 17,
+    "throughout_stable": 17,
+    "median_full_max_cm": 1.973061105820413,
+    "median_max_loaded_ankle_cm": 0.9838205396209976,
+    "median_reset_to_end_net_cm": 25.262970251774426,
+    "median_ground_joint_rmse_deg": 9.646323955952015,
+    "reference_palm_required": 15,
+    "required_with_physical_palm_before_extension": 15,
+    "median_pelvis_vertical_speed_p95_m_s": 0.6199584587150182,
+    "median_knee_extension_speed_p95_deg_s": 176.69457622779458,
+    "median_palm_duration_s": 1.0,
+    "median_reference_palm_duration_s": 1.12,
+    "median_rise_duration_ratio": 1.39647577092511,
+    "transfer": 15
+  }
+}

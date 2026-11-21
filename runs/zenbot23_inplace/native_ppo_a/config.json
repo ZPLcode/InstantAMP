@@ -1,0 +1,13 @@
+{
+  "robot": "zenbot23_getup",
+  "algorithm": "native_PPO_AMP",
+  "assist_n": 0.0,
+  "action_rate_l2": -0.015,
+  "base": "runs/zenbot23_inplace/baseline/ckpt/0000.npz",
+  "out": "runs/zenbot23_inplace/native_ppo_a",
+  "reference": "data/zenbot23_getup/recovery",
+  "iterations": 300,
+  "envs": 64,
+  "horizon": 36,
+  "seed": 93119
+}

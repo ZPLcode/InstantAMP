@@ -1,0 +1,49 @@
+{
+  "gains": {
+    "hip": 0.8745302327181104,
+    "knee": 1.0870022117900402,
+    "ankle": 0.9902298247713788,
+    "knee_offset": -0.07108274799857786,
+    "hip_offset": -0.09693548497841226,
+    "push": 0.1513912025782303,
+    "swing": 0.03687875504855935,
+    "waist_pitch": 0.11623781095324554
+  },
+  "fit_id": 108,
+  "validated_command_m_s": 2.15,
+  "jog_speed_calibration": {
+    "columns": [
+      "command_m_s",
+      "neural_command_m_s",
+      "hip_swing_multiplier",
+      "speed_feedback_gain"
+    ],
+    "knots": [
+      [
+        1.65,
+        1.96,
+        0.865,
+        0.4
+      ],
+      [
+        1.85,
+        2.025,
+        0.925,
+        0.4
+      ],
+      [
+        2.15,
+        2.15,
+        1.0,
+        0.0
+      ],
+      [
+        2.3,
+        2.34,
+        1.0,
+        0.0
+      ]
+    ],
+    "source": "Unshoved native MuJoCo speed sweeps. Sole motion and the pelvis gyroscope supply forward-speed feedback during stance."
+  }
+}

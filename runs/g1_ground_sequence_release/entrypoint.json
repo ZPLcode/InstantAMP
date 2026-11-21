@@ -1,0 +1,16 @@
+{
+  "checkpoint": "runs/g1_ground_sequence_release/ckpt/0000.npz",
+  "sha256": "76c8458f7822eb36a27c86039b5e7c4be81a6d01dd87912483472420f095e1d7",
+  "source": "fallAndGetUp2_subject2_850_1050.npz",
+  "trial": 4,
+  "seconds": 30.0,
+  "control_steps": 1500,
+  "reference_recording": "runs/g1_getup_inplace_candidate/hand_grounded_recovery/nominal/source-play.npz",
+  "public_player_replay": "runs/g1_ground_sequence_release/default-replay/source-play.npz",
+  "max_abs_difference": {
+    "qpos": 0.0,
+    "qvel": 0.0,
+    "hand_load_bw": 0.0,
+    "support_load_bw": 0.0
+  }
+}

@@ -58,6 +58,9 @@ class Demos:
     """The frame features of all demo clips, and the start of every window of `frames` frames that stays inside a clip."""
 
     def __init__(self, directory: str, sim, frames: int):
+        from . import g1_getup
+        self.g1_bank = g1_getup.load_reference(directory) if sim.robot is g1_getup else None
+        self.amp_frame = sim.amp_frame
         files = sorted(glob.glob(os.path.join(directory, "*.npz")))
         assert files, f"no clips in {directory} (bash tools/download_data.sh)"
         feats, starts, n = [], [], 0
@@ -82,7 +85,12 @@ class Demos:
             self.clip_offsets = jnp.array([a[0] for a in starts])
 
     def sample(self, key, B):
-        """B windows (B, frames, FRAME_DIM) uniform over the windows of all clips."""
+        """Sample recovery windows uniformly by clip, or locomotion windows uniformly by start frame."""
+        if self.g1_bank is not None:
+            from .g1_getup import sample_reference
+            f = sample_reference(self.g1_bank, key, B, self.window)
+            state = (f["pos"], quat_to_mat(f["quat"]), f["v"], f["w"], f["q"], f["qd"])
+            return self.amp_frame(state, f.get("points"))
         i = self.starts[jax.random.randint(key, (B,), 0, len(self.starts))]
         if self.clip_lengths is not None:
             kc, kt = jax.random.split(key)
@@ -146,18 +154,25 @@ def loss(net, norm, demo, robot, wt, key):
     return total, {"d_demo": d_demo.mean(), "d_robot": d_robot, "gp": gp}
 
 
-def recovery_style(st, window, scale):
-    x = normalize(st["norm"], window).reshape(*window.shape[:-2], -1)
+def recovery_features(norm, window, leggedlab):
+    if leggedlab:
+        # rsl_rl EmpiricalNormalization normalizes by std + eps.
+        return (window - norm["mean"]) / (jnp.sqrt(norm["var"]) + 1e-2)
+    return normalize(norm, window)
+
+
+def recovery_style(st, window, scale, leggedlab=False):
+    x = recovery_features(st["norm"], window, leggedlab).reshape(*window.shape[:-2], -1)
     d = nets.mlp_apply(st["net"], x, jax.nn.leaky_relu)[..., 0]
     return scale * jnp.maximum(1. - 0.25 * (d - 1.)**2, 0.)
 
 
-def recovery_loss(net, norm, demo, robot, wt, key):
+def recovery_loss(net, norm, demo, robot, wt, key, leggedlab=False):
     def predict(row):
         return nets.mlp_apply(net, row, jax.nn.leaky_relu)[..., 0]
 
-    xd = normalize(norm, demo).reshape(len(demo), -1)
-    xr = normalize(norm, robot).reshape(len(robot), -1)
+    xd = recovery_features(norm, demo, leggedlab).reshape(len(demo), -1)
+    xr = recovery_features(norm, robot, leggedlab).reshape(len(robot), -1)
     dd, dr = predict(xd), predict(xr)
     n = jnp.maximum(wt.sum(), 1.)
     gp = 10. * jnp.square(jax.vmap(jax.grad(predict))(xd)).sum(-1).mean()
@@ -165,17 +180,25 @@ def recovery_loss(net, norm, demo, robot, wt, key):
     return loss, {"d_demo": dd.mean(), "d_robot": (wt * dr).sum() / n, "gp": gp}
 
 
-def train_step(st, demo, robot, wt, key, lr: float, recovery=False):
+def train_step(st, demo, robot, wt, key, lr: float, recovery=False, leggedlab=False):
     """One critic step on a batch of demo and robot windows; the robot windows with weight 0 take no part."""
-    (_, aux), grads = jax.value_and_grad(recovery_loss if recovery else loss, has_aux=True)(st["net"], st["norm"], demo, robot, wt, key)
-    grads, _ = optim.clip_by_global_norm(grads, 1.0)
+    args = (st["net"], st["norm"], demo, robot, wt, key)
+    if recovery:
+        (_, aux), grads = jax.value_and_grad(recovery_loss, has_aux=True)(*args, leggedlab=leggedlab)
+    else:
+        (_, aux), grads = jax.value_and_grad(loss, has_aux=True)(*args)
+    if not leggedlab:
+        grads, _ = optim.clip_by_global_norm(grads, 1.0)
     if recovery:
         # Coupled Adam weight decay, following the reference trunk and head parameter groups.
         grads = [{k: g + (0.1 if i == len(grads)-1 else 0.001) * st["net"][i][k] for k, g in layer.items()}
                  for i, layer in enumerate(grads)]
     net, opt = optim.step(st["net"], grads, st["opt"], jax.tree.map(lambda _: False, st["net"]), lr, betas=(0.9, 0.999) if recovery else (0.5, 0.9))
-    norm = nets.rn_update(st["norm"], robot.reshape(-1, robot.shape[-1]), weights=jnp.repeat(wt, robot.shape[1]))
-    if recovery:
+    # In dev/get_up, PPOAMP.update feeds only the replayed policy windows into
+    # update_normalization and applies Adam directly to the discriminator.
+    norm = nets.rn_update(st["norm"], robot.reshape(-1, robot.shape[-1]), weights=jnp.repeat(wt, robot.shape[1]),
+                          max_count=1e8 if leggedlab else 2e8)
+    if recovery and not leggedlab:
         norm = nets.rn_update(norm, demo.reshape(-1, demo.shape[-1]))
     first = (st["mu"][0] == 0) & (st["mu"][1] == 0)
     now = jnp.stack([aux["d_demo"], aux["d_robot"]])

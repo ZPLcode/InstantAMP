@@ -120,38 +120,355 @@ To use your own clips, convert them with [`tools/convert_motions.py`](tools/conv
 `.npz` clip holds `fps` (50), `root_pos`, `root_quat` (x, y, z, w), `root_lin_vel`, `root_ang_vel` (world frame), `dof_pos` and
 `dof_vel` (29 joints in the order of `instantamp/env.py`'s `DOF`).
 
+## Prepare the G1 and Zenbot get-up releases
+
+Run these commands from the InstantAMP checkout after installing the Python dependencies. Both players use the same ten source motions. The G1 converter also writes the native-rate samples needed by training. The Zenbot retargeter builds the 23-joint reference from the converted G1 motions. The original clips are obtained from LeggedLab.
+
+```bash
+mkdir -p data/raw
+git clone --filter=blob:none --no-checkout --sparse https://gitee.com/chaomingsanhua/legged_lab.git data/raw/legged_lab_getup
+git -C data/raw/legged_lab_getup sparse-checkout set scripts/tools/retarget/config source/legged_lab/legged_lab/data/MotionData/g1_29dof/amp/get_up
+git -C data/raw/legged_lab_getup checkout --detach f5f54fe506d7c2e558e07163fd6624ae3d44bbed
+.venv/bin/python -m pip install joblib
+.venv/bin/python -m tools.prepare_g1_getup data/raw/legged_lab_getup
+.venv/bin/python -m tools.retarget_g1_zenbot
+```
+
+Install the checksum-verified Unitree surfaces for the G1 viewer with `bash tools/download_meshes.sh`. The Zenbot viewer reads 26 STL surfaces from the same 43 kg robot as the physics model. To prepare these from the robot source checkout, use a Git account with access to that repository, or set `zenbot_src` to an existing checkout containing the matching model.
+
+```bash
+zenbot_src=data/raw/h1_train_zenbot
+git clone --filter=blob:none --no-checkout --sparse https://github.com/ZPLcode/h1_train.git "$zenbot_src"
+git -C "$zenbot_src" sparse-checkout set robolab/data/robots/roboparty/zenbot
+git -C "$zenbot_src" checkout --detach aafe0101ade37656f5390a7320bbd026f1f3c171
+zenbot_robot="$zenbot_src/robolab/data/robots/roboparty/zenbot"
+cmp assets/zenbot_23dof_43kg.xml "$zenbot_robot/mjcf/zenbot.xml" && \
+  cp -R "$zenbot_robot/meshes" data/zenbot23_getup/
+```
+
+The Zenbot viewer and evaluator assemble the three committed checkpoint parts on first use and verify the SHA-256 in the release manifest. To materialize the original `runs/zenbot23_amp_ground_release/ckpt/0000.npz` for another tool, run `python3 -m tools.restore_zenbot_getup`. [Zenbot checkpoint parts](runs/zenbot23_amp_ground_release/ckpt) · [Release manifest](runs/zenbot23_amp_ground_release/release.json)
+
+Zenbot builds its native controller on first use with a C++17 compiler and OpenMP (GCC on Linux). Start either interactive viewer from the repository root.
+
+```bash
+.venv/bin/python -m tools.play_getup
+.venv/bin/python -m tools.play_zenbot_getup
+```
+
 ## LeggedLab G1 get-up
 
-Run `LeggedLab-Isaac-AMP-G1-GET-UP-v0` from the InstantAMP repository root. Prepare the ten
-positive-weight clips from a local LeggedLab checkout once. Only the preparation step needs
-`joblib`. The trainer and evaluator read the converted 50 Hz bank in `data/g1_getup/recovery`.
+The G1 training task uses a weight of −0.015 for the sum of squared changes between consecutive
+29-joint actions. This triples the original LeggedLab get-up weight of −0.005 at the same 50 Hz
+control rate. This change takes effect when training a policy.
+
+Run `LeggedLab-Isaac-AMP-G1-GET-UP-v0` from the InstantAMP repository root. The source task is
+registered on LeggedLab's `dev/get_up` branch (commit `f5f54fe`). Prepare its ten
+positive-weight clips from a local checkout once. Only the preparation step needs
+`joblib`. The converter writes a 50 Hz evaluation bank in `data/g1_getup/recovery`
+and keeps the source-rate motion samples in its `native/` subdirectory for training.
+[LeggedLab source at f5f54fe](https://gitee.com/chaomingsanhua/legged_lab/tree/f5f54fe).
 
 ```bash
 .venv/bin/python -m pip install joblib
 .venv/bin/python -m tools.prepare_g1_getup ../legged_lab
-.venv/bin/python -m instantamp.train --task LeggedLab-Isaac-AMP-G1-GET-UP-v0
-.venv/bin/python -m instantamp.evaluate runs/g1_getup --last 1
+.venv/bin/python -m instantamp.train --task LeggedLab-Isaac-AMP-G1-GET-UP-v0 --log_dir runs/g1_getup_example
+.venv/bin/python -m instantamp.evaluate runs/g1_getup_example --last 1
 ```
 
 The task uses 29 joints, 200 Hz MuJoCo Warp physics, 50 Hz policy control and 10-second episodes.
-Each reset samples a clip uniformly and a time on its 50 Hz grid, restores the pose and velocities,
+Each reset samples a clip uniformly and a continuous time in that clip, restores its interpolated pose and velocities,
 and adds 0.10 m to the root height. Joint targets use the source default pose plus 0.25 times the action.
-The standing reward activates above 0.65 m and targets 0.75 m. Torso assistance starts at 200 N,
-requires ground support on a wrist, knee or ankle, and fades from full force at 0.55 m to zero
-at 0.75 m. When the resetting environments exceed 60% of the maximum mean height reward,
-their assistance drops by 10 N.
+The named task uses the source Unitree G1 rev 1.0 joints, inertia and collision bodies,
+including the soles and hands. MuJoCo represents the source mesh colliders using convex hulls.
+The converted model is `assets/g1_leggedlab.xml`. The conversion is in `tools/convert_leggedlab_g1.py`.
+The standing reward activates above 0.65 m and targets 0.75 m. During training a persistent
+upward force acts on the torso. It starts at 200 N, and when the resetting environments
+exceed 60% of the maximum mean height reward their assistance drops by 10 N.
 
 The actor takes five noisy observations (570 values). The critic takes five clean observations
 including body-frame linear velocity and root height (590 values). The LSGAN discriminator sees ten
 85-value frames, with six pelvis-relative landmarks. Task and style rewards have equal weight and
-the style scale is 50. The target framework uses its bundled G1 MJCF, a single sliding-friction
-coefficient per contact material, MJCF joint order, and the InstantAMP ODE actor trained through
-world-model rollouts and real PPO updates. Checkpoints use the InstantAMP format. The default
+the style scale is 50. The policy emits a joint offset at each control step
+(`--ode 0`). InstantAMP's native learner updates the policy using world-model rollouts
+and real PPO data. Checkpoints use the InstantAMP format. The default
 run uses 4,096 environments and a 500,000-iteration limit. Use `--max_iterations` to bound a run.
 
 Evaluation sets assistance to zero and scores 15 fixed fallen starts. Success requires a pelvis
 height in (0.65, 0.85] m and a tilt below 30 degrees throughout the final second, with the feet
 supporting at least half of body weight on at least 45 of its 50 steps.
+
+To compare the movement with AMP, use `--starts source-play`. This uses
+the ten frame-zero starts from the source PLAY config, nominal physics and clean
+sensor observations. For the same starts with randomized torso mass, materials
+and noisy actor observations, use `--starts source-play-world --world-seed 42`.
+Both evaluations set the torso assistance to zero.
+The additional `fallen` protocol uses two offsets for clips below the fallen
+height cutoff. The comparison pairs the actual simulated poses with the
+source motion at the same time and reports height, tilt, joint and landmark
+errors throughout the motion. Both camera views share the same floor, axes
+and clock. The controller runs through the full ten seconds for the standing
+score, including the time after the reference ends.
+Pass `--show-hold` to the comparison video command to watch the policy continue through
+the full episode, with the final source frame held and labeled on the left.
+
+```bash
+run=runs/g1_getup_example
+.venv/bin/python -m instantamp.evaluate "$run" --last 1 --starts source-play --trajectories "$run/rollouts"
+# Use the checkpoint number printed during evaluation.
+.venv/bin/python -m tools.compare_recovery_rollouts "$run/rollouts/NNNN_avg_source_play_recovery.npz" \
+  --out "$run/style.json" --video "$run/reference-vs-policy.mp4"
+```
+
+The source PPO comparison can be run with `.venv/bin/python -m instantamp.train_g1_getup_amp`.
+It trains in the same MuJoCo Warp environment using real 24-step rollouts, an ELU actor
+with raw observations, a Gaussian action distribution, a privileged critic and an AMP
+discriminator. It starts from random weights and exports policies for the same evaluator.
+The following single-GPU command reproduces the training settings of the source-motion
+comparison and writes checkpoints at iterations 3,000 and 3,750. GPU contact dynamics
+can vary between runs with the same seed.
+
+```bash
+.venv/bin/python -m instantamp.train_g1_getup_amp --num_envs 512 --disc_batch 768 \
+  --iterations 3750 --save_every 250 --log_dir runs/getup_ppo_reproduction
+.venv/bin/python -m instantamp.evaluate runs/getup_ppo_reproduction \
+  --checkpoint 003000.npz --starts source-play --trajectories runs/getup_ppo_reproduction/rollouts
+```
+
+For a separate fine-tuning run, `--init_policy` imports an exported actor and preserves its
+observation preprocessing. With reference rewards enabled, the optional `--rise_anchor`
+penalizes changes to that actor's actions during source-matched, low-pelvis transitions.
+The actor still takes only robot observations at deployment.
+
+For a zero-assistance training run, set `--assist_newtons 0`. The optional
+`--reference_weight` adds a training reward for following the reset clip from
+its sampled frame and holding the final standing pose. Both trainers accept
+`--reference_hold_scale`. Its default of 1 keeps the full weight after playback.
+A value of 0.05 gives the held pose 5% of that weight after the last source frame.
+
+The optional standing fine-tune trains on physical states recorded during the rise. Its
+PPO reward uses pelvis height, orientation, foot support, root motion and horizontal
+displacement. The actor uses the same five observation frames as the get-up actor.
+Each bank entry is a simulated trajectory at `BANK/<trajectory>/rollout.npz` with
+`qpos` and `qvel` in the named G1 model's joint order.
+
+```bash
+.venv/bin/python -m instantamp.train_g1_stance --init-policy STANDING_ACTOR.npz \
+  --bank runs/g1_getup_ref_planning/source_starts --log-dir runs/stance_finetune \
+  --envs 256 --iterations 250 --save-every 25
+.venv/bin/python -m instantamp.evaluate runs/g1_getup_stand_release \
+  --last 1 --starts fallen --seconds 30 --trajectories runs/stand_validation
+```
+
+The packaged controller starts with the 3,000-iteration rise actor. It can then hand
+control to the balance and stationary actors according to ankle depth, torso orientation
+and angular speed. The standing actors can filter five sensor frames and reconstruct
+landmarks from measured joint angles. The evaluation records post-rise falls, foot loads
+and horizontal displacement over an uninterrupted rollout.
+
+Run the G1 ground-to-stand policy in an interactive MuJoCo desktop window from the
+repository root. The viewer loads `runs/g1_ground_sequence_release/ckpt/0000.npz`.
+The controller combines the PPO+AMP motor policy, a threefold action-rate penalty
+and trajectory feedback that uses MuJoCo root and contact measurements. For
+reference motions that use the hands, it checks palm load before extending the legs.
+The overlay shows the vertical load at each palm as a percentage of body weight.
+The release includes real-time reference comparisons, contact timing and post-rise
+displacement from the physical rollouts. [G1 release report](runs/g1_ground_sequence_release/README.md)
+
+```bash
+.venv/bin/python -m tools.play_getup
+```
+
+The window opens paused at the first source start. Space plays or pauses, R restarts that
+motion, N selects the next start and Enter applies a 0.20 m/s horizontal velocity impulse.
+To apply a force with the mouse, double-click the torso and hold Ctrl while dragging with
+the right mouse button. Left-drag orbits the camera and the mouse wheel zooms.
+The policy runs at 50 Hz with native CPU MuJoCo physics at 200 Hz. Use `--trial 0`
+through `--trial 9` to pick a starting motion.
+
+To watch the robot run, fall, stand and resume in one continuous simulation, run
+the command below. Set `--speed .55` for walking. The test pushes the torso at
+6 seconds by default. The recovery controller detects a fall from orientation
+and ground contact, including falls caused by dragging in the viewer. Once the body
+lands, it runs the PPO+AMP controller in separate MuJoCo states initialized from the
+measured pose and velocity. It compares short damping intervals and initial joint
+targets, then executes the selected entry with normal motor limits. The recorded
+results include failed rises before the first stand, palm contact before knee
+extension, and forward speed after the gait resumes.
+
+```bash
+.venv/bin/python -m tools.evaluate_g1_walk_recovery --speed 2.15 --direction 90 --viewer
+```
+
+#### Reproduce the G1 palm-supported recovery policy
+
+The packer combines the saved 29-motor PPO+AMP correction with feedback trajectories
+from native MuJoCo. Each bank contains measured poses and velocities, servo actions,
+local feedback gains and the frame at which standing control takes over. The manifest
+lists the motor checkpoint, ordered banks and matching teacher starts for each recipe.
+The packer checks the initial joint angles against the source clip and offset, then
+derives the reference palm windows from the G1 collision geometry at 0.02 s per frame.
+The live controller measures palm load and adds the trained motor correction on each
+tracking step. [Packing recipes](assets/g1_ground_sequence_recipes.json)
+
+The published G1 weights, fine-tuning inputs and training logs are included in this branch. The packing commands below use the archived development checkpoints, teacher starts and feedback banks at the paths listed in the manifest. With that development archive present, the comparison checks every checkpoint field, including its data type and motor weights.
+
+```bash
+recipe=hand_supported_stance
+.venv/bin/python -m tools.pack_g1_ground_policy "$recipe" \
+  --out "runs/rebuilt/$recipe" \
+  --compare "runs/g1_getup_inplace_candidate/$recipe/ckpt/0000.npz"
+```
+
+`hand_final4_dev` packages the trained motor correction and four physical feedback
+banks. `hand_supported_stance` derives mode 9 from that package and evaluates foot
+support during the predicted stance. `hand_supported_impulse` derives mode 10 from
+the frozen mode 9 checkpoint and enables a bounded motor response to an unexpected
+impulse in quiet stance. `hand_amp_balance` derives mode 11 from mode 10 and can
+hand control to the learned AMP balance actor when the predicted stance fails.
+`hand_grounded_balance` derives mode 12 from mode 11 and reacquires the loaded
+foot positions after an AMP balance step. `hand_grounded_recovery` derives mode 13
+from mode 12 and waits for one second of calm supported stance after a sudden push
+before looking for a sustained disturbance again.
+These exports preserve the learned motor weights. To use a
+different copy of the frozen source, supply it directly to the same exporter.
+
+```bash
+.venv/bin/python -m tools.export_g1_supported_stance \
+  runs/rebuilt/hand_supported_stance/ckpt/0000.npz --absorb-impulse \
+  --out runs/rebuilt/hand_supported_impulse \
+  --compare runs/g1_getup_inplace_candidate/hand_supported_impulse/ckpt/0000.npz
+```
+
+To repeat the ground-phase PPO fine-tune on top of `hand_sequence30`, the command
+below stretches the real demonstration by a factor of 1.35 and trains with measured
+palm loading, joint tracking and the threefold action-rate penalty. A training update
+collects 1,400 native control steps. The `hand_final4_dev` recipe uses update 5 of 12.
+
+```bash
+.venv/bin/python -m tools.train_g1_tracking_residual \
+  --base runs/g1_getup_inplace_candidate/hand_sequence30/ckpt/0000.npz \
+  --discriminator runs/g1_getup_polish/style/amp6_rate3/discriminator/000060.npz \
+  --out runs/retrained_ground_ppo --envs 4 --steps 350 --iterations 12 --seed 508791 \
+  --scale 0.06 --std 0.16 --lr 0.00015 --reference-motion-weight 3 \
+  --rise-duration-scale 1.35 --ground-support-weight 7
+.venv/bin/python -m tools.pack_g1_ground_policy hand_final4_dev \
+  --motor runs/retrained_ground_ppo/000005/ckpt/0000.npz --out runs/retrained_ground_policy
+```
+
+To measure that same player's motion without opening a window, run the ten source starts
+and fifteen low starts for thirty seconds each. The default checkpoint follows the
+interactive viewer. Pass `--checkpoint PATH` to compare a different policy.
+
+```bash
+.venv/bin/python -m tools.verify_getup_player record --out runs/native_getup_check
+.venv/bin/python -m tools.verify_getup_player score runs/native_getup_check/source-play.npz
+```
+
+The first command writes one replay archive and one per-trial `*-metrics.json` per
+protocol. The second recomputes metrics from an existing native-player recording.
+The reports include the checkpoint, physics and source-clip hashes. Pose and speed
+errors use matched timestamps through the reference rise. Foot travel sums both
+ankle paths in the moving pelvis frame. Knee reversals count extrema of either
+knee with at least 0.1 rad of prominence. The first quiet time starts a continuous
+one-second interval with torso tilt below 15°, pelvis horizontal speed below 0.08 m/s,
+ankle horizontal speeds below 0.05 m/s, arm joint RMS speed below 0.4 rad/s,
+pelvis height between 0.65 and 0.85 m, and bilateral floor support. Use
+`--push-at 15` for the viewer's impulse or `--jitter-seed 714` to reproduce the
+perturbed reset suite.
+
+```bash
+.venv/bin/python -m tools.compare_recovery_rollouts runs/native_getup_check/source-play.npz \
+  --trial 0 --show-hold --out runs/native_getup_check/comparison.json \
+  --video runs/native_getup_check/comparison.mp4
+```
+
+For the three-column reference, old policy and new policy comparison, append
+`--baseline-archive PATH_TO_OLD_SOURCE_PLAY_NPZ` from a run with the same starts,
+perturbations and duration.
+
+To compare checkpoints across six repeatable reset perturbations, use the benchmark
+command below. It keeps each trial's metrics and a per-seed summary under
+`runs/g1_getup_multiseed/selection`, and reuses completed runs with the same checkpoint
+hash. The two protocols share eight start poses. The combined count uses each
+clip/offset once per seed.
+
+```bash
+.venv/bin/python -m tools.benchmark_getup_checkpoints --suite selection \
+  --checkpoint live=runs/g1_getup_amp_rate3/ckpt/0000.npz
+```
+
+`--suite panel` covers the nominal starts and one development seed for a first
+comparison. `--suite long` records 90 seconds from each source start with the push at
+15 seconds, both nominally and with another perturbation. `--suite final` checks a
+nominated checkpoint against five separately reserved reset seeds. Use
+`--keep-recordings` on a fresh run to retain the full replay archives.
+For completed runs with matching source and reset-state hashes, pass
+`--suite final --compare CANDIDATE_LABEL BASELINE_LABEL` to count which individual
+starts both policies passed and which passed with only one of the two policies.
+
+To measure whether the robot stands **in place**, score the maximum horizontal
+displacement from the first upright frame, including the first and second seconds.
+The per-start report also gives loaded ankle displacement, reset-to-final drift,
+actual reference duration and the 10, 20 and 30 cm pass counts. It records an
+early failed attempt when the pelvis gains at least 10 cm, stays at or above
+0.50 m for 0.10 s, then drops at least 12 cm and stays at or below 0.45 m for
+0.10 s. A subsequent elevation or the first sustained upright posture confirms a
+retry. The first-attempt counts require a rise without a retry or a later fall.
+
+```bash
+.venv/bin/python -m tools.score_getup_in_place runs/native_getup_check/source-play.npz \
+  runs/native_getup_check/fallen.npz --out runs/native_getup_check/in-place.json
+.venv/bin/python -m tools.score_g1_ground_phase runs/native_getup_check/source-play.npz \
+  runs/native_getup_check/fallen.npz --out runs/native_getup_check/ground-phase.json
+.venv/bin/python -m tools.score_g1_weight_transfer runs/native_getup_check/source-play.npz \
+  runs/native_getup_check/fallen.npz --ground-phase runs/native_getup_check/ground-phase.json \
+  --out runs/native_getup_check/weight-transfer.json
+```
+
+To compare policies on the same three development perturbations, specify each
+checkpoint with its own label. The command uses 17 distinct starts per seed and
+stores each start's 30-second result under `runs/g1_getup_in_place/dev`. Pass
+`--keep-recordings` to retain the simulated motion and force samples as well.
+
+```bash
+.venv/bin/python -m tools.benchmark_getup_in_place --suite dev \
+  --checkpoint selected=runs/g1_getup_amp_selected/ckpt/0000.npz candidate=PATH_TO_CANDIDATE.npz
+```
+
+To continue a native learner in a new run directory, pass `--init_full` with
+its `ckpt/full/NNNN.npz` file and retain the matching actor export in `ckpt/`.
+Use the same network widths and a higher absolute `--max_iterations`.
+This restores the actor, dynamics model, critic, discriminator, optimizers and
+counters. The actor input normalizer stays fixed. The new stage collects fresh
+replay and starts its assistance curriculum at the specified `--assist_newtons`.
+To import a different actor while continuing the learner, supply both `--init_full`
+and `--init_policy`. The latter supplies the averaged policy and its input
+normalizer, and starts the actor optimizer from zero. A positive `--rise_anchor`
+uses this policy as a frozen action target on real PPO observations where the
+source pelvis is low and its motion is still playing. Each target is weighted
+by the squared post-step reference pose score. This requires `--reference_weight`
+and `--ppo_frac` above zero. Policy exports contain the trained actor.
+
+For a compatible InstantAMP actor warm start, pass `--init_policy`, select its
+action mode and, for ODE actors, match the ODE limits. Fine-tuning keeps the actor's
+input normalization fixed. The motion references supply the discriminator's expert
+examples. Playback uses only robot observations and the trained policy.
+
+The local source PPO run keeps the original get-up actor at
+`runs/g1_getup_leggedlab_ppo/ckpt/003000.npz`. A separate native InstantAMP
+run starts from an actor distilled on physical rollouts of the ten source motions
+and continues with the original task and AMP rewards at zero assistance. Its
+6,750-iteration export is `runs/g1_getup_native_motion_prior/ckpt/0001.npz`.
+The earlier physical demonstrations trained the starting actor. The exported actor
+uses only the five-frame robot observation. The distillation recipe is in
+`runs/g1_getup_source_recipe/README.md` and the native learner settings are in
+`runs/g1_getup_native_motion_prior/config.json`.
+
+The two actors can be viewed on the [first ten-second episode](runs/g1_getup_native_motion_prior/evaluation/iter_006750/trial00_full_vs_ppo3000.mp4)
+or across [all ten source clips](runs/g1_getup_native_motion_prior/evaluation/iter_006750/all10_vs_ppo3000.mp4).
+On three repetitions of the ten nominal starts, the source PPO actor held the final
+stance in 3–5 episodes and the native actor in 7–8. The long subject 2 rise still
+varies considerably in its timing and final balance.
 
 ## Train the G1 baseline on recovery style
 
@@ -306,15 +623,92 @@ python tools/track_g1_reference.py export /path/to/ckpt_latest.pt g1_reference_a
 ## Zenbot 23-DoF get-up
 
 The `zenbot23_getup` task uses the 43.0678308 kg articulation from
-`motion_train/robolab/data/robots/roboparty/zenbot`. Recovery demonstrations and task settings come from the local
-`legged_lab` configuration `tasks/locomotion/amp/config/zenbot/zenbot_get_up_env_cfg.py` and its G1 get-up base class.
+`motion_train/robolab/data/robots/roboparty/zenbot`. The released policy uses [G1 get-up references retargeted to Zenbot](#prepare-the-g1-and-zenbot-get-up-releases). For a separate experiment using an existing native Zenbot `get_up_frax` database, the following commands prepare that database in its own directory and train with it.
 
 ```bash
-python tools/prepare_zenbot.py /path/to/motion_train --legged-lab /path/to/legged_lab --meshes
-python -m instantamp.train --robot zenbot23_getup --num_envs 4096
-python -m instantamp.evaluate runs/zenbot23_getup --last 1
-python tools/render.py runs/zenbot23_getup --out runs/zenbot23_getup/preview
+python tools/prepare_zenbot.py /path/to/motion_train --legged-lab /path/to/legged_lab --dest data/zenbot23_frax
+python -m instantamp.train --robot zenbot23_getup --num_envs 4096 \
+  --walk_dir data/zenbot23_frax/recovery --amp_dir data/zenbot23_frax/recovery \
+  --floor_dir data/zenbot23_frax/recovery --amp_getup_dir data/zenbot23_frax/recovery --log_dir runs/zenbot23_frax
+python -m instantamp.evaluate runs/zenbot23_frax --last 1
 ```
+
+For the released weights, the ten G1 LeggedLab recoveries supply the Zenbot demonstrations. The retargeter fits the physical
+Zenbot joint ranges, limb lengths, foot, knee and hand heights and self-contact constraints. It preserves the
+source timestamps and recomputes the six world-frame landmarks with Zenbot forward kinematics. The source
+hashes and per-clip checks are in `data/zenbot23_getup/recovery/retarget.json`.
+
+```bash
+python -m tools.retarget_g1_zenbot --source data/g1_getup/recovery --dest data/zenbot23_getup/recovery
+python -m tools.evaluate_zenbot_native --reference data/zenbot23_getup/recovery
+```
+
+Open the native Zenbot get-up policy in a MuJoCo window, or render the retargeted
+reference and the closed-loop policy side by side. The default get-up controller combines
+the 480-value actor history, a native PPO+AMP motor correction and trajectory
+feedback using the measured floating-base state. It forecasts physically feasible motor
+commands in copies of the MuJoCo state. The live simulation applies 23 torque-limited
+motors with five sampled motor-group delays of 3–7 physics steps. The release uses
+the G1 motions retargeted to Zenbot, real palm and sole contacts, and a threefold
+action-rate penalty. The viewer shows left and right palm load as a fraction of body
+weight. Its graphics use the 43 kg Zenbot
+meshes in `data/zenbot23_getup/meshes`. Space plays or pauses, R restarts,
+N advances to the next fallen start and Enter applies a horizontal impulse.
+Double-click a body, then hold Ctrl and right-drag to apply a force.
+The [Zenbot release report](runs/zenbot23_amp_ground_release/README.md) links the checkpoint, real-time videos,
+contact measurements, training lineage and independent 30-second tests.
+
+Record the same physical player for 30 seconds per start, score whether each get-up
+uses the palms before extending the knees, and render a fixed-camera comparison.
+Each random seed changes the joint and body angles, horizontal velocity and motor
+group delays. Seed 42 uses the 17 standard initial poses.
+
+```bash
+.venv/bin/python -m tools.evaluate_zenbot_getup --seeds 42 --trajectories --out runs/zenbot_check
+.venv/bin/python -m tools.summarize_zenbot_getup runs/zenbot_check --out runs/zenbot_check/summary.json
+.venv/bin/python -m tools.render_zenbot_ground_phase runs/zenbot_check/42_00.npz --out runs/zenbot_check/first_getup.mp4
+```
+
+Pass `--no-plan-cache` in the viewer or evaluator to recompute a motor plan
+from measured state. To regenerate a cache, record the same nominal poses with
+`--save-plans`, then package the generated controls. Cache lookup requires
+an exact match of all initial joint and root positions, velocities and motor delays.
+
+```bash
+.venv/bin/python -m tools.evaluate_zenbot_getup --checkpoint "$ZENBOT_CHECKPOINT" \
+  --seeds 42 --trajectories --save-plans runs/zenbot_plan_check/plans --out runs/zenbot_plan_check/physical
+.venv/bin/python -m tools.cache_zenbot_getup --checkpoint "$ZENBOT_CHECKPOINT" \
+  --plans runs/zenbot_plan_check/plans --out runs/zenbot_cached_policy
+```
+
+```bash
+.venv/bin/python -m tools.play_zenbot_getup --trial 0
+MUJOCO_GL=egl .venv/bin/python -m tools.play_zenbot_getup --trial 0 --video runs/zenbot_comparison.mp4
+```
+
+The later of the two native PPO+AMP runs started from the first trained residual and a broader motion bank.
+This command repeats its 300-update run in a separate directory. The release uses its update 50.
+
+```bash
+.venv/bin/python -m tools.train_zenbot_tracking --base runs/zenbot23_inplace/multiref2/ckpt/0000.npz \
+  --iterations 300 --envs 80 --horizon 36 --seed 41887 --scale .14 --out runs/zenbot_native_retrain
+```
+
+The training command below uses the ten retargeted clips for the reset distribution, motion reference,
+and the 10-frame, 73-feature AMP discriminator. The native CPU checkpoint evaluator runs the
+23 torque motors at 200 Hz with the five actuator-group delays, a 50 Hz policy and zero assistance.
+
+```bash
+python -m instantamp.train --robot zenbot23_getup --num_envs 512 --action_rate_l2_weight -.015 --log_dir runs/zenbot23_g1_getup_amp
+python -m tools.evaluate_zenbot_native --checkpoint runs/zenbot23_g1_getup_amp/ckpt/NNNN.npz --seconds 12
+```
+
+For a mixed recovery curriculum, `--zenbot_phase_resets .68 --zenbot_episode_steps 225` starts 68% of the worlds
+at intermediate reference frames and the rest at the beginning of a get-up. The motion reward follows the sampled
+frame and holds the final pose. A full learner checkpoint can continue in another log directory with `--init_full`
+and a lower `--assist_newtons`. Record the assistance used during training alongside the independent CPU results.
+Use `--starts standing` in the CPU evaluator for a separate balance test, or `--sensor-noise .25 --seed 79021`
+to vary the five motor delays and apply one quarter of the training observation noise.
 
 Preparation verifies the MJCF and clip checksums against the `get_up_frax` manifest, maps named joints into MuJoCo hinge order,
 and resamples the 11 selected 30 Hz recoveries to 50 Hz. Meshes are optional for training.

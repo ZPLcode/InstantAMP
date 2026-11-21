@@ -1,0 +1,2306 @@
+{
+  "runs/zenbot23_inplace/expanded_recovery/published_nominal": {
+    "cases": [
+      {
+        "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+        "offset": 0.0,
+        "trial": 0,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 70,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.36
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 70,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.4000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 88,
+          "hand_tick": 14,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.28
+        },
+        "minimum_hand_landmark_m": 0.04086433723568916,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+        "offset": 0.5,
+        "trial": 1,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 45,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 45,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 0.9
+        },
+        "actual_phase": {
+          "knee_tick": 51,
+          "hand_tick": 10,
+          "knee_to_stand_s": 1.3,
+          "hand_s": 0.5
+        },
+        "minimum_hand_landmark_m": 0.04086433723568916,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1400_1480.npz",
+        "offset": 0.0,
+        "trial": 2,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 47,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.9400000000000001
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 47,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.9400000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 73,
+          "hand_tick": 8,
+          "knee_to_stand_s": 1.54,
+          "hand_s": 1.3
+        },
+        "minimum_hand_landmark_m": 0.04316992685198784,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1400_1480.npz",
+        "offset": 0.5,
+        "trial": 3,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 22,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.44
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 22,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.44
+        },
+        "actual_phase": {
+          "knee_tick": 30,
+          "hand_tick": 8,
+          "knee_to_stand_s": 1.42,
+          "hand_s": 0.44
+        },
+        "minimum_hand_landmark_m": 0.04750347137451172,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+        "offset": 0.0,
+        "trial": 4,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 113,
+          "hand_tick": 33,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 113,
+          "hand_tick": 25,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 1.3
+        },
+        "actual_phase": {
+          "knee_tick": 186,
+          "hand_tick": 55,
+          "knee_to_stand_s": 0.24,
+          "hand_s": 1.9000000000000001
+        },
+        "minimum_hand_landmark_m": 0.04084013029932976,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+        "offset": 0.5,
+        "trial": 5,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 88,
+          "hand_tick": 8,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 88,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 1.3
+        },
+        "actual_phase": {
+          "knee_tick": 122,
+          "hand_tick": 21,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 1.78
+        },
+        "minimum_hand_landmark_m": 0.04084013029932976,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject5_2500_2600.npz",
+        "offset": 0.0,
+        "trial": 6,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 109,
+          "hand_tick": 61,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.48
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 109,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 1.9000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 181,
+          "hand_tick": 5,
+          "knee_to_stand_s": 1.58,
+          "hand_s": 3.16
+        },
+        "minimum_hand_landmark_m": 0.07708786427974701,
+        "minimum_palm_surface_m": 0.007417385942836502,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject5_2500_2600.npz",
+        "offset": 0.5,
+        "trial": 7,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 84,
+          "hand_tick": 36,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.48
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 84,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 1.4000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 161,
+          "hand_tick": 5,
+          "knee_to_stand_s": 0.52,
+          "hand_s": 2.1
+        },
+        "minimum_hand_landmark_m": 0.07708786427974701,
+        "minimum_palm_surface_m": 0.007417385942836502,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject2_850_1050.npz",
+        "offset": 0.0,
+        "trial": 8,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 240,
+          "hand_tick": 52,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 1.96
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 240,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 4.42
+        },
+        "actual_phase": {
+          "knee_tick": 296,
+          "hand_tick": 45,
+          "knee_to_stand_s": 0.8200000000000001,
+          "hand_s": 4.74
+        },
+        "minimum_hand_landmark_m": 0.07126497477293015,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject2_850_1050.npz",
+        "offset": 0.5,
+        "trial": 9,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 215,
+          "hand_tick": 27,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 1.96
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 215,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 3.92
+        },
+        "actual_phase": {
+          "knee_tick": 234,
+          "hand_tick": 1,
+          "knee_to_stand_s": 1.4000000000000001,
+          "hand_s": 3.7
+        },
+        "minimum_hand_landmark_m": 0.07126497477293015,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject3_900_1000.npz",
+        "offset": 0.0,
+        "trial": 10,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 108,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 108,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 2.0
+        },
+        "actual_phase": {
+          "knee_tick": 199,
+          "hand_tick": 8,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 3.4
+        },
+        "minimum_hand_landmark_m": 0.15617722272872925,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject3_900_1000.npz",
+        "offset": 0.5,
+        "trial": 11,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 83,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 83,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 1.5
+        },
+        "actual_phase": {
+          "knee_tick": 130,
+          "hand_tick": 3,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 2.06
+        },
+        "minimum_hand_landmark_m": 0.21256068348884583,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+        "offset": 0.0,
+        "trial": 12,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 27,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.58,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 27,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.58,
+          "hand_s": 0.54
+        },
+        "actual_phase": {
+          "knee_tick": 83,
+          "hand_tick": 3,
+          "knee_to_stand_s": 0.72,
+          "hand_s": 0.18
+        },
+        "minimum_hand_landmark_m": 0.22936655580997467,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+        "offset": 0.5,
+        "trial": 13,
+        "seed": 42,
+        "original_g1_needs_palm": false,
+        "retargeted_marker_phase": {
+          "knee_tick": 5,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.52,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 5,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.52,
+          "hand_s": 0.0
+        },
+        "actual_phase": {
+          "knee_tick": 2,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.34,
+          "hand_s": 0.0
+        },
+        "minimum_hand_landmark_m": 0.2644868493080139,
+        "minimum_palm_surface_m": 0.024040002307452922,
+        "real_palm_precedes_extension": false
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1630_1690.npz",
+        "offset": 0.0,
+        "trial": 14,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.64,
+          "hand_s": 0.42
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.64,
+          "hand_s": 0.5
+        },
+        "actual_phase": {
+          "knee_tick": 44,
+          "hand_tick": 1,
+          "knee_to_stand_s": 1.84,
+          "hand_s": 0.86
+        },
+        "minimum_hand_landmark_m": 0.040143512189388275,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1630_1690.npz",
+        "offset": 0.5,
+        "trial": 15,
+        "seed": 42,
+        "original_g1_needs_palm": null,
+        "retargeted_marker_phase": {
+          "knee_tick": 17,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 17,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 0.18
+        },
+        "actual_phase": {
+          "knee_tick": 18,
+          "hand_tick": 5,
+          "knee_to_stand_s": 1.1400000000000001,
+          "hand_s": 0.14
+        },
+        "minimum_hand_landmark_m": 0.10509016364812851,
+        "minimum_palm_surface_m": 0.004024931275066958,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_530_600.npz",
+        "offset": 0.0,
+        "trial": 16,
+        "seed": 42,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 25,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 0.48
+        },
+        "actual_phase": {
+          "knee_tick": 26,
+          "hand_tick": 8,
+          "knee_to_stand_s": 0.46,
+          "hand_s": 0.36
+        },
+        "minimum_hand_landmark_m": 0.13901862502098083,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      }
+    ],
+    "trials": 17,
+    "original_g1_requires_palm": 15,
+    "actual_before_knee_on_g1_required": 15,
+    "retargeted_surface_requires_palm": 16,
+    "actual_before_knee_on_retargeted_surface": 16
+  },
+  "runs/zenbot23_inplace/expanded_recovery/new_independent": {
+    "cases": [
+      {
+        "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+        "offset": 0.0,
+        "trial": 0,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 70,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.36
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 70,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.4000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 88,
+          "hand_tick": 14,
+          "knee_to_stand_s": 1.0,
+          "hand_s": 1.3800000000000001
+        },
+        "minimum_hand_landmark_m": 0.04086433723568916,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+        "offset": 0.5,
+        "trial": 1,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 45,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 45,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 0.9
+        },
+        "actual_phase": {
+          "knee_tick": 66,
+          "hand_tick": 10,
+          "knee_to_stand_s": 1.68,
+          "hand_s": 1.04
+        },
+        "minimum_hand_landmark_m": 0.04086433723568916,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1400_1480.npz",
+        "offset": 0.0,
+        "trial": 2,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 47,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.9400000000000001
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 47,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.9400000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 73,
+          "hand_tick": 9,
+          "knee_to_stand_s": 1.54,
+          "hand_s": 1.28
+        },
+        "minimum_hand_landmark_m": 0.04316992685198784,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1400_1480.npz",
+        "offset": 0.5,
+        "trial": 3,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 22,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.44
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 22,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.44
+        },
+        "actual_phase": {
+          "knee_tick": 25,
+          "hand_tick": 9,
+          "knee_to_stand_s": 0.88,
+          "hand_s": 0.32
+        },
+        "minimum_hand_landmark_m": 0.04750347137451172,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+        "offset": 0.0,
+        "trial": 4,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 113,
+          "hand_tick": 33,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 113,
+          "hand_tick": 25,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 1.3
+        },
+        "actual_phase": {
+          "knee_tick": 184,
+          "hand_tick": 56,
+          "knee_to_stand_s": 0.28,
+          "hand_s": 1.86
+        },
+        "minimum_hand_landmark_m": 0.04084013029932976,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+        "offset": 0.5,
+        "trial": 5,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 88,
+          "hand_tick": 8,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 88,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 1.3
+        },
+        "actual_phase": {
+          "knee_tick": 121,
+          "hand_tick": 21,
+          "knee_to_stand_s": 0.84,
+          "hand_s": 1.78
+        },
+        "minimum_hand_landmark_m": 0.04084013029932976,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject5_2500_2600.npz",
+        "offset": 0.0,
+        "trial": 6,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 109,
+          "hand_tick": 61,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.48
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 109,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 1.9000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 181,
+          "hand_tick": 7,
+          "knee_to_stand_s": 1.58,
+          "hand_s": 3.1
+        },
+        "minimum_hand_landmark_m": 0.07708786427974701,
+        "minimum_palm_surface_m": 0.007417385942836502,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject5_2500_2600.npz",
+        "offset": 0.5,
+        "trial": 7,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 84,
+          "hand_tick": 36,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.48
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 84,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 1.4000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 161,
+          "hand_tick": 5,
+          "knee_to_stand_s": 0.44,
+          "hand_s": 2.12
+        },
+        "minimum_hand_landmark_m": 0.07708786427974701,
+        "minimum_palm_surface_m": 0.007417385942836502,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject2_850_1050.npz",
+        "offset": 0.0,
+        "trial": 8,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 240,
+          "hand_tick": 52,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 1.96
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 240,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 4.42
+        },
+        "actual_phase": {
+          "knee_tick": 296,
+          "hand_tick": 46,
+          "knee_to_stand_s": 0.48,
+          "hand_s": 4.7
+        },
+        "minimum_hand_landmark_m": 0.07126497477293015,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject2_850_1050.npz",
+        "offset": 0.5,
+        "trial": 9,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 215,
+          "hand_tick": 27,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 1.96
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 215,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 3.92
+        },
+        "actual_phase": {
+          "knee_tick": 234,
+          "hand_tick": 52,
+          "knee_to_stand_s": 1.42,
+          "hand_s": 3.46
+        },
+        "minimum_hand_landmark_m": 0.07126497477293015,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject3_900_1000.npz",
+        "offset": 0.0,
+        "trial": 10,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 108,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 108,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 2.0
+        },
+        "actual_phase": {
+          "knee_tick": 199,
+          "hand_tick": 9,
+          "knee_to_stand_s": 0.98,
+          "hand_s": 3.38
+        },
+        "minimum_hand_landmark_m": 0.15617722272872925,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject3_900_1000.npz",
+        "offset": 0.5,
+        "trial": 11,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 83,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 83,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 1.5
+        },
+        "actual_phase": {
+          "knee_tick": 130,
+          "hand_tick": 3,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 2.06
+        },
+        "minimum_hand_landmark_m": 0.21256068348884583,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+        "offset": 0.0,
+        "trial": 12,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 27,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.58,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 27,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.58,
+          "hand_s": 0.54
+        },
+        "actual_phase": {
+          "knee_tick": 82,
+          "hand_tick": 4,
+          "knee_to_stand_s": 0.64,
+          "hand_s": 0.16
+        },
+        "minimum_hand_landmark_m": 0.22936655580997467,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+        "offset": 0.5,
+        "trial": 13,
+        "seed": 381529,
+        "original_g1_needs_palm": false,
+        "retargeted_marker_phase": {
+          "knee_tick": 5,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.52,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 5,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.52,
+          "hand_s": 0.0
+        },
+        "actual_phase": {
+          "knee_tick": 9,
+          "hand_tick": null,
+          "knee_to_stand_s": 1.24,
+          "hand_s": 0.0
+        },
+        "minimum_hand_landmark_m": 0.2644868493080139,
+        "minimum_palm_surface_m": 0.024040002307452922,
+        "real_palm_precedes_extension": false
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1630_1690.npz",
+        "offset": 0.0,
+        "trial": 14,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.64,
+          "hand_s": 0.42
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.64,
+          "hand_s": 0.5
+        },
+        "actual_phase": {
+          "knee_tick": 45,
+          "hand_tick": 1,
+          "knee_to_stand_s": 1.86,
+          "hand_s": 0.88
+        },
+        "minimum_hand_landmark_m": 0.040143512189388275,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1630_1690.npz",
+        "offset": 0.5,
+        "trial": 15,
+        "seed": 381529,
+        "original_g1_needs_palm": null,
+        "retargeted_marker_phase": {
+          "knee_tick": 17,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 17,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 0.18
+        },
+        "actual_phase": {
+          "knee_tick": 19,
+          "hand_tick": 4,
+          "knee_to_stand_s": 0.84,
+          "hand_s": 0.16
+        },
+        "minimum_hand_landmark_m": 0.10509016364812851,
+        "minimum_palm_surface_m": 0.004024931275066958,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_530_600.npz",
+        "offset": 0.0,
+        "trial": 16,
+        "seed": 381529,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 25,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 0.48
+        },
+        "actual_phase": {
+          "knee_tick": 22,
+          "hand_tick": 13,
+          "knee_to_stand_s": 0.44,
+          "hand_s": 0.18
+        },
+        "minimum_hand_landmark_m": 0.13901862502098083,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+        "offset": 0.0,
+        "trial": 0,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 70,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.36
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 70,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.4000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 88,
+          "hand_tick": 14,
+          "knee_to_stand_s": 0.96,
+          "hand_s": 1.34
+        },
+        "minimum_hand_landmark_m": 0.04086433723568916,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+        "offset": 0.5,
+        "trial": 1,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 45,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 45,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 0.9
+        },
+        "actual_phase": {
+          "knee_tick": 66,
+          "hand_tick": 11,
+          "knee_to_stand_s": 1.7,
+          "hand_s": 1.02
+        },
+        "minimum_hand_landmark_m": 0.04086433723568916,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1400_1480.npz",
+        "offset": 0.0,
+        "trial": 2,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 47,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.9400000000000001
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 47,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.9400000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 73,
+          "hand_tick": 8,
+          "knee_to_stand_s": 1.54,
+          "hand_s": 1.3
+        },
+        "minimum_hand_landmark_m": 0.04316992685198784,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1400_1480.npz",
+        "offset": 0.5,
+        "trial": 3,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 22,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.44
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 22,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.44
+        },
+        "actual_phase": {
+          "knee_tick": 30,
+          "hand_tick": 9,
+          "knee_to_stand_s": 1.44,
+          "hand_s": 0.42
+        },
+        "minimum_hand_landmark_m": 0.04750347137451172,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+        "offset": 0.0,
+        "trial": 4,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 113,
+          "hand_tick": 33,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 113,
+          "hand_tick": 25,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 1.3
+        },
+        "actual_phase": {
+          "knee_tick": 187,
+          "hand_tick": 53,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 1.8800000000000001
+        },
+        "minimum_hand_landmark_m": 0.04084013029932976,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+        "offset": 0.5,
+        "trial": 5,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 88,
+          "hand_tick": 8,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 88,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 1.3
+        },
+        "actual_phase": {
+          "knee_tick": 122,
+          "hand_tick": 31,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 1.62
+        },
+        "minimum_hand_landmark_m": 0.04084013029932976,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject5_2500_2600.npz",
+        "offset": 0.0,
+        "trial": 6,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 109,
+          "hand_tick": 61,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.48
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 109,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 1.9000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 181,
+          "hand_tick": 6,
+          "knee_to_stand_s": 1.68,
+          "hand_s": 3.06
+        },
+        "minimum_hand_landmark_m": 0.07708786427974701,
+        "minimum_palm_surface_m": 0.007417385942836502,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject5_2500_2600.npz",
+        "offset": 0.5,
+        "trial": 7,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 84,
+          "hand_tick": 36,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.48
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 84,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 1.4000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 161,
+          "hand_tick": 6,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 2.2800000000000002
+        },
+        "minimum_hand_landmark_m": 0.07708786427974701,
+        "minimum_palm_surface_m": 0.007417385942836502,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject2_850_1050.npz",
+        "offset": 0.0,
+        "trial": 8,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 240,
+          "hand_tick": 52,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 1.96
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 240,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 4.42
+        },
+        "actual_phase": {
+          "knee_tick": 305,
+          "hand_tick": 29,
+          "knee_to_stand_s": 1.22,
+          "hand_s": 5.16
+        },
+        "minimum_hand_landmark_m": 0.07126497477293015,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject2_850_1050.npz",
+        "offset": 0.5,
+        "trial": 9,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 215,
+          "hand_tick": 27,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 1.96
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 215,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 3.92
+        },
+        "actual_phase": {
+          "knee_tick": 204,
+          "hand_tick": 38,
+          "knee_to_stand_s": 1.02,
+          "hand_s": 2.82
+        },
+        "minimum_hand_landmark_m": 0.07126497477293015,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject3_900_1000.npz",
+        "offset": 0.0,
+        "trial": 10,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 108,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 108,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 2.0
+        },
+        "actual_phase": {
+          "knee_tick": 199,
+          "hand_tick": 10,
+          "knee_to_stand_s": 1.0,
+          "hand_s": 3.36
+        },
+        "minimum_hand_landmark_m": 0.15617722272872925,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject3_900_1000.npz",
+        "offset": 0.5,
+        "trial": 11,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 83,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 83,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 1.5
+        },
+        "actual_phase": {
+          "knee_tick": 130,
+          "hand_tick": 3,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 2.06
+        },
+        "minimum_hand_landmark_m": 0.21256068348884583,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+        "offset": 0.0,
+        "trial": 12,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 27,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.58,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 27,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.58,
+          "hand_s": 0.54
+        },
+        "actual_phase": {
+          "knee_tick": 81,
+          "hand_tick": 3,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.34
+        },
+        "minimum_hand_landmark_m": 0.22936655580997467,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+        "offset": 0.5,
+        "trial": 13,
+        "seed": 403061,
+        "original_g1_needs_palm": false,
+        "retargeted_marker_phase": {
+          "knee_tick": 5,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.52,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 5,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.52,
+          "hand_s": 0.0
+        },
+        "actual_phase": {
+          "knee_tick": 2,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.38,
+          "hand_s": 0.0
+        },
+        "minimum_hand_landmark_m": 0.2644868493080139,
+        "minimum_palm_surface_m": 0.024040002307452922,
+        "real_palm_precedes_extension": false
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1630_1690.npz",
+        "offset": 0.0,
+        "trial": 14,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.64,
+          "hand_s": 0.42
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.64,
+          "hand_s": 0.5
+        },
+        "actual_phase": {
+          "knee_tick": 44,
+          "hand_tick": 8,
+          "knee_to_stand_s": 2.1,
+          "hand_s": 0.72
+        },
+        "minimum_hand_landmark_m": 0.040143512189388275,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1630_1690.npz",
+        "offset": 0.5,
+        "trial": 15,
+        "seed": 403061,
+        "original_g1_needs_palm": null,
+        "retargeted_marker_phase": {
+          "knee_tick": 17,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 17,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 0.18
+        },
+        "actual_phase": {
+          "knee_tick": 19,
+          "hand_tick": 5,
+          "knee_to_stand_s": 1.12,
+          "hand_s": 0.16
+        },
+        "minimum_hand_landmark_m": 0.10509016364812851,
+        "minimum_palm_surface_m": 0.004024931275066958,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_530_600.npz",
+        "offset": 0.0,
+        "trial": 16,
+        "seed": 403061,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 25,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 0.48
+        },
+        "actual_phase": {
+          "knee_tick": 26,
+          "hand_tick": 7,
+          "knee_to_stand_s": 0.46,
+          "hand_s": 0.36
+        },
+        "minimum_hand_landmark_m": 0.13901862502098083,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+        "offset": 0.0,
+        "trial": 0,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 70,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.36
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 70,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.4000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 88,
+          "hand_tick": 15,
+          "knee_to_stand_s": 0.96,
+          "hand_s": 1.24
+        },
+        "minimum_hand_landmark_m": 0.04086433723568916,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+        "offset": 0.5,
+        "trial": 1,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 45,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 45,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 0.9
+        },
+        "actual_phase": {
+          "knee_tick": 66,
+          "hand_tick": 11,
+          "knee_to_stand_s": 1.68,
+          "hand_s": 0.98
+        },
+        "minimum_hand_landmark_m": 0.04086433723568916,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1400_1480.npz",
+        "offset": 0.0,
+        "trial": 2,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 47,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.9400000000000001
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 47,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.9400000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 74,
+          "hand_tick": 8,
+          "knee_to_stand_s": 1.52,
+          "hand_s": 1.32
+        },
+        "minimum_hand_landmark_m": 0.04316992685198784,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1400_1480.npz",
+        "offset": 0.5,
+        "trial": 3,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 22,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.44
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 22,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.44
+        },
+        "actual_phase": {
+          "knee_tick": 26,
+          "hand_tick": 9,
+          "knee_to_stand_s": 0.9,
+          "hand_s": 0.34
+        },
+        "minimum_hand_landmark_m": 0.04750347137451172,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+        "offset": 0.0,
+        "trial": 4,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 113,
+          "hand_tick": 33,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 113,
+          "hand_tick": 25,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 1.3
+        },
+        "actual_phase": {
+          "knee_tick": 185,
+          "hand_tick": 53,
+          "knee_to_stand_s": 0.26,
+          "hand_s": 1.92
+        },
+        "minimum_hand_landmark_m": 0.04084013029932976,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+        "offset": 0.5,
+        "trial": 5,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 88,
+          "hand_tick": 8,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 88,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 1.3
+        },
+        "actual_phase": {
+          "knee_tick": 77,
+          "hand_tick": 30,
+          "knee_to_stand_s": 1.18,
+          "hand_s": 0.9
+        },
+        "minimum_hand_landmark_m": 0.04084013029932976,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject5_2500_2600.npz",
+        "offset": 0.0,
+        "trial": 6,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 109,
+          "hand_tick": 61,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.48
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 109,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 1.9000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 181,
+          "hand_tick": 8,
+          "knee_to_stand_s": 1.48,
+          "hand_s": 3.0
+        },
+        "minimum_hand_landmark_m": 0.07708786427974701,
+        "minimum_palm_surface_m": 0.007417385942836502,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject5_2500_2600.npz",
+        "offset": 0.5,
+        "trial": 7,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 84,
+          "hand_tick": 36,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 0.48
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 84,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 1.4000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 161,
+          "hand_tick": 6,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 2.32
+        },
+        "minimum_hand_landmark_m": 0.07708786427974701,
+        "minimum_palm_surface_m": 0.007417385942836502,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject2_850_1050.npz",
+        "offset": 0.0,
+        "trial": 8,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 240,
+          "hand_tick": 52,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 1.96
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 240,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 4.42
+        },
+        "actual_phase": {
+          "knee_tick": 396,
+          "hand_tick": 4,
+          "knee_to_stand_s": 0.74,
+          "hand_s": 7.5600000000000005
+        },
+        "minimum_hand_landmark_m": 0.07126497477293015,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject2_850_1050.npz",
+        "offset": 0.5,
+        "trial": 9,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 215,
+          "hand_tick": 27,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 1.96
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 215,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 3.92
+        },
+        "actual_phase": {
+          "knee_tick": 234,
+          "hand_tick": 1,
+          "knee_to_stand_s": 1.42,
+          "hand_s": 3.66
+        },
+        "minimum_hand_landmark_m": 0.07126497477293015,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject3_900_1000.npz",
+        "offset": 0.0,
+        "trial": 10,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 108,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 108,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 2.0
+        },
+        "actual_phase": {
+          "knee_tick": 199,
+          "hand_tick": 8,
+          "knee_to_stand_s": 0.74,
+          "hand_s": 3.4
+        },
+        "minimum_hand_landmark_m": 0.15617722272872925,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject3_900_1000.npz",
+        "offset": 0.5,
+        "trial": 11,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 83,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 83,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.22,
+          "hand_s": 1.5
+        },
+        "actual_phase": {
+          "knee_tick": 97,
+          "hand_tick": 5,
+          "knee_to_stand_s": 0.24,
+          "hand_s": 1.42
+        },
+        "minimum_hand_landmark_m": 0.21256068348884583,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+        "offset": 0.0,
+        "trial": 12,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 27,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.58,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 27,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.58,
+          "hand_s": 0.54
+        },
+        "actual_phase": {
+          "knee_tick": 83,
+          "hand_tick": 3,
+          "knee_to_stand_s": 0.66,
+          "hand_s": 0.32
+        },
+        "minimum_hand_landmark_m": 0.22936655580997467,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+        "offset": 0.5,
+        "trial": 13,
+        "seed": 426209,
+        "original_g1_needs_palm": false,
+        "retargeted_marker_phase": {
+          "knee_tick": 5,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.52,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 5,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.52,
+          "hand_s": 0.0
+        },
+        "actual_phase": {
+          "knee_tick": 8,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.96,
+          "hand_s": 0.0
+        },
+        "minimum_hand_landmark_m": 0.2644868493080139,
+        "minimum_palm_surface_m": 0.024040002307452922,
+        "real_palm_precedes_extension": false
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1630_1690.npz",
+        "offset": 0.0,
+        "trial": 14,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.64,
+          "hand_s": 0.42
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.64,
+          "hand_s": 0.5
+        },
+        "actual_phase": {
+          "knee_tick": 28,
+          "hand_tick": 6,
+          "knee_to_stand_s": 0.8200000000000001,
+          "hand_s": 0.38
+        },
+        "minimum_hand_landmark_m": 0.040143512189388275,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1630_1690.npz",
+        "offset": 0.5,
+        "trial": 15,
+        "seed": 426209,
+        "original_g1_needs_palm": null,
+        "retargeted_marker_phase": {
+          "knee_tick": 17,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 17,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 0.18
+        },
+        "actual_phase": {
+          "knee_tick": 18,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.98,
+          "hand_s": 0.0
+        },
+        "minimum_hand_landmark_m": 0.10509016364812851,
+        "minimum_palm_surface_m": 0.004024931275066958,
+        "real_palm_precedes_extension": false
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_530_600.npz",
+        "offset": 0.0,
+        "trial": 16,
+        "seed": 426209,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 25,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 0.48
+        },
+        "actual_phase": {
+          "knee_tick": 25,
+          "hand_tick": 7,
+          "knee_to_stand_s": 0.48,
+          "hand_s": 0.36
+        },
+        "minimum_hand_landmark_m": 0.13901862502098083,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      }
+    ],
+    "trials": 51,
+    "original_g1_requires_palm": 45,
+    "actual_before_knee_on_g1_required": 45,
+    "retargeted_surface_requires_palm": 48,
+    "actual_before_knee_on_retargeted_surface": 47
+  },
+  "runs/zenbot23_inplace/expanded_recovery/new_push": {
+    "cases": [
+      {
+        "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+        "offset": 0.0,
+        "trial": 0,
+        "seed": 445279,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 70,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.36
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 70,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.4000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 88,
+          "hand_tick": 14,
+          "knee_to_stand_s": 0.96,
+          "hand_s": 1.26
+        },
+        "minimum_hand_landmark_m": 0.04086433723568916,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+        "offset": 0.0,
+        "trial": 4,
+        "seed": 445279,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 113,
+          "hand_tick": 33,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 113,
+          "hand_tick": 25,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 1.3
+        },
+        "actual_phase": {
+          "knee_tick": 186,
+          "hand_tick": 53,
+          "knee_to_stand_s": 0.26,
+          "hand_s": 2.06
+        },
+        "minimum_hand_landmark_m": 0.04084013029932976,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+        "offset": 0.5,
+        "trial": 5,
+        "seed": 445279,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 88,
+          "hand_tick": 8,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 88,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 1.3
+        },
+        "actual_phase": {
+          "knee_tick": 122,
+          "hand_tick": 32,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 1.6
+        },
+        "minimum_hand_landmark_m": 0.04084013029932976,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject2_850_1050.npz",
+        "offset": 0.0,
+        "trial": 8,
+        "seed": 445279,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 240,
+          "hand_tick": 52,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 1.96
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 240,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 4.42
+        },
+        "actual_phase": {
+          "knee_tick": 305,
+          "hand_tick": 41,
+          "knee_to_stand_s": 1.22,
+          "hand_s": 4.98
+        },
+        "minimum_hand_landmark_m": 0.07126497477293015,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+        "offset": 0.0,
+        "trial": 12,
+        "seed": 445279,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 27,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.58,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 27,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.58,
+          "hand_s": 0.54
+        },
+        "actual_phase": {
+          "knee_tick": 83,
+          "hand_tick": 3,
+          "knee_to_stand_s": 0.62,
+          "hand_s": 0.18
+        },
+        "minimum_hand_landmark_m": 0.22936655580997467,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_530_600.npz",
+        "offset": 0.0,
+        "trial": 16,
+        "seed": 445279,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 25,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 0.48
+        },
+        "actual_phase": {
+          "knee_tick": 21,
+          "hand_tick": 8,
+          "knee_to_stand_s": 0.48,
+          "hand_s": 0.26
+        },
+        "minimum_hand_landmark_m": 0.13901862502098083,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+        "offset": 0.0,
+        "trial": 0,
+        "seed": 462727,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 70,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.36
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 70,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.92,
+          "hand_s": 1.4000000000000001
+        },
+        "actual_phase": {
+          "knee_tick": 88,
+          "hand_tick": 14,
+          "knee_to_stand_s": 0.9400000000000001,
+          "hand_s": 1.36
+        },
+        "minimum_hand_landmark_m": 0.04086433723568916,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+        "offset": 0.0,
+        "trial": 4,
+        "seed": 462727,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 113,
+          "hand_tick": 33,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 113,
+          "hand_tick": 25,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 1.3
+        },
+        "actual_phase": {
+          "knee_tick": 187,
+          "hand_tick": 53,
+          "knee_to_stand_s": 0.24,
+          "hand_s": 2.08
+        },
+        "minimum_hand_landmark_m": 0.04084013029932976,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+        "offset": 0.5,
+        "trial": 5,
+        "seed": 462727,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 88,
+          "hand_tick": 8,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 0.86
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 88,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.42,
+          "hand_s": 1.3
+        },
+        "actual_phase": {
+          "knee_tick": 122,
+          "hand_tick": 20,
+          "knee_to_stand_s": 0.8,
+          "hand_s": 1.74
+        },
+        "minimum_hand_landmark_m": 0.04084013029932976,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp2_subject2_850_1050.npz",
+        "offset": 0.0,
+        "trial": 8,
+        "seed": 462727,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 240,
+          "hand_tick": 52,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 1.96
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 240,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 4.42
+        },
+        "actual_phase": {
+          "knee_tick": 295,
+          "hand_tick": 45,
+          "knee_to_stand_s": 0.52,
+          "hand_s": 4.64
+        },
+        "minimum_hand_landmark_m": 0.07126497477293015,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+        "offset": 0.0,
+        "trial": 12,
+        "seed": 462727,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 27,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.58,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 27,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.58,
+          "hand_s": 0.54
+        },
+        "actual_phase": {
+          "knee_tick": 83,
+          "hand_tick": 3,
+          "knee_to_stand_s": 0.36,
+          "hand_s": 0.18
+        },
+        "minimum_hand_landmark_m": 0.22936655580997467,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      },
+      {
+        "clip": "fallAndGetUp6_subject1_530_600.npz",
+        "offset": 0.0,
+        "trial": 16,
+        "seed": 462727,
+        "original_g1_needs_palm": true,
+        "retargeted_marker_phase": {
+          "knee_tick": 25,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 25,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.54,
+          "hand_s": 0.48
+        },
+        "actual_phase": {
+          "knee_tick": 21,
+          "hand_tick": 11,
+          "knee_to_stand_s": 0.48,
+          "hand_s": 0.2
+        },
+        "minimum_hand_landmark_m": 0.13901862502098083,
+        "minimum_palm_surface_m": 0.0,
+        "real_palm_precedes_extension": true
+      }
+    ],
+    "trials": 12,
+    "original_g1_requires_palm": 12,
+    "actual_before_knee_on_g1_required": 12,
+    "retargeted_surface_requires_palm": 12,
+    "actual_before_knee_on_retargeted_surface": 12
+  },
+  "runs/zenbot23_inplace/expanded_recovery/known_miss": {
+    "cases": [
+      {
+        "clip": "fallAndGetUp6_subject1_1630_1690.npz",
+        "offset": 0.5,
+        "trial": 15,
+        "seed": 298477,
+        "original_g1_needs_palm": null,
+        "retargeted_marker_phase": {
+          "knee_tick": 17,
+          "hand_tick": null,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 0.0
+        },
+        "retargeted_surface_phase": {
+          "knee_tick": 17,
+          "hand_tick": 0,
+          "knee_to_stand_s": 0.3,
+          "hand_s": 0.18
+        },
+        "actual_phase": {
+          "knee_tick": 19,
+          "hand_tick": 5,
+          "knee_to_stand_s": 1.54,
+          "hand_s": 0.14
+        },
+        "minimum_hand_landmark_m": 0.10509016364812851,
+        "minimum_palm_surface_m": 0.004024931275066958,
+        "real_palm_precedes_extension": true
+      }
+    ],
+    "trials": 1,
+    "original_g1_requires_palm": 0,
+    "actual_before_knee_on_g1_required": 0,
+    "retargeted_surface_requires_palm": 1,
+    "actual_before_knee_on_retargeted_surface": 1
+  }
+}

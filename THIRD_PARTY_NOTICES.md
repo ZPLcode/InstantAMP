@@ -99,6 +99,12 @@ SOFTWARE.
 
 ## Unitree G1 description
 
+The named G1 get-up task uses the Unitree G1 rev 1.0 asset from
+[LeggedLab, commit f5f54fe](https://gitee.com/chaomingsanhua/legged_lab/tree/f5f54fe506d7c2e558e07163fd6624ae3d44bbed/source/legged_lab/legged_lab/data/Robots/Unitree/g1_29dof/usd/g1_29dof_rev_1_0).
+`tools/convert_leggedlab_g1.py` converts the USD joints, inertials, primitive collisions, and convex collision meshes to
+`assets/g1_leggedlab.xml`. The conversion retains up to 64 source vertices per hull for MuJoCo Warp.
+The Unitree G1 description is covered by the BSD notice below. The LeggedLab repository carries the Apache 2.0 license.
+
 The G1 model in `assets/g1_mjlab.xml` and the meshes that `tools/download_meshes.sh` downloads (from Holosoma's repository,
 https://github.com/amazon-far/holosoma, at a fixed commit; only rendering needs them, and they are not included here) derive from
 Unitree's G1 description, distributed under the BSD 3-Clause License:

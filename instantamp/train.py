@@ -37,7 +37,7 @@ import jax  # noqa: E402
 import jax.numpy as jnp
 import numpy as np
 
-from . import amp, critic, env, g1_getup, nets, optim
+from . import amp, critic, env, g1_getup, nets, optim, zenbot
 from . import buffer as rb
 from .sim import Sim, motion_dirs, unflatten
 
@@ -249,10 +249,24 @@ class RecoveryConfig(Config):
     warmup_steps: int = 40
     max_iterations: int = 100_000
     minutes: float = 0.
+    init_policy: str = ""  # load the exported actor and its normalization
+    init_full: str = ""  # restore the learner into a new run with a fresh replay buffer
+    assist_newtons: float = 0.
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not np.isfinite(self.assist_newtons) or self.assist_newtons < 0.:
+            raise ValueError("assist_newtons must be finite and nonnegative")
+        if self.init_full and Path(self.init_full).resolve().parent == (Path(self.log_dir) / "ckpt/full").resolve():
+            raise ValueError("Full-checkpoint continuation requires a new log directory")
 
 
 @dataclasses.dataclass
 class ZenbotGetUpConfig(RecoveryConfig):
+    assist_newtons: float = zenbot.INITIAL_ASSIST
+    zenbot_phase_resets: float = 0.  # probability of starting at an intermediate reference pose
+    zenbot_episode_steps: int = 500
+    action_rate_l2_weight: float = -0.005
     robot: str = "zenbot23_getup"
     reference_weight: float = 5.0  # per second while the selected native recovery clip is playing
 
@@ -260,11 +274,25 @@ class ZenbotGetUpConfig(RecoveryConfig):
 @dataclasses.dataclass
 class G1GetUpConfig(RecoveryConfig):
     task: str = g1_getup.TASK_ID
+    action_rate_l2_weight: float = g1_getup.ACTION_RATE_L2_WEIGHT
     robot: str = "g1_getup"
+    random_start: int = 1  # Source train.py staggers the first episode's timeout.
+    ode: int = 0  # LeggedLab's policy directly specifies an offset from the default joint pose each step.
+    amp_recent: int = 244  # source discriminator history buffer in policy steps
+    buffer_steps: int = 244
     max_iterations: int = 500_000
     ckpt_iterations: int = 50
+    assist_newtons: float = g1_getup.INITIAL_ASSIST
+    reference_weight: float = 0.  # optional training reward for the reset clip and its final standing pose
+    reference_hold_scale: float = 1.  # multiplier on that reward after the last source frame
+    rise_anchor: float = 0.  # preserve the specified starting actor on source-matched, low-pelvis PPO steps
 
     def __post_init__(self):
+        if not 0. <= self.reference_hold_scale <= 1.:
+            raise ValueError("reference_hold_scale must be between 0 and 1")
+        if not np.isfinite(self.rise_anchor) or self.rise_anchor < 0 or (self.rise_anchor and
+                (not self.init_policy or self.ppo_frac <= 0 or self.reference_weight <= 0)):
+            raise ValueError("A positive rise_anchor requires init_policy, an active reference reward and real PPO samples")
         self.amp_dir = self.amp_dir or self.floor_dir
         super().__post_init__()
 
@@ -277,10 +305,13 @@ class InstantAMP:
         self.recovery_clock = self.paired or self.legged
         set_jax(c.jax_cache)
         self.sim = Sim(c.num_envs, c.nconmax, c.njmax, c.walk_dir, c.floor_dir, bool(c.random_start), c.seed, c.reset_floor, c.prob_shove, bool(c.push),
-                       robot=c.robot, amp_wrists=bool(c.amp_wrists), reference_weight=getattr(c, "reference_weight", 0.),
+                       robot=c.robot, amp_wrists=bool(c.amp_wrists), assist_newtons=getattr(c, "assist_newtons", None), reference_weight=getattr(c, "reference_weight", 0.),
                        g1_style=bool(c.g1_style), getup_rise_weight=getattr(c, "getup_rise_weight", -0.25),
                        g1_support_friction=bool(getattr(c, "g1_support_friction", 0)), getup_reset_frames=getattr(c, "getup_reset_frames", 20),
-                       g1_phase_amp=self.recovery_clock)
+                       g1_phase_amp=self.recovery_clock, reference_hold_scale=getattr(c, "reference_hold_scale", 1.),
+                       action_rate_l2_weight=getattr(c, "action_rate_l2_weight", None),
+                       zenbot_phase_resets=getattr(c, "zenbot_phase_resets", 0.),
+                       zenbot_episode_steps=getattr(c, "zenbot_episode_steps", 500))
         self.J = self.JS = self.sim.J  # joints (actions, targets) and the world model's q, qd
         self.ode = bool(c.ode)
         self.ode_dmax = c.ode_dmax if c.ode_dmax > 0 else None
@@ -300,7 +331,12 @@ class InstantAMP:
                 if self.paired:
                     from .g1_phase_amp import G1PhaseDemos
                     self.phase_demos = G1PhaseDemos(self.sim, self.getup_demos, heading_features=bool(c.g1_phase_heading))
-            self.amp_envs = np.nonzero(~((np.arange(c.num_envs) * c.det_share) % 1.0 >= c.det_share))[0].astype(np.int32)
+            if self.sim.robot is g1_getup:
+                # The source discriminator sees windows from the entire behavior policy,
+                # including the noisy rollouts that contribute real PPO gradients.
+                self.amp_envs = np.arange(c.num_envs, dtype=np.int32)
+            else:
+                self.amp_envs = np.nonzero(~((np.arange(c.num_envs) * c.det_share) % 1.0 >= c.det_share))[0].astype(np.int32)
         self.use_critic = bool(c.critic)
         self.ppo = c.ppo_frac > 0
         self.B_im = int(round((1 - c.ppo_frac) * c.pi_batch)) if self.ppo else c.pi_batch  # imagined rollouts per update
@@ -353,6 +389,8 @@ class InstantAMP:
 
     # ------------------------------------------------------------------ actor
     def norm_obs(self, obs_norm, obs):
+        if "raw" in obs_norm:
+            return obs
         return jnp.clip(nets.rn_apply(obs_norm, obs), -self.cfg.obs_clip, self.cfg.obs_clip)
 
     def export(self, carry):
@@ -374,12 +412,20 @@ class InstantAMP:
                "r": tr.reward}  # fmt: skip
         if self.sim.reference is not None:
             rec["reference_clip"] = s.reference_clip
-            if self.sim.g1_reference:
-                rec.update(reference_start=s.reference_start, reference_yaw=s.reference_yaw)
+            if s.reference_start is not None:
+                rec["reference_start"] = s.reference_start
+            if s.reference_yaw is not None:
+                rec["reference_yaw"] = s.reference_yaw
+            if s.episode_limit is not None:
+                rec["episode_limit"] = s.episode_limit
         if self.cfg.g1_style:
             rec["down_start"] = s.down
         if self.sim.robot is g1_getup:
             rec["obs_critic"] = s.critic_obs
+            if getattr(self.cfg, "rise_anchor", 0.):
+                frame = s.reference_start + s.t + 1
+                pose_score = tr.parts[:, self.sim.terms.index("motion_reference")] / (env.DT * self.cfg.reference_weight)
+                rec["rise_anchor_weight"] = g1_getup.rise_anchor_weight(self.sim.reference, s.reference_clip, frame, pose_score)
         if self.ppo and self.sim.recovery:
             rec.update(a=a, mu=mu)
         elif self.ppo:  # the action taken, the mean it was drawn around, and the unweighted tracking term (the locomotion style's gate)
@@ -395,7 +441,9 @@ class InstantAMP:
         upd = lambda st, x: nets.rn_update(st, x, weights=ok)  # noqa: E731
         wm_b = {"in_norm": upd(wb["in_norm"], nets.wm_inputs(S0, v0.height, v0.soles, rec["target"], rec["xi"])),
                 "out_norm": upd(wb["out_norm"], nets.wm_targets(S0, S1, env.DT)), "inc_norm": upd(wb["inc_norm"], nets.increments(S0, S1))}  # fmt: skip
-        return {**carry, "buf": rb.add(carry["buf"], flat), "wm_b": wm_b, "obs_norm": upd(carry["obs_norm"], rec["obs"]),
+        freeze_norm = getattr(self.cfg, "init_policy", "") or getattr(self.cfg, "init_full", "")
+        obs_norm = carry["obs_norm"] if freeze_norm else upd(carry["obs_norm"], rec["obs"])
+        return {**carry, "buf": rb.add(carry["buf"], flat), "wm_b": wm_b, "obs_norm": obs_norm,
                 "env_steps": carry["env_steps"] + self.cfg.num_envs}  # fmt: skip
 
     def collect_step(self, carry, key):
@@ -579,7 +627,7 @@ class InstantAMP:
             if self.recovery_clock:
                 d = jnp.maximum(d, sim.recovery_timeout(start["reference_clip"], start["reference_start"], t1))
             if sim.recovery:
-                d = (t1 >= sim.episode_steps).astype(jnp.float32)
+                d = (t1 >= start.get("episode_limit", sim.episode_steps)).astype(jnp.float32)
             recovering = ~up1
             terms = sim.reward_terms(S, S1, v1.kin, a, a_last, c_obs, recovering, d, sim.soft_contact(v1.soles), zeros, sim.q_soft,
                                      torque=sim.estimated_torque(S, target) if sim.recovery else None,
@@ -663,7 +711,7 @@ class InstantAMP:
     # ------------------------------------------------------------------ hybrid PPO
     def style(self, st, windows):
         if self.sim.recovery:
-            return amp.recovery_style(st, windows, self.cfg.amp_style_scale)
+            return amp.recovery_style(st, windows, self.cfg.amp_style_scale, leggedlab=self.sim.robot is g1_getup)
         return amp.style(st, amp.score(st["net"], st["norm"], windows), self.cfg.amp_style_scale)
 
     def ppo_batch(self, carry):
@@ -741,9 +789,12 @@ class InstantAMP:
         std = jnp.sqrt(((adv - mean) ** 2 * mask).sum() / jnp.maximum(mask.sum(), 1.0)) + 1e-6
         out = {"obs": w["obs"][tr], "a_ode": w["a_ode"][tr], "a": w["a"][tr], "mu": w["mu"][tr], "adv": (adv - mean) / std, "mask": mask}
         out = jax.lax.stop_gradient({k: flat(v) for k, v in out.items()})
-        if "anchor" in carry:
-            teacher = carry["anchor"]
+        if "anchor" in carry or "rise_teacher" in carry:
+            teacher = carry["anchor"] if "anchor" in carry else carry["rise_teacher"]
             out["anchor_mu"] = self.act(teacher["pi"], teacher["obs_norm"], out["obs"], out["a_ode"])
+        if "rise_teacher" in carry:
+            out["rise_anchor_weight"] = flat(w["rise_anchor_weight"][tr])
+        elif "anchor" in carry:
             out["down"] = flat(w["was_up"][tr]) == 0
             out["early"] = flat(w["t"][tr]) * env.DT < 2.
             if self.recovery_clock:
@@ -766,7 +817,11 @@ class InstantAMP:
         nm = jnp.maximum(m.sum(), 1.0)
         aux = {"ppo_clipfrac": ((jnp.abs(ratio - 1) > c.ppo_clip) * m).sum() / nm, "ppo_logr": (jnp.abs(logr) * m).sum() / nm}
         loss = -(surr * m).sum() / nm
-        if "anchor_mu" in b:
+        if "rise_anchor_weight" in b:
+            anchor_loss = g1_getup.rise_anchor_loss(mu, b["anchor_mu"], m * b["rise_anchor_weight"])
+            loss = loss + c.rise_anchor * anchor_loss
+            aux["rise_anchor_mse"] = anchor_loss
+        elif "anchor_mu" in b:
             # Balance rare recovery states against the long upright episodes. Permit more exploration during the opening.
             kl = jnp.sum(jnp.square(mu - b["anchor_mu"]), axis=-1) / (2 * c.action_noise**2)
             if "preserve_baseline" in b:
@@ -820,7 +875,7 @@ class InstantAMP:
 
     # ------------------------------------------------------------------ iteration programs
     SUMMED = ("done", "terminated", "len_sum", "rew_sums", "diverged", "down_done", "down_up", "pushes",
-              "reference_score_sum", "reference_frames")
+              "reference_score_sum", "reference_frames", "reference_moving_score_sum", "reference_moving_frames")
 
     def collect_iter(self, carry):
         key, k_c = jax.random.split(carry["key"])
@@ -843,7 +898,8 @@ class InstantAMP:
             ok = (w["mask"][:, -1] > 0) & up & moving
             if sim.recovery:
                 ok = w["mask"][:, -1] > 0
-            st, aux = amp.train_step(st, self.demos.sample(k_d, c.amp_batch), feats, ok.astype(jnp.float32), k_g, c.amp_lr, recovery=sim.recovery)
+            st, aux = amp.train_step(st, self.demos.sample(k_d, c.amp_batch), feats, ok.astype(jnp.float32), k_g, c.amp_lr,
+                                     recovery=sim.recovery, leggedlab=sim.robot is g1_getup)
             return st, {**aux, "usable": ok.mean()}
 
         def paired_update(states, key):
@@ -954,6 +1010,8 @@ class InstantAMP:
                      + (("ppo_clipfrac", "ppo_logr", "ppo_gn", "ppo_r", "ppo_cos_bp", "ppo_cos_half") if self.ppo else ()))  # fmt: skip
         if "anchor" in carry:
             stat_keys += ("anchor_kl",)
+        if "rise_teacher" in carry:
+            stat_keys += ("rise_anchor_mse",)
 
         if self.recovery_clock and self.ppo:
             stat_keys += ("real_getup_amp_per_active_step",)
@@ -989,9 +1047,16 @@ def save_full(path, carry):
 def load_full(carry, path):
     part = {k: carry[k] for k in FULL_KEYS if k in carry}
     leaves, tdef = jax.tree.flatten(part)
-    z = np.load(path)
-    assert len(z.files) == len(leaves), f"{path} holds {len(z.files)} arrays, this run's state has {len(leaves)}: different options?"
-    return {**carry, **jax.tree.unflatten(tdef, [jnp.asarray(z[f"{i:05d}"], dtype=x.dtype).reshape(x.shape) for i, x in enumerate(leaves)])}
+    with np.load(path, allow_pickle=False) as z:
+        if len(z.files) != len(leaves):
+            raise ValueError(f"{path} has {len(z.files)} arrays, expected {len(leaves)} for this learner")
+        values = []
+        for i, leaf in enumerate(leaves):
+            arr = z[f"{i:05d}"]
+            if arr.shape != leaf.shape:
+                raise ValueError(f"{path} array {i} has shape {arr.shape}, expected {leaf.shape}")
+            values.append(jnp.asarray(arr, dtype=leaf.dtype))
+    return {**carry, **jax.tree.unflatten(tdef, values)}
 
 
 def initialize_g1_style(carry, path):
@@ -1005,9 +1070,54 @@ def initialize_g1_style(carry, path):
     return {**carry, **source, "pi": jax.tree.map(jnp.copy, old["avg"])}
 
 
+def initialize_actor(carry, path, expected_ode):
+    """Load the averaged actor and its normalizer into a fresh training run."""
+    from .inference import load
+
+    pi, norm, ode = load(path)
+    if ode != expected_ode and (ode is None or expected_ode is None or not np.allclose(
+            [v or 0. for v in ode], [v or 0. for v in expected_ode])):
+        raise ValueError("The checkpoint and training ODE action limits differ")
+    template = carry["pi"]
+    if "raw" in norm:
+        # The LeggedLab PPO actor uses plain ELU layers and raw observations.
+        # Its affine dimensions must still match the named task's policy.
+        template = [{k: layer[k] for k in ("w", "b")} for layer in template]
+    expected = template, {k: carry["obs_norm"][k] for k in ("mean", "var")}
+    loaded = pi, {k: norm[k] for k in ("mean", "var")}
+    if jax.tree.structure(loaded) != jax.tree.structure(expected) or any(
+            a.shape != b.shape for a, b in zip(jax.tree.leaves(loaded), jax.tree.leaves(expected))):
+        raise ValueError("The checkpoint does not match this task's policy or observations")
+    if "opt_pi" in carry:
+        carry = {**carry, "opt_pi": optim.init(pi, jax.tree.map(lambda _: False, pi))}
+    obs_norm = {k: v for k, v in carry["obs_norm"].items() if k == "count"}
+    return {**carry, "pi": pi, "avg": jax.tree.map(jnp.copy, pi), "obs_norm": {**obs_norm, **norm}}
+
+
+def initialize_native_learner(fresh, full_path, actor_path, expected_ode, rise_anchor=0.):
+    """Restore the learner, then optionally replace its actor and reset the actor optimizer."""
+    carry = fresh
+    if full_path:
+        companion = Path(full_path).parent.parent / Path(full_path).name
+        source_template = initialize_actor(fresh, companion, expected_ode)
+        carry = load_full(source_template, full_path)
+    if actor_path:
+        # The fresh template includes the native LayerNorm parameters even when
+        # the restored companion used plain layers and raw observations.
+        actor_keys = ("pi", "obs_norm", "opt_pi")
+        selected = initialize_actor({k: fresh[k] for k in actor_keys}, actor_path, expected_ode)
+        carry = {**carry, **selected}
+    if rise_anchor:
+        # Reconstructed from --init_policy for this training stage, excluded from exports.
+        carry = {**carry, "rise_teacher": jax.tree.map(jnp.copy, {"pi": carry["pi"], "obs_norm": carry["obs_norm"]})}
+    return carry
+
+
 def save_policy(path, carry, meta, ode=None):
     """The averaged and live policy and the observation normalizer (<path>.npz), and the metadata (<path>.json)."""
     flat = {"obs_norm/mean": np.asarray(carry["obs_norm"]["mean"]), "obs_norm/var": np.asarray(carry["obs_norm"]["var"])}
+    if "raw" in carry["obs_norm"]:
+        flat["obs_norm/raw"] = np.bool_(True)
     if ode is not None:
         flat["ode/dmax"] = np.float32(0.0 if ode[0] is None else ode[0])
         flat["ode/amax"] = np.float32(0.0 if ode[1] is None else ode[1])
@@ -1055,6 +1165,15 @@ def main(argv=None):
     carry = xs.init(jax.random.PRNGKey(cfg.seed))
     if cfg.init_g1_full:
         carry = initialize_g1_style(carry, cfg.init_g1_full)
+    actor_path = getattr(cfg, "init_policy", "")
+    full_path = getattr(cfg, "init_full", "")
+    if full_path or actor_path:
+        carry = initialize_native_learner(carry, full_path, actor_path, (xs.ode_dmax, xs.ode_amax) if xs.ode else None,
+                                          getattr(cfg, "rise_anchor", 0.))
+        xs.pi_mask = jax.tree.map(lambda _: False, carry["pi"])
+    if full_path:
+        if cfg.max_iterations and int(carry["it"]) >= cfg.max_iterations:
+            raise ValueError("max_iterations must exceed the checkpoint's absolute iteration")
     print(f"[instantamp] {cfg.num_envs} envs, world-model input {xs.wm_in}, actor input {xs.sim.obs_dim}, "
           f"buffer {sum(v.nbytes for v in jax.tree.leaves(carry['buf'])) / 2**30:.2f} GiB, device {jax.devices()[0]}", flush=True)  # fmt: skip
     t_c = time.time()
@@ -1096,6 +1215,15 @@ def main(argv=None):
             frames = sum(int(x["reference_frames"]) for x in cs)
             if frames:
                 st["reference_pose_score"] = sum(float(x["reference_score_sum"]) for x in cs) / frames
+                if xs.sim.track_getup:
+                    moving = sum(int(x["reference_moving_frames"]) for x in cs)
+                    moving_score = sum(float(x["reference_moving_score_sum"]) for x in cs)
+                    st["reference_moving_fraction"] = moving / frames
+                    if moving:
+                        st["reference_moving_pose_score"] = moving_score / moving
+                    if moving < frames:
+                        total_score = sum(float(x["reference_score_sum"]) for x in cs)
+                        st["reference_hold_pose_score"] = (total_score - moving_score) / (frames - moving)
         train_s = time.time() - t0
         it, env_steps = int(carry["it"]), float(carry["env_steps"])
         logf.write(json.dumps({"it": it, "train_s": train_s, "wall_s": time.time() - t_launch, "env_steps": env_steps, "nonfinite": int(carry["nonfinite"]), **st}) + "\n")

@@ -1,0 +1,2340 @@
+{
+  "checkpoint_sha256": "76c8458f7822eb36a27c86039b5e7c4be81a6d01dd87912483472420f095e1d7",
+  "archives": [
+    "runs/g1_getup_inplace_candidate/hand_grounded_recovery/nominal/source-play.npz",
+    "runs/g1_getup_inplace_candidate/hand_grounded_recovery/nominal/fallen.npz"
+  ],
+  "physics_sha256": "cd830cf5a2efe69fe77ac2c1804f21d47a8e603ea52518264765737b1b72b17c",
+  "dt_s": 0.02,
+  "duration_s": 30.0,
+  "reset_jitter_seed": -1,
+  "push_s": -1.0,
+  "push_angle_deg": 0.0,
+  "definition": "First 0.20s sustained upright frame, no grace. All following upright frames, at least 90% foot-supported in every 1s, final 10s bilateral quiet, 3s minimum followup. Distances in world-plane XY. Count whole episodes including never-risen starts in each denominator. Planted feet use >=0.1 BW for >=3 samples. Reference comparison stops at source end.",
+  "retry_definition": "Before first upright: gain 10 cm from a prior low and reach >=0.50 m for 0.10 s, then drop >=0.12 m from the peak and reach <=0.45 m for 0.10 s. Count a retry if another qualifying elevation or the first sustained upright follows. Never-risen trials are retained and incomplete attempts are recorded separately.",
+  "by_protocol": {
+    "source-play": {
+      "trials": 10,
+      "ever_rose": 10,
+      "final_supported": 10,
+      "attempt_diagnostics_trials": 10,
+      "trials_with_pre_rise_retries": 0,
+      "total_pre_rise_retries": 0,
+      "reference_starts_with_pre_rise_retries": 0,
+      "rose_without_retry_or_refall": 10,
+      "first_attempt_pelvis_within_cm": {
+        "10": 10,
+        "20": 10,
+        "30": 10
+      },
+      "first_attempt_pelvis_and_feet_within_cm": {
+        "10": 10,
+        "20": 10,
+        "30": 10
+      },
+      "rose_no_refall": 10,
+      "final_bilateral_quiet_10s": 10,
+      "throughout_stable": 10,
+      "median_first_rise_s": 2.59,
+      "median_time_from_rise_to_quiet_s": 0.24,
+      "median_first_1s_net_cm": 1.5560984513674303,
+      "median_first_1s_max_cm": 1.8165887262506262,
+      "median_first_2s_max_cm": 1.8165887262506262,
+      "mean_full_max_cm": 3.1716996204657772,
+      "median_full_max_cm": 1.8165887262506262,
+      "p90_full_max_cm": 8.754517391998121,
+      "mean_first_1s_max_cm": 3.1608887467455666,
+      "mean_first_2s_max_cm": 3.1716996204657772,
+      "median_reset_to_end_net_cm": 29.837353325833433,
+      "median_max_loaded_ankle_cm": 1.2469110216466177,
+      "pelvis_within_cm": {
+        "10": 10,
+        "20": 10,
+        "30": 10
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": 10,
+        "20": 10,
+        "30": 10
+      }
+    },
+    "fallen": {
+      "trials": 15,
+      "ever_rose": 15,
+      "final_supported": 15,
+      "attempt_diagnostics_trials": 15,
+      "trials_with_pre_rise_retries": 0,
+      "total_pre_rise_retries": 0,
+      "reference_starts_with_pre_rise_retries": 0,
+      "rose_without_retry_or_refall": 15,
+      "first_attempt_pelvis_within_cm": {
+        "10": 15,
+        "20": 15,
+        "30": 15
+      },
+      "first_attempt_pelvis_and_feet_within_cm": {
+        "10": 15,
+        "20": 15,
+        "30": 15
+      },
+      "rose_no_refall": 15,
+      "final_bilateral_quiet_10s": 15,
+      "throughout_stable": 15,
+      "median_first_rise_s": 2.8000000000000003,
+      "median_time_from_rise_to_quiet_s": 0.28,
+      "median_first_1s_net_cm": 1.9112912791906245,
+      "median_first_1s_max_cm": 1.973061105820413,
+      "median_first_2s_max_cm": 1.973061105820413,
+      "mean_full_max_cm": 3.008622328146704,
+      "median_full_max_cm": 1.973061105820413,
+      "p90_full_max_cm": 6.61421230247528,
+      "mean_first_1s_max_cm": 2.8921930617032983,
+      "mean_first_2s_max_cm": 2.984190514851405,
+      "median_reset_to_end_net_cm": 34.41173639989244,
+      "median_max_loaded_ankle_cm": 1.447265298291158,
+      "pelvis_within_cm": {
+        "10": 15,
+        "20": 15,
+        "30": 15
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": 15,
+        "20": 15,
+        "30": 15
+      }
+    }
+  },
+  "unique": {
+    "trials": 17,
+    "ever_rose": 17,
+    "final_supported": 17,
+    "attempt_diagnostics_trials": 17,
+    "trials_with_pre_rise_retries": 0,
+    "total_pre_rise_retries": 0,
+    "reference_starts_with_pre_rise_retries": 0,
+    "rose_without_retry_or_refall": 17,
+    "first_attempt_pelvis_within_cm": {
+      "10": 17,
+      "20": 17,
+      "30": 17
+    },
+    "first_attempt_pelvis_and_feet_within_cm": {
+      "10": 17,
+      "20": 17,
+      "30": 17
+    },
+    "rose_no_refall": 17,
+    "final_bilateral_quiet_10s": 17,
+    "throughout_stable": 17,
+    "median_first_rise_s": 2.54,
+    "median_time_from_rise_to_quiet_s": 0.28,
+    "median_first_1s_net_cm": 1.9112912791906245,
+    "median_first_1s_max_cm": 1.973061105820413,
+    "median_first_2s_max_cm": 1.973061105820413,
+    "mean_full_max_cm": 3.2457789012812985,
+    "median_full_max_cm": 1.973061105820413,
+    "p90_full_max_cm": 7.484803484397042,
+    "mean_first_1s_max_cm": 3.1384213776376653,
+    "mean_first_2s_max_cm": 3.224221418961917,
+    "median_reset_to_end_net_cm": 25.262970251774426,
+    "median_max_loaded_ankle_cm": 0.9838205396209976,
+    "pelvis_within_cm": {
+      "10": 17,
+      "20": 17,
+      "30": 17
+    },
+    "pelvis_and_planted_feet_within_cm": {
+      "10": 17,
+      "20": 17,
+      "30": 17
+    }
+  },
+  "cases": [
+    {
+      "trial": 0,
+      "first_upright_s": 2.96,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 52.454951216629894,
+        "max_cm": 55.55898139774237,
+        "path_cm": 90.63953076089538
+      },
+      "reference": {
+        "available_s": 2.96,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 2.1,
+        "reset_to_clip_end": {
+          "net_cm": 55.15776020108783,
+          "max_cm": 61.51429197831616,
+          "path_cm": 103.29308655115868
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 51.14600030753207,
+          "max_cm": 55.55898139774237,
+          "path_cm": 85.56101571161486
+        },
+        "aligned_pelvis_xy_rmse_cm": 16.184446506391176,
+        "remaining_after_ref_rise_s": 0.86,
+        "ref_rise_to_clip_end": {
+          "net_cm": 4.401860333830942,
+          "max_cm": 11.363758162403927,
+          "path_cm": 22.23875197190946
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          35.46359919639703,
+          4.291768139882931
+        ],
+        "common_after_robot_rise_s": 0.0,
+        "reference_after_robot_rise": {
+          "net_cm": 0.0,
+          "max_cm": 0.0,
+          "path_cm": 0.0
+        },
+        "robot_after_robot_rise": {
+          "net_cm": 0.0,
+          "max_cm": 0.0,
+          "path_cm": 0.0
+        }
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.45585632353276906,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 9.841823784401013e-05,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 1.3147566631709198,
+        "max_cm": 1.7917125129135847,
+        "path_cm": 5.078515049280531
+      },
+      "followup_s": 27.04,
+      "reset_to_first_rise": {
+        "net_cm": 51.14600030753207,
+        "max_cm": 55.55898139774237,
+        "path_cm": 85.56101571161486
+      },
+      "first_1s_after_rise": {
+        "net_cm": 1.4460231173954778,
+        "max_cm": 1.7917125129135847,
+        "path_cm": 4.2335602621484
+      },
+      "first_2s_after_rise": {
+        "net_cm": 1.5004314129373097,
+        "max_cm": 1.7917125129135847,
+        "path_cm": 4.7288445347213015
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 0.9939592836333395,
+          "max_cm": 0.9939592836333395,
+          "path_cm": 1.502248363855524
+        },
+        {
+          "net_cm": 5.4381029476977965,
+          "max_cm": 5.505804257364685,
+          "path_cm": 6.577625565069855
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.9939592836333395,
+          "max_cm": 0.9939592836333395,
+          "path_cm": 1.502248363855524
+        },
+        {
+          "first_loaded_after_rise_s": 0.02,
+          "bouts": 1,
+          "net_cm": 2.162153822964976,
+          "max_cm": 2.214632183083932,
+          "path_cm": 3.2810755540365064
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.32,
+      "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+      "offset_s": 0.0,
+      "reset_state_sha256": "52b6dcf57c74af593e996ff73574b58a15ec477bdd46708ebddb3afa0ba86cb7",
+      "trajectory_sha256": "347deb4991d26b1792ac34d4e2cb39f5c1d4dd413542937f60f7bc7f66bffa23",
+      "protocols": {
+        "source-play": 0,
+        "fallen": 0
+      }
+    },
+    {
+      "trial": 1,
+      "first_upright_s": 2.22,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 39.13029896479297,
+        "max_cm": 43.980592699006756,
+        "path_cm": 75.23000690981122
+      },
+      "reference": {
+        "available_s": 2.62,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 1.6,
+        "reset_to_clip_end": {
+          "net_cm": 81.40610252718085,
+          "max_cm": 81.40610252718085,
+          "path_cm": 121.02930078606353
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 39.88600985324488,
+          "max_cm": 43.980592699006756,
+          "path_cm": 72.59743322964496
+        },
+        "aligned_pelvis_xy_rmse_cm": 36.58749637827166,
+        "remaining_after_ref_rise_s": 1.02,
+        "ref_rise_to_clip_end": {
+          "net_cm": 58.64188175243934,
+          "max_cm": 58.64188175243934,
+          "path_cm": 60.950550734346734
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          73.01022296538488,
+          58.86504825765717
+        ],
+        "common_after_robot_rise_s": 0.4,
+        "reference_after_robot_rise": {
+          "net_cm": 13.58880057255292,
+          "max_cm": 13.58880057255292,
+          "path_cm": 14.181278299282374
+        },
+        "robot_after_robot_rise": {
+          "net_cm": 9.087196215425106,
+          "max_cm": 9.087196215425106,
+          "path_cm": 11.171585116542584
+        }
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.3621219221444289,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 0.00048212685190621786,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 8.038568627508203,
+        "max_cm": 9.087196215425106,
+        "path_cm": 13.804158796708844
+      },
+      "followup_s": 27.78,
+      "reset_to_first_rise": {
+        "net_cm": 41.02085730359367,
+        "max_cm": 43.980592699006756,
+        "path_cm": 61.42584811310237
+      },
+      "first_1s_after_rise": {
+        "net_cm": 8.615713193445215,
+        "max_cm": 9.087196215425106,
+        "path_cm": 12.509622278673573
+      },
+      "first_2s_after_rise": {
+        "net_cm": 8.780293297489992,
+        "max_cm": 9.087196215425106,
+        "path_cm": 12.76179252616637
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 4.8442595384558,
+          "max_cm": 4.8442595384558,
+          "path_cm": 6.483787930489602
+        },
+        {
+          "net_cm": 5.40415314982559,
+          "max_cm": 7.488982127180852,
+          "path_cm": 21.582680449228274
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 2,
+          "net_cm": 4.8442595384558,
+          "max_cm": 4.8442595384558,
+          "path_cm": 6.476970814393419
+        },
+        {
+          "first_loaded_after_rise_s": 0.42,
+          "bouts": 2,
+          "net_cm": 5.096148953486407,
+          "max_cm": 5.096148953486407,
+          "path_cm": 5.938905076358036
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 0.96,
+      "rise_to_quiet_s": 4.28,
+      "clip": "fallAndGetUp1_subject1_1400_1480.npz",
+      "offset_s": 0.0,
+      "reset_state_sha256": "c246f534b7382878fb23c62cf91739331e85da0fe0c5b22aabb05d89536786c3",
+      "trajectory_sha256": "47209c3590388d262d154e792df0a1b8d630b04a8c6e272474df46b91fdc30bb",
+      "protocols": {
+        "source-play": 1,
+        "fallen": 2
+      }
+    },
+    {
+      "trial": 2,
+      "first_upright_s": 3.7,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 72.59202843316783,
+        "max_cm": 82.65943380322194,
+        "path_cm": 123.23647095853867
+      },
+      "reference": {
+        "available_s": 3.3000000000000003,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 2.64,
+        "reset_to_clip_end": {
+          "net_cm": 71.65782190158725,
+          "max_cm": 80.5397183023235,
+          "path_cm": 141.48088119204994
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 70.0600487467343,
+          "max_cm": 82.65943380322194,
+          "path_cm": 114.35056068802716
+        },
+        "aligned_pelvis_xy_rmse_cm": 19.562130311132204,
+        "remaining_after_ref_rise_s": 0.66,
+        "ref_rise_to_clip_end": {
+          "net_cm": 9.455284732702426,
+          "max_cm": 18.186600683120364,
+          "path_cm": 27.3034898806023
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          24.549280959080583,
+          67.68799327405874
+        ]
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.1496104119259904,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 8.059878520433963e-05,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 0.9827185111049264,
+        "max_cm": 1.377675660477047,
+        "path_cm": 3.183046668047298
+      },
+      "followup_s": 26.3,
+      "reset_to_first_rise": {
+        "net_cm": 72.2723689743193,
+        "max_cm": 82.65943380322194,
+        "path_cm": 120.05342429049138
+      },
+      "first_1s_after_rise": {
+        "net_cm": 1.2888005487905716,
+        "max_cm": 1.377675660477047,
+        "path_cm": 2.6344328974585474
+      },
+      "first_2s_after_rise": {
+        "net_cm": 1.1945104653928644,
+        "max_cm": 1.377675660477047,
+        "path_cm": 2.798342974417557
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 2.41158621924453,
+          "max_cm": 2.7324530440153825,
+          "path_cm": 4.475834634730832
+        },
+        {
+          "net_cm": 0.13174432724928387,
+          "max_cm": 0.2536964117033543,
+          "path_cm": 0.8737196093276871
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 2,
+          "net_cm": 2.41158621924453,
+          "max_cm": 2.7324530440153825,
+          "path_cm": 4.473300638366743
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.13174432724928387,
+          "max_cm": 0.2536964117033543,
+          "path_cm": 0.8737196093276871
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.22,
+      "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+      "offset_s": 0.0,
+      "reset_state_sha256": "269798fbdc5f9047526fbd328e30d1dfb16cb8343b30f63de0fb1768acc71396",
+      "trajectory_sha256": "78fa457e8790d1d6cf771113dc985691110f919fe7a757574b644db3e070467f",
+      "protocols": {
+        "source-play": 2,
+        "fallen": 4
+      }
+    },
+    {
+      "trial": 3,
+      "first_upright_s": 3.38,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 25.262970251774426,
+        "max_cm": 28.733585139864488,
+        "path_cm": 62.52344850182053
+      },
+      "reference": {
+        "available_s": 3.3000000000000003,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 2.8000000000000003,
+        "reset_to_clip_end": {
+          "net_cm": 55.74944278967002,
+          "max_cm": 55.74944278967002,
+          "path_cm": 73.85886307235265
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 26.90109154235836,
+          "max_cm": 28.733585139864488,
+          "path_cm": 57.65722973391457
+        },
+        "aligned_pelvis_xy_rmse_cm": 16.053670317553898,
+        "remaining_after_ref_rise_s": 0.5,
+        "ref_rise_to_clip_end": {
+          "net_cm": 16.942888463993274,
+          "max_cm": 16.942888463993274,
+          "path_cm": 17.19291454966435
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          64.16475560877628,
+          1.2169611796143045
+        ]
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.6749114355969751,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 0.00020912276395154523,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 1.057660262548956,
+        "max_cm": 1.8414649395876677,
+        "path_cm": 3.496982377458724
+      },
+      "followup_s": 26.62,
+      "reset_to_first_rise": {
+        "net_cm": 26.31803166008499,
+        "max_cm": 28.733585139864488,
+        "path_cm": 59.0264661243618
+      },
+      "first_1s_after_rise": {
+        "net_cm": 1.6661737853393828,
+        "max_cm": 1.8414649395876677,
+        "path_cm": 2.526425098646739
+      },
+      "first_2s_after_rise": {
+        "net_cm": 1.6126391194258418,
+        "max_cm": 1.8414649395876677,
+        "path_cm": 2.7810362898770657
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 2.604281186667685,
+          "max_cm": 2.604281186667685,
+          "path_cm": 4.382555654760947
+        },
+        {
+          "net_cm": 2.5623184731500155,
+          "max_cm": 2.5623184731500155,
+          "path_cm": 2.6462945620992198
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 2.604281186667685,
+          "max_cm": 2.604281186667685,
+          "path_cm": 4.382555654760947
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 2.5623184731500155,
+          "max_cm": 2.5623184731500155,
+          "path_cm": 2.6462945620992198
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.1,
+      "clip": "fallAndGetUp1_subject5_2500_2600.npz",
+      "offset_s": 0.0,
+      "reset_state_sha256": "c48186232ba82a9f0bac562dbb8da2dd38747cb912f9fad36d9e2523265c2352",
+      "trajectory_sha256": "5a67c2f108a479e7ecdc2e9b0330ba405610e8fc55b30dace23528d2221e7888",
+      "protocols": {
+        "source-play": 3,
+        "fallen": 6
+      }
+    },
+    {
+      "trial": 4,
+      "first_upright_s": 7.22,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 5.654733208941699,
+        "max_cm": 14.941070083256525,
+        "path_cm": 98.69655860370436
+      },
+      "reference": {
+        "available_s": 6.62,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 5.04,
+        "reset_to_clip_end": {
+          "net_cm": 10.182693913423527,
+          "max_cm": 19.13653723140458,
+          "path_cm": 83.978876041034
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 12.480017759430972,
+          "max_cm": 14.941070083256525,
+          "path_cm": 84.47469296081489
+        },
+        "aligned_pelvis_xy_rmse_cm": 13.823575820521278,
+        "remaining_after_ref_rise_s": 1.58,
+        "ref_rise_to_clip_end": {
+          "net_cm": 12.568185097148158,
+          "max_cm": 15.972732486811985,
+          "path_cm": 24.33191411694846
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          53.11656136934465,
+          17.848874304078084
+        ]
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.4805283814230223,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 4.617817110997751e-05,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 0.2440166681933016,
+        "max_cm": 0.8680804703892859,
+        "path_cm": 1.9023762696812687
+      },
+      "followup_s": 22.78,
+      "reset_to_first_rise": {
+        "net_cm": 5.488145784277249,
+        "max_cm": 14.941070083256525,
+        "path_cm": 96.7941823340231
+      },
+      "first_1s_after_rise": {
+        "net_cm": 0.7090368500526353,
+        "max_cm": 0.8680804703892859,
+        "path_cm": 1.2161723563811273
+      },
+      "first_2s_after_rise": {
+        "net_cm": 0.3866474662735366,
+        "max_cm": 0.8680804703892859,
+        "path_cm": 1.554873077092021
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 1.5100015036722376,
+          "max_cm": 1.5100015036722376,
+          "path_cm": 1.548649314326002
+        },
+        {
+          "net_cm": 1.0827334769932064,
+          "max_cm": 1.0827334769932064,
+          "path_cm": 1.0884881476048596
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 1.5100015036722376,
+          "max_cm": 1.5100015036722376,
+          "path_cm": 1.548649314326002
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 1.0827334769932064,
+          "max_cm": 1.0827334769932064,
+          "path_cm": 1.0884881476048596
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.02,
+      "clip": "fallAndGetUp2_subject2_850_1050.npz",
+      "offset_s": 0.0,
+      "reset_state_sha256": "db36d79458a7a1bbcf4399dee05bbb8d9c702379e43f5bc2f0178265a5d98d97",
+      "trajectory_sha256": "ee919b07af06c82b613971de301855ad3c6a309da4adf5f78a4e34a385a1449b",
+      "protocols": {
+        "source-play": 4,
+        "fallen": 8
+      }
+    },
+    {
+      "trial": 5,
+      "first_upright_s": 3.46,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 58.33249549494857,
+        "max_cm": 59.512704210466424,
+        "path_cm": 83.05904964162931
+      },
+      "reference": {
+        "available_s": 3.3000000000000003,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 2.36,
+        "reset_to_clip_end": {
+          "net_cm": 40.64223440276022,
+          "max_cm": 59.32074923816189,
+          "path_cm": 91.57620075920832
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 53.842578410106704,
+          "max_cm": 54.910043242565976,
+          "path_cm": 75.9874254847738
+        },
+        "aligned_pelvis_xy_rmse_cm": 14.757247706132182,
+        "remaining_after_ref_rise_s": 0.9400000000000001,
+        "ref_rise_to_clip_end": {
+          "net_cm": 14.445817210522657,
+          "max_cm": 14.445817210522657,
+          "path_cm": 19.033548310419945
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          15.765923308102112,
+          31.525296339995133
+        ]
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.014962030851575828,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 8.443771171107089e-06,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 1.0334109323305678,
+        "max_cm": 2.1948543331699972,
+        "path_cm": 3.3872797370975767
+      },
+      "followup_s": 26.54,
+      "reset_to_first_rise": {
+        "net_cm": 57.383761680680735,
+        "max_cm": 57.383761680680735,
+        "path_cm": 79.67176990453171
+      },
+      "first_1s_after_rise": {
+        "net_cm": 1.9112912791906245,
+        "max_cm": 2.1948543331699972,
+        "path_cm": 2.4801030152657324
+      },
+      "first_2s_after_rise": {
+        "net_cm": 1.5148526219576683,
+        "max_cm": 2.1948543331699972,
+        "path_cm": 2.8812250490955837
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 0.06477839294849659,
+          "max_cm": 0.06758304839743866,
+          "path_cm": 0.1752159138993035
+        },
+        {
+          "net_cm": 0.019830224116073148,
+          "max_cm": 0.04247684579771753,
+          "path_cm": 0.14818306960162653
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.06477839294849659,
+          "max_cm": 0.06758304839743866,
+          "path_cm": 0.1752159138993035
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.019830224116073148,
+          "max_cm": 0.04247684579771753,
+          "path_cm": 0.14818306960162653
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.12,
+      "clip": "fallAndGetUp2_subject3_900_1000.npz",
+      "offset_s": 0.0,
+      "reset_state_sha256": "7882089e834866af09b4ac826c77f2d40c1969dbd82e92fab0956105f8731144",
+      "trajectory_sha256": "458aeb8bba2bf9b68fe83d2bbdaba4285865e94a96d8ec101514955727f44b2c",
+      "protocols": {
+        "source-play": 5,
+        "fallen": 10
+      }
+    },
+    {
+      "trial": 6,
+      "first_upright_s": 1.56,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 7.83297052632481,
+        "max_cm": 10.207390389869085,
+        "path_cm": 32.612804500081296
+      },
+      "reference": {
+        "available_s": 3.3000000000000003,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 0.8200000000000001,
+        "reset_to_clip_end": {
+          "net_cm": 38.84618999962937,
+          "max_cm": 57.08587743465458,
+          "path_cm": 90.36064216977633
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 7.492574169406185,
+          "max_cm": 10.207390389869085,
+          "path_cm": 32.17701385384201
+        },
+        "aligned_pelvis_xy_rmse_cm": 35.333981823235284,
+        "remaining_after_ref_rise_s": 2.48,
+        "ref_rise_to_clip_end": {
+          "net_cm": 17.468230137900225,
+          "max_cm": 24.603883392753986,
+          "path_cm": 53.30568226703396
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          61.37752570236293,
+          46.13288771160147
+        ],
+        "common_after_robot_rise_s": 1.74,
+        "reference_after_robot_rise": {
+          "net_cm": 20.828060656606134,
+          "max_cm": 21.20365825954487,
+          "path_cm": 25.7643499303608
+        },
+        "robot_after_robot_rise": {
+          "net_cm": 1.2979421173417798,
+          "max_cm": 1.392146710646592,
+          "path_cm": 1.7629357017894725
+        }
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.04126925219448372,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 7.774393846818957e-06,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 0.9254211976011983,
+        "max_cm": 1.392146710646592,
+        "path_cm": 2.1987263480287575
+      },
+      "followup_s": 28.44,
+      "reset_to_first_rise": {
+        "net_cm": 8.680031782319952,
+        "max_cm": 10.207390389869085,
+        "path_cm": 30.414078152052532
+      },
+      "first_1s_after_rise": {
+        "net_cm": 1.36267687873516,
+        "max_cm": 1.36267687873516,
+        "path_cm": 1.5841336325206
+      },
+      "first_2s_after_rise": {
+        "net_cm": 1.2412037213135467,
+        "max_cm": 1.392146710646592,
+        "path_cm": 1.8283208828924677
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 1.6990278598240358,
+          "max_cm": 1.7281481165583437,
+          "path_cm": 2.103414817903641
+        },
+        {
+          "net_cm": 0.40412657345938785,
+          "max_cm": 0.5732311136698632,
+          "path_cm": 1.1253475308445986
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.12,
+          "bouts": 1,
+          "net_cm": 0.2533345455757202,
+          "max_cm": 0.2819170669752603,
+          "path_cm": 0.44325018249021925
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.40412657345938785,
+          "max_cm": 0.5732311136698632,
+          "path_cm": 1.1253475308445986
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.26,
+      "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+      "offset_s": 0.0,
+      "reset_state_sha256": "c5e05506271ce209c79909af8ffa9c6bfedbdecd99779fa7d86bda2ceca16fc8",
+      "trajectory_sha256": "6fe798ee7f7338a89437a24760f2b126f7411b48f581cbab0ece5ae4f5e0d321",
+      "protocols": {
+        "source-play": 6,
+        "fallen": 12
+      }
+    },
+    {
+      "trial": 7,
+      "first_upright_s": 1.7,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 34.41173639989244,
+        "max_cm": 36.73047139687944,
+        "path_cm": 74.46351439316018
+      },
+      "reference": {
+        "available_s": 1.96,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 1.12,
+        "reset_to_clip_end": {
+          "net_cm": 108.19012130326662,
+          "max_cm": 108.19012130326662,
+          "path_cm": 115.08979773607895
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 36.114636896286875,
+          "max_cm": 36.73047139687944,
+          "path_cm": 71.31239014694995
+        },
+        "aligned_pelvis_xy_rmse_cm": 56.68213102102465,
+        "remaining_after_ref_rise_s": 0.84,
+        "ref_rise_to_clip_end": {
+          "net_cm": 23.59739986912861,
+          "max_cm": 23.59739986912861,
+          "path_cm": 24.47570971739285
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          58.65010514470295,
+          16.50867324439946
+        ],
+        "common_after_robot_rise_s": 0.26,
+        "reference_after_robot_rise": {
+          "net_cm": 6.1902418108932,
+          "max_cm": 6.1902418108932,
+          "path_cm": 6.390098683138526
+        },
+        "robot_after_robot_rise": {
+          "net_cm": 1.1416581017116043,
+          "max_cm": 1.1416581017116043,
+          "path_cm": 1.7321698847807723
+        }
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.3005639788299097,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 5.409222083846212e-05,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 2.5503979865195885,
+        "max_cm": 3.114958962466979,
+        "path_cm": 4.8832941309909925
+      },
+      "followup_s": 28.3,
+      "reset_to_first_rise": {
+        "net_cm": 36.18877014603097,
+        "max_cm": 36.18877014603097,
+        "path_cm": 69.58022026216916
+      },
+      "first_1s_after_rise": {
+        "net_cm": 3.114384656625287,
+        "max_cm": 3.114958962466979,
+        "path_cm": 4.012269352005553
+      },
+      "first_2s_after_rise": {
+        "net_cm": 2.830516856325134,
+        "max_cm": 3.114958962466979,
+        "path_cm": 4.340334199800139
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 0.6177296348072795,
+          "max_cm": 0.6177296348072795,
+          "path_cm": 0.8624856104349266
+        },
+        {
+          "net_cm": 0.9838205396209976,
+          "max_cm": 0.9838205396209976,
+          "path_cm": 1.1703882203745595
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.6177296348072795,
+          "max_cm": 0.6177296348072795,
+          "path_cm": 0.8624856104349266
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.9838205396209976,
+          "max_cm": 0.9838205396209976,
+          "path_cm": 1.1703882203745595
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.28,
+      "clip": "fallAndGetUp6_subject1_1630_1690.npz",
+      "offset_s": 0.0,
+      "reset_state_sha256": "7968de9ce3c75bc8b6a819ed371d30a1e9c94f54bcebee9225689775ac452504",
+      "trajectory_sha256": "0ca957c43757f61e54fca57835edbedbdf36148e73a96a99d55c899f81cadee4",
+      "protocols": {
+        "source-play": 7,
+        "fallen": 14
+      }
+    },
+    {
+      "trial": 8,
+      "first_upright_s": 1.1400000000000001,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 8.999114430883798,
+        "max_cm": 8.999114430883798,
+        "path_cm": 29.51809181550366
+      },
+      "reference": {
+        "available_s": 2.2800000000000002,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 0.9,
+        "reset_to_clip_end": {
+          "net_cm": 65.83542637949009,
+          "max_cm": 65.83542637949009,
+          "path_cm": 73.05451429942559
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 8.907667845398882,
+          "max_cm": 8.907667845398882,
+          "path_cm": 28.848541815842765
+        },
+        "aligned_pelvis_xy_rmse_cm": 42.26191037497346,
+        "remaining_after_ref_rise_s": 1.3800000000000001,
+        "ref_rise_to_clip_end": {
+          "net_cm": 43.149659480384635,
+          "max_cm": 43.149659480384635,
+          "path_cm": 45.59226840994589
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          62.071313246917356,
+          45.18564041967547
+        ],
+        "common_after_robot_rise_s": 1.1400000000000001,
+        "reference_after_robot_rise": {
+          "net_cm": 38.43536347126418,
+          "max_cm": 38.43536347126418,
+          "path_cm": 39.394376903540454
+        },
+        "robot_after_robot_rise": {
+          "net_cm": 8.700596626732679,
+          "max_cm": 8.700596626732679,
+          "path_cm": 8.803169201774855
+        }
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.1654943171451154,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 9.337570200989865e-05,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 8.699723105425658,
+        "max_cm": 8.717553078284011,
+        "path_cm": 9.47271920143575
+      },
+      "followup_s": 28.86,
+      "reset_to_first_rise": {
+        "net_cm": 1.661387666714554,
+        "max_cm": 5.965511936206938,
+        "path_cm": 20.045372614067915
+      },
+      "first_1s_after_rise": {
+        "net_cm": 8.638914172993337,
+        "max_cm": 8.638914172993337,
+        "path_cm": 8.72969538734925
+      },
+      "first_2s_after_rise": {
+        "net_cm": 8.653146232736638,
+        "max_cm": 8.717553078284011,
+        "path_cm": 8.907166143123199
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 0.5476914958874154,
+          "max_cm": 0.7758192760287866,
+          "path_cm": 1.694452770228798
+        },
+        {
+          "net_cm": 0.754928001423192,
+          "max_cm": 0.754928001423192,
+          "path_cm": 0.798841344187883
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.08,
+          "bouts": 1,
+          "net_cm": 0.34913309613334254,
+          "max_cm": 0.34913309613334254,
+          "path_cm": 0.8166778370800944
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.754928001423192,
+          "max_cm": 0.754928001423192,
+          "path_cm": 0.798841344187883
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.48,
+      "clip": "fallAndGetUp6_subject1_530_600.npz",
+      "offset_s": 0.0,
+      "reset_state_sha256": "a1511710328d1f46b5688c03cf8a85c08b5935406a7b2ba6ec4889c8a89831bf",
+      "trajectory_sha256": "3620fe55aa94dd71677128c7745ac49fa0af6d31dcf301e881f470f0bd1894b9",
+      "protocols": {
+        "source-play": 8
+      }
+    },
+    {
+      "trial": 9,
+      "first_upright_s": 0.7000000000000001,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 16.499276018924455,
+        "max_cm": 17.91448955474742,
+        "path_cm": 25.63861912090411
+      },
+      "reference": {
+        "available_s": 1.62,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 0.34,
+        "reset_to_clip_end": {
+          "net_cm": 26.68448301194768,
+          "max_cm": 27.186921436714616,
+          "path_cm": 48.51041535593003
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 16.732696212479993,
+          "max_cm": 17.91448955474742,
+          "path_cm": 24.878702572661354
+        },
+        "aligned_pelvis_xy_rmse_cm": 17.751692188951633,
+        "remaining_after_ref_rise_s": 1.28,
+        "ref_rise_to_clip_end": {
+          "net_cm": 24.81484765634928,
+          "max_cm": 24.823625357158186,
+          "path_cm": 32.86958169497379
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          54.70171389032892,
+          34.979280742624766
+        ],
+        "common_after_robot_rise_s": 0.92,
+        "reference_after_robot_rise": {
+          "net_cm": 24.74317806714095,
+          "max_cm": 24.74317806714095,
+          "path_cm": 26.13168187181621
+        },
+        "robot_after_robot_rise": {
+          "net_cm": 1.2615486273621432,
+          "max_cm": 1.3313533212975022,
+          "path_cm": 1.4252490437922594
+        }
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.06685561145562373,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 2.9266551433326956e-05,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 0.8493169226450187,
+        "max_cm": 1.3313533212975022,
+        "path_cm": 2.185165592035019
+      },
+      "followup_s": 29.3,
+      "reset_to_first_rise": {
+        "net_cm": 17.22477182350012,
+        "max_cm": 17.91448955474742,
+        "path_cm": 23.45345352886909
+      },
+      "first_1s_after_rise": {
+        "net_cm": 1.235903310474476,
+        "max_cm": 1.3313533212975022,
+        "path_cm": 1.4529234421491
+      },
+      "first_2s_after_rise": {
+        "net_cm": 0.9824755105505574,
+        "max_cm": 1.3313533212975022,
+        "path_cm": 1.782656144325444
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 0.24867747619899935,
+          "max_cm": 0.24867747619899935,
+          "path_cm": 0.35389759481429917
+        },
+        {
+          "net_cm": 0.4047792394798403,
+          "max_cm": 0.4047792394798403,
+          "path_cm": 0.4092338908272458
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.24867747619899935,
+          "max_cm": 0.24867747619899935,
+          "path_cm": 0.35389759481429917
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.4047792394798403,
+          "max_cm": 0.4047792394798403,
+          "path_cm": 0.4092338908272458
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.04,
+      "clip": "fallAndGetUp6_subject1_650_700.npz",
+      "offset_s": 0.0,
+      "reset_state_sha256": "b4d3f405b6c0d4dd14a23f3a868719fc17eced7b67b562be44fd3fefd274f508",
+      "trajectory_sha256": "efe73d231fd6c176085500606fc7239a141f42bd3c45e489ba98c5ef7827248e",
+      "protocols": {
+        "source-play": 9
+      }
+    },
+    {
+      "trial": 1,
+      "first_upright_s": 2.2,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 37.02703161288646,
+        "max_cm": 40.8291206697605,
+        "path_cm": 59.66499745569666
+      },
+      "reference": {
+        "available_s": 2.46,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 1.6,
+        "reset_to_clip_end": {
+          "net_cm": 45.00864397078051,
+          "max_cm": 52.76367110076706,
+          "path_cm": 86.51420180398223
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 36.86185256336556,
+          "max_cm": 40.8291206697605,
+          "path_cm": 58.11188895797342
+        },
+        "aligned_pelvis_xy_rmse_cm": 12.814453174000176,
+        "remaining_after_ref_rise_s": 0.86,
+        "ref_rise_to_clip_end": {
+          "net_cm": 4.401860333830942,
+          "max_cm": 11.363758162403927,
+          "path_cm": 22.23875197190946
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          35.46359919639703,
+          4.291768139882931
+        ],
+        "common_after_robot_rise_s": 0.26,
+        "reference_after_robot_rise": {
+          "net_cm": 7.069254523580611,
+          "max_cm": 7.069254523580611,
+          "path_cm": 7.162475575353544
+        },
+        "robot_after_robot_rise": {
+          "net_cm": 0.763201725771472,
+          "max_cm": 0.763201725771472,
+          "path_cm": 0.8759315618515611
+        }
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.08366771089560819,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 1.4335200146137015e-05,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 0.5823995271021728,
+        "max_cm": 0.9811317707705651,
+        "path_cm": 2.4290400595747883
+      },
+      "followup_s": 27.8,
+      "reset_to_first_rise": {
+        "net_cm": 37.01318512853831,
+        "max_cm": 40.8291206697605,
+        "path_cm": 57.23595739612186
+      },
+      "first_1s_after_rise": {
+        "net_cm": 0.9395964128424303,
+        "max_cm": 0.9811317707705651,
+        "path_cm": 1.7485944669105284
+      },
+      "first_2s_after_rise": {
+        "net_cm": 0.6575459674305155,
+        "max_cm": 0.9811317707705651,
+        "path_cm": 2.0564734836042304
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 2.448864361427497,
+          "max_cm": 2.448864361427497,
+          "path_cm": 2.755608770953488
+        },
+        {
+          "net_cm": 0.19471689048423574,
+          "max_cm": 0.19471689048423574,
+          "path_cm": 0.3372829966617352
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.08,
+          "bouts": 1,
+          "net_cm": 0.3687412618009531,
+          "max_cm": 0.3687412618009531,
+          "path_cm": 0.49269499945635414
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.19471689048423574,
+          "max_cm": 0.19471689048423574,
+          "path_cm": 0.3372829966617352
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.3,
+      "clip": "fallAndGetUp1_subject1_1060_1150.npz",
+      "offset_s": 0.5,
+      "reset_state_sha256": "f3a4767fe8e48ea95513411b6dc6f285ad8338965d975e0d96b68c4edcb2056d",
+      "trajectory_sha256": "422e3e6f5d8151a026dc28cdec9062fdab31af1d484169bba8a6ca5e9b7bd99d",
+      "protocols": {
+        "fallen": 1
+      }
+    },
+    {
+      "trial": 3,
+      "first_upright_s": 1.5,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 23.739563430995197,
+        "max_cm": 27.243374175354084,
+        "path_cm": 55.437471435463834
+      },
+      "reference": {
+        "available_s": 2.12,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 1.1,
+        "reset_to_clip_end": {
+          "net_cm": 78.33287505727999,
+          "max_cm": 78.33287505727999,
+          "path_cm": 105.52666717345154
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 20.10650242238916,
+          "max_cm": 27.243374175354084,
+          "path_cm": 50.399251137284004
+        },
+        "aligned_pelvis_xy_rmse_cm": 43.65610517048971,
+        "remaining_after_ref_rise_s": 1.02,
+        "ref_rise_to_clip_end": {
+          "net_cm": 58.64188175243934,
+          "max_cm": 58.64188175243934,
+          "path_cm": 60.950550734346734
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          73.01022296538488,
+          58.86504825765717
+        ],
+        "common_after_robot_rise_s": 0.62,
+        "reference_after_robot_rise": {
+          "net_cm": 28.76259488869506,
+          "max_cm": 28.76259488869506,
+          "path_cm": 29.45937169471293
+        },
+        "robot_after_robot_rise": {
+          "net_cm": 3.381611274782957,
+          "max_cm": 3.381611274782957,
+          "path_cm": 3.752570312735343
+        }
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.09103858812654915,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 1.4181740181118429e-05,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 1.3336328011649974,
+        "max_cm": 3.3862555391638463,
+        "path_cm": 8.790790610915163
+      },
+      "followup_s": 28.5,
+      "reset_to_first_rise": {
+        "net_cm": 23.29911528490099,
+        "max_cm": 27.243374175354084,
+        "path_cm": 46.64668082454867
+      },
+      "first_1s_after_rise": {
+        "net_cm": 2.5627320160942406,
+        "max_cm": 3.3862555391638463,
+        "path_cm": 4.625437907968076
+      },
+      "first_2s_after_rise": {
+        "net_cm": 1.6789971272903925,
+        "max_cm": 3.3862555391638463,
+        "path_cm": 8.266390025670345
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 0.6987361990453079,
+          "max_cm": 0.6987361990453079,
+          "path_cm": 1.2641907905128549
+        },
+        {
+          "net_cm": 0.8208527607142592,
+          "max_cm": 0.9300963867828558,
+          "path_cm": 2.264163245783713
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.6987361990453079,
+          "max_cm": 0.6987361990453079,
+          "path_cm": 1.2641907905128549
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.8208527607142592,
+          "max_cm": 0.9300963867828558,
+          "path_cm": 2.264163245783713
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.4,
+      "clip": "fallAndGetUp1_subject1_1400_1480.npz",
+      "offset_s": 0.5,
+      "reset_state_sha256": "a11445ed68c431e4284f311d508ad33f6b2fc5eeba09b1ce3bc28befd1244cd6",
+      "trajectory_sha256": "98edb3dd1344266cee970eae2fd872eae78c78350d7466ca73498e3f3822a2e5",
+      "protocols": {
+        "fallen": 3
+      }
+    },
+    {
+      "trial": 5,
+      "first_upright_s": 2.82,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 39.71899136318408,
+        "max_cm": 68.38680607320636,
+        "path_cm": 118.72044211302426
+      },
+      "reference": {
+        "available_s": 2.8000000000000003,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 2.14,
+        "reset_to_clip_end": {
+          "net_cm": 63.31127808729604,
+          "max_cm": 72.11031904930242,
+          "path_cm": 132.45703077289622
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 39.83863577614333,
+          "max_cm": 68.38680607320636,
+          "path_cm": 115.60650504103371
+        },
+        "aligned_pelvis_xy_rmse_cm": 20.220149780186823,
+        "remaining_after_ref_rise_s": 0.66,
+        "ref_rise_to_clip_end": {
+          "net_cm": 9.455284732702426,
+          "max_cm": 18.186600683120364,
+          "path_cm": 27.3034898806023
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          24.549280959080583,
+          67.68799327405874
+        ]
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.1315274482887424,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 0.00012814945749366666,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 1.346862846502874,
+        "max_cm": 1.728390337900932,
+        "path_cm": 2.9014338595954716
+      },
+      "followup_s": 27.18,
+      "reset_to_first_rise": {
+        "net_cm": 40.013898363952926,
+        "max_cm": 68.38680607320636,
+        "path_cm": 115.81900825342876
+      },
+      "first_1s_after_rise": {
+        "net_cm": 1.7182769328471408,
+        "max_cm": 1.728390337900932,
+        "path_cm": 2.184147208278953
+      },
+      "first_2s_after_rise": {
+        "net_cm": 1.5381321914300004,
+        "max_cm": 1.728390337900932,
+        "path_cm": 2.593671616709032
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 0.5454582940563792,
+          "max_cm": 0.551054264177463,
+          "path_cm": 0.7055593480729189
+        },
+        {
+          "net_cm": 0.680595745157207,
+          "max_cm": 0.7009131822137806,
+          "path_cm": 1.0383226184531347
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.5454582940563792,
+          "max_cm": 0.551054264177463,
+          "path_cm": 0.7055593480729189
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.680595745157207,
+          "max_cm": 0.7009131822137806,
+          "path_cm": 1.0383226184531347
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.16,
+      "clip": "fallAndGetUp1_subject1_2100_2200.npz",
+      "offset_s": 0.5,
+      "reset_state_sha256": "2bfbeae32012abda77a02a6e4b89f377ebdf269808158a039402a4ef721d6c9c",
+      "trajectory_sha256": "257071910b81fdc5fd2b20722d4347bceb166f60b23596e82a691020e847ae7f",
+      "protocols": {
+        "fallen": 5
+      }
+    },
+    {
+      "trial": 7,
+      "first_upright_s": 2.8000000000000003,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 22.887426289948916,
+        "max_cm": 23.50801197755228,
+        "path_cm": 54.26681135661162
+      },
+      "reference": {
+        "available_s": 2.8000000000000003,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 2.3000000000000003,
+        "reset_to_clip_end": {
+          "net_cm": 53.177228067365334,
+          "max_cm": 53.177228067365334,
+          "path_cm": 67.82825188999917
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 23.395934529381215,
+          "max_cm": 23.395934529381215,
+          "path_cm": 51.21797056337329
+        },
+        "aligned_pelvis_xy_rmse_cm": 15.609181907107095,
+        "remaining_after_ref_rise_s": 0.5,
+        "ref_rise_to_clip_end": {
+          "net_cm": 16.942888463993274,
+          "max_cm": 16.942888463993274,
+          "path_cm": 17.19291454966435
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          64.16475560877628,
+          1.2169611796143045
+        ],
+        "common_after_robot_rise_s": 0.0,
+        "reference_after_robot_rise": {
+          "net_cm": 0.0,
+          "max_cm": 0.0,
+          "path_cm": 0.0
+        },
+        "robot_after_robot_rise": {
+          "net_cm": 0.0,
+          "max_cm": 0.0,
+          "path_cm": 0.0
+        }
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.3647673142376298,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 6.938257777095375e-05,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 1.618878386167725,
+        "max_cm": 2.1883608181832086,
+        "path_cm": 3.0488407932383126
+      },
+      "followup_s": 27.2,
+      "reset_to_first_rise": {
+        "net_cm": 23.395934529381215,
+        "max_cm": 23.395934529381215,
+        "path_cm": 51.21797056337329
+      },
+      "first_1s_after_rise": {
+        "net_cm": 2.0539912369783133,
+        "max_cm": 2.1883608181832086,
+        "path_cm": 2.3901565567496763
+      },
+      "first_2s_after_rise": {
+        "net_cm": 1.765879244997981,
+        "max_cm": 2.1883608181832086,
+        "path_cm": 2.7296495034620274
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 1.3264426180140325,
+          "max_cm": 1.3264426180140325,
+          "path_cm": 1.4859771928957999
+        },
+        {
+          "net_cm": 1.447265298291158,
+          "max_cm": 1.447265298291158,
+          "path_cm": 1.5344619845751406
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 1.3264426180140325,
+          "max_cm": 1.3264426180140325,
+          "path_cm": 1.4859771928957999
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 1.447265298291158,
+          "max_cm": 1.447265298291158,
+          "path_cm": 1.5344619845751406
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.06,
+      "clip": "fallAndGetUp1_subject5_2500_2600.npz",
+      "offset_s": 0.5,
+      "reset_state_sha256": "3647bce7fb6e73721eea81170cdae1f6c6172e7db75c2cd27110f0c0b91413d9",
+      "trajectory_sha256": "a2d133586a4da04870404824f35c12d9352d6165270fbc95ee19ae25f8c265ab",
+      "protocols": {
+        "fallen": 7
+      }
+    },
+    {
+      "trial": 9,
+      "first_upright_s": 6.34,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 18.88509065290303,
+        "max_cm": 19.772618265425663,
+        "path_cm": 115.38900082891372
+      },
+      "reference": {
+        "available_s": 6.12,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 4.54,
+        "reset_to_clip_end": {
+          "net_cm": 10.017628291014969,
+          "max_cm": 18.57482599741213,
+          "path_cm": 82.23467992120183
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 12.97664760519344,
+          "max_cm": 19.772618265425663,
+          "path_cm": 107.50956693371239
+        },
+        "aligned_pelvis_xy_rmse_cm": 13.647410398681806,
+        "remaining_after_ref_rise_s": 1.58,
+        "ref_rise_to_clip_end": {
+          "net_cm": 12.568185097148158,
+          "max_cm": 15.972732486811985,
+          "path_cm": 24.33191411694846
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          53.11656136934465,
+          17.848874304078084
+        ]
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.12165377748320075,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 2.426328792391188e-05,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 6.541075123479607,
+        "max_cm": 6.541075123479607,
+        "path_cm": 6.963092843705949
+      },
+      "followup_s": 23.66,
+      "reset_to_first_rise": {
+        "net_cm": 13.082076247549795,
+        "max_cm": 19.772618265425663,
+        "path_cm": 108.42590798520777
+      },
+      "first_1s_after_rise": {
+        "net_cm": 5.884411823293657,
+        "max_cm": 5.884411823293657,
+        "path_cm": 5.905384929898117
+      },
+      "first_2s_after_rise": {
+        "net_cm": 6.184061158275221,
+        "max_cm": 6.184061158275221,
+        "path_cm": 6.438882527595892
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 1.7750885254644182,
+          "max_cm": 1.778945133725344,
+          "path_cm": 2.2821525345150104
+        },
+        {
+          "net_cm": 0.4860150771630634,
+          "max_cm": 0.4860150771630634,
+          "path_cm": 0.5407888048275532
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 1.7750885254644182,
+          "max_cm": 1.778945133725344,
+          "path_cm": 2.2821525345150104
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.4860150771630634,
+          "max_cm": 0.4860150771630634,
+          "path_cm": 0.5407888048275532
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.38,
+      "clip": "fallAndGetUp2_subject2_850_1050.npz",
+      "offset_s": 0.5,
+      "reset_state_sha256": "ea4ccf888e8a0b2634762c0b3c5dac4ceea0a4f88abaf832b08c2f04ae554a2c",
+      "trajectory_sha256": "0cd82e4d0b8ac8c355fef7491f5928ee04f760381ba3bb2e8e4265e7e815e9a2",
+      "protocols": {
+        "fallen": 9
+      }
+    },
+    {
+      "trial": 11,
+      "first_upright_s": 2.54,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 54.01044602370454,
+        "max_cm": 58.232619724566135,
+        "path_cm": 77.25293625260372
+      },
+      "reference": {
+        "available_s": 2.8000000000000003,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 1.86,
+        "reset_to_clip_end": {
+          "net_cm": 41.612476570200094,
+          "max_cm": 60.56602109962971,
+          "path_cm": 88.0311144112899
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 54.059424867511616,
+          "max_cm": 58.232619724566135,
+          "path_cm": 76.02955929531049
+        },
+        "aligned_pelvis_xy_rmse_cm": 14.363288771981884,
+        "remaining_after_ref_rise_s": 0.9400000000000001,
+        "ref_rise_to_clip_end": {
+          "net_cm": 14.445817210522657,
+          "max_cm": 14.445817210522657,
+          "path_cm": 19.033548310419945
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          15.765923308102112,
+          31.525296339995133
+        ],
+        "common_after_robot_rise_s": 0.26,
+        "reference_after_robot_rise": {
+          "net_cm": 4.390185297403374,
+          "max_cm": 4.390185297403374,
+          "path_cm": 4.52409779471235
+        },
+        "robot_after_robot_rise": {
+          "net_cm": 1.4013026694419373,
+          "max_cm": 1.4013026694419373,
+          "path_cm": 1.403727589742596
+        }
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.12346013472144413,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 4.769207022964892e-05,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 1.3464613179944354,
+        "max_cm": 1.973061105820413,
+        "path_cm": 2.627104547035839
+      },
+      "followup_s": 27.46,
+      "reset_to_first_rise": {
+        "net_cm": 52.666202184709356,
+        "max_cm": 58.232619724566135,
+        "path_cm": 74.62583170556788
+      },
+      "first_1s_after_rise": {
+        "net_cm": 1.9603704636324648,
+        "max_cm": 1.973061105820413,
+        "path_cm": 1.9980001569921035
+      },
+      "first_2s_after_rise": {
+        "net_cm": 1.723215735136329,
+        "max_cm": 1.973061105820413,
+        "path_cm": 2.235476195071611
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 0.2875038860171505,
+          "max_cm": 0.2875038860171505,
+          "path_cm": 0.4575777316438972
+        },
+        {
+          "net_cm": 0.24122901429043642,
+          "max_cm": 0.24122901429043642,
+          "path_cm": 0.38400528246577526
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.2875038860171505,
+          "max_cm": 0.2875038860171505,
+          "path_cm": 0.4575777316438972
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 1,
+          "net_cm": 0.24122901429043642,
+          "max_cm": 0.24122901429043642,
+          "path_cm": 0.38400528246577526
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 1.0,
+      "rise_to_quiet_s": 0.34,
+      "clip": "fallAndGetUp2_subject3_900_1000.npz",
+      "offset_s": 0.5,
+      "reset_state_sha256": "06e8513a890d29a381c49ed3ecd19cf332de0632c6d2874995ac43a8d0f5e97c",
+      "trajectory_sha256": "ee9487242113b635e51754d616b2c9a11e2367f77542ad9d004f2a9a1bf46ac9",
+      "protocols": {
+        "fallen": 11
+      }
+    },
+    {
+      "trial": 13,
+      "first_upright_s": 0.72,
+      "horizon_s": 30.0,
+      "attempts": {
+        "failed_elevations": 0,
+        "retries": 0,
+        "events": []
+      },
+      "reset_to_final": {
+        "net_cm": 9.112969799361114,
+        "max_cm": 15.933349554312501,
+        "path_cm": 33.126469367651794
+      },
+      "reference": {
+        "available_s": 2.8000000000000003,
+        "attempts": {
+          "failed_elevations": 0,
+          "retries": 0,
+          "events": []
+        },
+        "first_upright_s": 0.32,
+        "reset_to_clip_end": {
+          "net_cm": 24.519198170592766,
+          "max_cm": 41.71057451498273,
+          "path_cm": 72.80016017653786
+        },
+        "robot_reset_to_common_end": {
+          "net_cm": 8.319922506554601,
+          "max_cm": 15.933349554312501,
+          "path_cm": 32.09734208121484
+        },
+        "aligned_pelvis_xy_rmse_cm": 23.043376593377303,
+        "remaining_after_ref_rise_s": 2.48,
+        "ref_rise_to_clip_end": {
+          "net_cm": 17.468230137900225,
+          "max_cm": 24.603883392753986,
+          "path_cm": 53.30568226703396
+        },
+        "ankle_origin_max_cm_after_ref_rise": [
+          61.37752570236293,
+          46.13288771160147
+        ],
+        "common_after_robot_rise_s": 2.08,
+        "reference_after_robot_rise": {
+          "net_cm": 20.061129532582008,
+          "max_cm": 20.55676592120441,
+          "path_cm": 33.974923329648504
+        },
+        "robot_after_robot_rise": {
+          "net_cm": 6.660204397964639,
+          "max_cm": 6.660204397964639,
+          "path_cm": 11.73122867496748
+        }
+      },
+      "final_supported": true,
+      "final_bilateral_quiet_10s": true,
+      "tail_both_loaded_fraction": 1.0,
+      "tail_foot_max_cm": 0.3381041521282211,
+      "post_rise_falls": [],
+      "tail_pelvis_xy_speed_rms_m_s": 1.2605859298236945e-05,
+      "throughout_stable": true,
+      "pelvis_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "pelvis_and_planted_feet_within_cm": {
+        "10": true,
+        "20": true,
+        "30": true
+      },
+      "full_after_rise": {
+        "net_cm": 6.278160581074962,
+        "max_cm": 6.662970421805728,
+        "path_cm": 12.760355961404432
+      },
+      "followup_s": 29.28,
+      "reset_to_first_rise": {
+        "net_cm": 14.664658482319048,
+        "max_cm": 15.933349554312501,
+        "path_cm": 20.36611340624736
+      },
+      "first_1s_after_rise": {
+        "net_cm": 5.602664557252022,
+        "max_cm": 5.602664557252022,
+        "path_cm": 9.800370164875186
+      },
+      "first_2s_after_rise": {
+        "net_cm": 6.653507187580631,
+        "max_cm": 6.653507187580631,
+        "path_cm": 11.720079716395423
+      },
+      "ankles_after_rise": [
+        {
+          "net_cm": 4.995764110447793,
+          "max_cm": 4.995764110447793,
+          "path_cm": 16.062272869011714
+        },
+        {
+          "net_cm": 5.562505158705925,
+          "max_cm": 6.285346310973738,
+          "path_cm": 9.904543081321018
+        }
+      ],
+      "loaded_ankles_after_rise": [
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 2,
+          "net_cm": 4.995764110447793,
+          "max_cm": 4.995764110447793,
+          "path_cm": 8.57677370177354
+        },
+        {
+          "first_loaded_after_rise_s": 0.0,
+          "bouts": 2,
+          "net_cm": 5.562505158705925,
+          "max_cm": 6.285346310973738,
+          "path_cm": 8.192377883890641
+        }
+      ],
+      "every_frame_upright_after_rise": true,
+      "worst_1s_loaded_fraction_after_rise": 0.92,
+      "rise_to_quiet_s": 0.68,
+      "clip": "fallAndGetUp6_subject1_1080_1180.npz",
+      "offset_s": 0.5,
+      "reset_state_sha256": "ad9f9fc31438e9e2d995cbf19debf21a44d2fe60ac62bc2e658516c604c29632",
+      "trajectory_sha256": "35822fee62be232b46b2358a97560243d1a323248496c8906f6642babb92f526",
+      "protocols": {
+        "fallen": 13
+      }
+    }
+  ]
+}

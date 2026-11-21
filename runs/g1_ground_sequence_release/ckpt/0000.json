@@ -1,0 +1,8 @@
+{
+  "source": "runs/g1_getup_inplace_candidate/hand_grounded_balance/ckpt/0000.npz",
+  "source_sha256": "7e41c5c48ee4e052b2ec1ac52287ecc0eff225bbe6d084f83a590182df4936c4",
+  "planning": 13,
+  "foot_support_weight_fraction": 0.5,
+  "required_loaded_samples": 45,
+  "support_window_samples": 50
+}

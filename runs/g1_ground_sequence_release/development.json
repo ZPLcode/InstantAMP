@@ -1,0 +1,58 @@
+{
+  "time_utc": "2026-11-21T01:51:51.334414+00:00",
+  "sha256": "76c8458f7822eb36a27c86039b5e7c4be81a6d01dd87912483472420f095e1d7",
+  "eligible": true,
+  "development_trials": 102,
+  "single": 102,
+  "strict": 102,
+  "quiet": 102,
+  "palm_first": 90,
+  "push_trials": 40,
+  "push_once": 40,
+  "push_quiet": 40,
+  "late_90s": {
+    "trials": 1,
+    "ever_rose": 1,
+    "final_supported": 1,
+    "attempt_diagnostics_trials": 1,
+    "trials_with_pre_rise_retries": 0,
+    "total_pre_rise_retries": 0,
+    "reference_starts_with_pre_rise_retries": 0,
+    "rose_without_retry_or_refall": 1,
+    "first_attempt_pelvis_within_cm": {
+      "10": 1,
+      "20": 1,
+      "30": 1
+    },
+    "first_attempt_pelvis_and_feet_within_cm": {
+      "10": 1,
+      "20": 1,
+      "30": 1
+    },
+    "rose_no_refall": 1,
+    "final_bilateral_quiet_10s": 1,
+    "throughout_stable": 1,
+    "median_first_rise_s": 2.56,
+    "median_time_from_rise_to_quiet_s": 0.32,
+    "median_first_1s_net_cm": 2.0818437018643894,
+    "median_first_1s_max_cm": 2.103374940772253,
+    "median_first_2s_max_cm": 2.103374940772253,
+    "mean_full_max_cm": 4.321338643395668,
+    "median_full_max_cm": 4.321338643395668,
+    "p90_full_max_cm": 4.321338643395668,
+    "mean_first_1s_max_cm": 2.103374940772253,
+    "mean_first_2s_max_cm": 2.103374940772253,
+    "median_reset_to_end_net_cm": 56.418885101287444,
+    "median_max_loaded_ankle_cm": 8.177816409452166,
+    "pelvis_within_cm": {
+      "10": 1,
+      "20": 1,
+      "30": 1
+    },
+    "pelvis_and_planted_feet_within_cm": {
+      "10": 1,
+      "20": 1,
+      "30": 1
+    }
+  }
+}

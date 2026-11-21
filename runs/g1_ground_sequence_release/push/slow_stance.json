@@ -1,0 +1,58 @@
+[
+  {
+    "case": 0,
+    "mode": "slow",
+    "force_n": 30.0,
+    "angle_deg": 135,
+    "time_s": 90,
+    "peak_cm": 1.8300844501699765,
+    "minimum_height_m": 0.7740455611793511,
+    "peak_tilt_deg": 11.81605617956624,
+    "max_tilt_above_previous_deg": 10.486997478313393,
+    "tail_speed_rms": 7.132811449989668e-05,
+    "amp_reaction_frames": 0,
+    "continuous_stance": true
+  },
+  {
+    "case": 1,
+    "mode": "slow",
+    "force_n": 30.0,
+    "angle_deg": 270,
+    "time_s": 90,
+    "peak_cm": 102.0668124631229,
+    "minimum_height_m": 0.24960756432792675,
+    "peak_tilt_deg": 92.75755862482879,
+    "max_tilt_above_previous_deg": 83.58691368426747,
+    "tail_speed_rms": 2.8867188089424583e-06,
+    "amp_reaction_frames": 20,
+    "continuous_stance": false
+  },
+  {
+    "case": 5,
+    "mode": "slow",
+    "force_n": 30.0,
+    "angle_deg": -60,
+    "time_s": 90,
+    "peak_cm": 2.068958469162494,
+    "minimum_height_m": 0.7704848648854575,
+    "peak_tilt_deg": 12.611084350915101,
+    "max_tilt_above_previous_deg": 0.0,
+    "tail_speed_rms": 3.0664487237851388e-06,
+    "amp_reaction_frames": 0,
+    "continuous_stance": true
+  },
+  {
+    "case": 8,
+    "mode": "slow",
+    "force_n": 30.0,
+    "angle_deg": 140,
+    "time_s": 90,
+    "peak_cm": 228.13950913926914,
+    "minimum_height_m": 0.08421238899435966,
+    "peak_tilt_deg": 133.84435135103143,
+    "max_tilt_above_previous_deg": 131.09969592019948,
+    "tail_speed_rms": 2.719719069134025e-05,
+    "amp_reaction_frames": 26,
+    "continuous_stance": false
+  }
+]

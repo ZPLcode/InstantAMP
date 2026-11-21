@@ -1,0 +1,18 @@
+{
+  "base": "runs/g1_getup_inplace_candidate/measured_plan5/ckpt/0000.npz",
+  "out": "runs/g1_getup_inplace_candidate/smooth_ref_ppo",
+  "discriminator": "runs/g1_getup_polish/style/amp6_rate3/discriminator/000060.npz",
+  "motions": "data/g1_getup/recovery",
+  "envs": 6,
+  "steps": 335,
+  "iterations": 30,
+  "seed": 359341,
+  "scale": 0.06,
+  "std": 0.2,
+  "lr": 0.00035,
+  "reference_motion_weight": 3.0,
+  "base_sha256": "32ffe06fb6decd0efaee542ced7d0614ed1789a76b24dc44ee4836dc363be813",
+  "action_rate_multiplier": 3.0,
+  "assist_n": 0.0,
+  "learner": "native_ppo_amp"
+}

@@ -30,16 +30,23 @@ def prepare(source, dest):
         frames = 0
         for name in ACTIVE_CLIPS:
             clip = load(bank / f"{name}.pkl")
-            frames += convert_recovery_clip(staged / f"{name}.npz", clip["root_pos"], clip["root_rot"],
-                                            clip["dof_pos"], order, float(clip["fps"]), clip["key_body_pos"])
+            fields = (clip["root_pos"], clip["root_rot"], clip["dof_pos"], order, float(clip["fps"]), clip["key_body_pos"])
+            frames += convert_recovery_clip(staged / f"{name}.npz", *fields)
+            convert_recovery_clip(staged / "native" / f"{name}.npz", *fields, keep_native=True)
         if dest.exists():
             existing = {p.name for p in dest.glob("*.npz")}
             expected = {p.name for p in staged.glob("*.npz")}
             if expected != existing or any((staged / f).read_bytes() != (dest / f).read_bytes() for f in expected):
                 raise FileExistsError(f"Different recovery data already exists in {dest}. Choose a new --dest.")
+            if (dest / "native").exists():
+                files = {p.name for p in (dest / "native").glob("*.npz")}
+                if files != expected or any((staged/"native"/f).read_bytes() != (dest/"native"/f).read_bytes() for f in files):
+                    raise FileExistsError(f"Different native recovery data already exists in {dest / 'native'}")
+            else:
+                (staged / "native").rename(dest / "native")
         else:
             staged.rename(dest)
-    print(f"Prepared {len(ACTIVE_CLIPS)} clips, {frames} frames at 50 Hz in {dest}")
+    print(f"Prepared {len(ACTIVE_CLIPS)} clips, {frames} frames at 50 Hz in {dest} and native-rate knots in {dest / 'native'}")
 
 
 if __name__ == "__main__":

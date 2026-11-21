@@ -66,8 +66,9 @@ WEIGHTS = {"joint_acc_l2": -1e-7, "action_rate_l2": -0.005, "joint_torques_l2": 
 class RecoveryReference:
     """Phase-aligned poses for the native Zenbot clips used to initialize episodes."""
 
-    def __init__(self, directory, key_positions, joints=len(DOF)):
+    def __init__(self, directory, key_positions, joints=len(DOF), *, coupled_pose=False):
         self.joints = joints
+        self.coupled_pose = coupled_pose
         self.files = sorted(Path(directory).glob("*.npz"))
         poses, lengths = [], []
         for path in self.files:
@@ -103,9 +104,14 @@ class RecoveryReference:
 
     def score(self, pose, clip, step):
         errors, active = self.errors(pose, clip, step)
-        # Half reward at 15 cm pelvis/landmark error, ~29 degrees tilt, or 0.5 rad joint RMS.
+        # Normalize height, tilt, joints and landmarks in their respective units.
         scales = (0.15, 0.5, 0.5, 0.15)
-        score = sum(1 / (1 + error / scale**2) for error, scale in zip(errors, scales)) / len(scales)
+        squared_errors = [error / scale**2 for error, scale in zip(errors, scales)]
+        if self.coupled_pose:
+            # A pelvis on the floor cannot match a standing pose through its joint angles alone.
+            score = 1 / (1 + sum(squared_errors) / len(scales))
+        else:
+            score = sum(1 / (1 + error) for error in squared_errors) / len(scales)
         return jnp.where(active, score, 0.)
 
 
