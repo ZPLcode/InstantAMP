@@ -26,7 +26,7 @@ class ZenbotPlayer:
 
         checkpoint = resolve_checkpoint(checkpoint)
         self.reference = Path(reference)
-        self.policy_label = f"Zenbot | {Path(checkpoint).parents[2].name}/{Path(checkpoint).parents[1].name}"
+        self.checkpoint = checkpoint
         self.native = ZenbotNative(reference, checkpoint, seed)
         if not use_plan_cache and self.native.native_tracking is not None:
             self.native.native_tracking.db.pop("cache_state", None)
@@ -41,13 +41,56 @@ class ZenbotPlayer:
                         for i in range(getattr(self.native.model,total))]
             if screen != physical:
                 raise ValueError(f"Zenbot visual and physical {field} order differ")
+        self.chest = self.model.body(zenbot.TORSO).id
         self.reset(trial)
+
+    @property
+    def policy_label(self):
+        return f"Zenbot | {self.checkpoint.parents[1].name}/{self.checkpoint.name}"
+
+    def follow_checkpoint(self, link):
+        """Reload a retargeted checkpoint symlink in the existing simulated world."""
+        attempted = None
+
+        def poll():
+            nonlocal attempted
+            try:
+                target = link.resolve(strict=True)
+                if target == self.checkpoint:
+                    return
+                signature = (target, target.stat().st_mtime_ns)
+                if signature == attempted:
+                    return
+                attempted = signature
+                self.native.replace_policy(target)
+                self.checkpoint = target
+                print(f"Loaded {target} at simulation time {self.data.time:.2f} s", flush=True)
+            except FileNotFoundError:
+                pass  # An updated symlink target can still be in the process of being saved.
+            except (OSError, ValueError) as error:
+                print(f"Could not load the selected policy: {error}", flush=True)
+        return poll
 
     def update_view(self):
         self.data.qpos[:] = self.native.data.qpos
         self.data.qvel[:] = self.native.data.qvel
         self.data.time = self.native.data.time
         mujoco.mj_forward(self.model,self.data)
+
+    def measurements(self):
+        """Live pose at the displayed frame and measured foot loads from the last policy step."""
+        x, y, z = self.data.xmat[self.chest].reshape(3, 3)[:, 0]
+        pitch = np.degrees(np.arctan2(-z, np.hypot(x, y)))
+        joints = self.data.qpos[7:]
+        mae = np.degrees(np.abs(joints - zenbot.DEFAULT_Q).mean())
+        loads = getattr(self.native, "support_load", None)
+        foot = "n/a"
+        if self.data.time > 0. and loads is not None:
+            feet = loads[:2]
+            if len(feet) == 2 and np.isfinite(feet).all():
+                foot = f"L {feet[0]:.1%}   R {feet[1]:.1%} BW"
+        return (f"Chest pitch (+forward) {pitch:+.1f} deg   |   Joint MAE vs default {mae:.1f} deg\n"
+                f"Pelvis height {self.data.qpos[2]:.3f} m   |   Foot load {foot}")
 
     def reset(self, trial):
         if not 0 <= trial < len(self.names):
@@ -115,14 +158,16 @@ def record(player, path, seconds):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--checkpoint",type=Path,default=RELEASE)
+    p.add_argument("--checkpoint",type=Path,default=RELEASE,help="Policy file or a live symlink to the selected policy")
     p.add_argument("--reference",type=Path,default=REFERENCE)
     p.add_argument("--trial",type=int,default=0)
     p.add_argument("--seed",type=int,default=42)
     p.add_argument("--no-plan-cache", action="store_true", help="Recompute the motor plan from the current measured state")
     p.add_argument("--video",type=Path,help="Render a real-time two-panel MP4 instead of opening a window")
     p.add_argument("--seconds",type=float,default=12.)
+    p.add_argument("--play", action="store_true", help="Start the live viewer in playback mode")
     args=p.parse_args()
+    checkpoint_link = args.checkpoint.absolute() if args.checkpoint.is_symlink() else None
     try:
         args.checkpoint = resolve_checkpoint(args.checkpoint)
     except (OSError, ValueError) as error:
@@ -135,7 +180,9 @@ def main():
     if args.video:
         record(player,args.video,args.seconds)
     else:
-        run(player, lambda: player.native.support_load[2:4] if player.data.time else (0.0, 0.0))
+        run(player, lambda: player.native.support_load[2:4] if player.data.time else (0.0, 0.0),
+            play=args.play, poll_policy=player.follow_checkpoint(checkpoint_link) if checkpoint_link else None,
+            measurements=player.measurements)
 
 
 if __name__ == "__main__":

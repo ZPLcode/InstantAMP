@@ -73,41 +73,65 @@ def gather(buf, rows, envs):
     return {k: (v[rows, envs].astype(jnp.float32) if v.dtype == jnp.float16 else v[rows, envs]) for k, v in buf.items() if k not in ("ptr", "size")}
 
 
-def sample_windows(buf, key, B: int, k: int, recent: int = 0, envs=None, recovery_lengths=None):
+def sample_windows(buf, key, B: int, k: int, recent: int = 0, envs=None, recovery_lengths=None, recovery_only=False,
+                   *, recovery_steps: int = 0):
     """B windows of k consecutive transitions, each from one env: (B, k, ...), and their validity mask (B, k). Transition j counts
     while transitions 0..j are finite and no earlier transition in the window ended its env's run of consecutive states (the
     env was done, or the next transition starts elsewhere, for example after a push). The transition after the window is read
     too, so the sampled ages leave room for it. recent > 0: only windows that start among the newest `recent` steps; envs: only these
-    envs (a static array of indices)."""
+    envs (a static array of indices). With recovery_only and recovery_steps, the opening of a recovery is padded
+    with its entry state. These fixed-length pose windows are for the motion discriminator."""
     kt, ke = jax.random.split(key)
     N = buf["s_qpos"].shape[1]
     n = buf["size"] - k
     t0 = _uniform_int(kt, n, B) if recent <= 0 else jnp.maximum(n - recent, 0) + _uniform_int(kt, jnp.minimum(n, recent), B)
     env = jax.random.randint(ke, (B,), 0, N) if envs is None else jnp.asarray(envs)[jax.random.randint(ke, (B,), 0, len(envs))]
-    if recovery_lengths is not None:
+    pad_opening = recovery_only and recovery_steps > 0
+    if recovery_lengths is not None or recovery_only:
         # Sample the end of a complete recovery window, within the most recent filled rows.
         available_envs = jnp.arange(N) if envs is None else jnp.asarray(envs)
         age = (jnp.arange(_T(buf)) - (buf["ptr"] - buf["size"])) % _T(buf)
-        clip = buf["reference_clip"][:, available_envs]
         end = buf["t"][:, available_envs]
-        source = buf["reference_start"][:, available_envs] + end
-        oldest = jnp.maximum(k - 1, buf["size"] - recent - 1) if recent else k - 1
-        eligible = ((age >= oldest) & (age < buf["size"] - 1))[:, None]
-        eligible &= (clip >= 0) & (end >= k-1) & (source < recovery_lengths[jnp.maximum(0, clip)])
+        if pad_opening:
+            remaining = buf["recovery_left"][:, available_envs]
+            # A floor reset and an actual fall during gait each begin a fresh pose history.
+            history = jnp.clip(jnp.minimum(end, recovery_steps - remaining), 0, k - 1)
+            oldest = jnp.maximum(buf["size"] - recent, 0) if recent else 0
+            eligible = ((age >= oldest) & (age < buf["size"]))[:, None] & (age[:, None] >= history)
+            eligible &= buf["size"] >= k
+        else:
+            oldest = jnp.maximum(k - 1, buf["size"] - recent - 1) if recent else k - 1
+            eligible = ((age >= oldest) & (age < buf["size"] - 1))[:, None]
+            eligible &= end >= k-1
+        if recovery_only:
+            eligible &= buf["recovery_left"][:, available_envs] > 0
+        else:
+            clip = buf["reference_clip"][:, available_envs]
+            source = buf["reference_start"][:, available_envs] + end
+            eligible &= (clip >= 0) & (source < recovery_lengths[jnp.maximum(0, clip)])
         prefix = jnp.cumsum(eligible.reshape(-1), dtype=jnp.int32)
         selected = jnp.searchsorted(prefix, jax.random.randint(jax.random.fold_in(key, 1), (B,), 0,
                                                                jnp.maximum(prefix[-1], 1)), side="right")
         row, col = jnp.divmod(jnp.minimum(selected, prefix.size-1), len(available_envs))
         t0 = jnp.where(prefix[-1] > 0, age[row] - (k-1), t0)
         env = jnp.where(prefix[-1] > 0, available_envs[col], env)
-    rows = _rows(buf, t0[:, None] + jnp.arange(k + 1))
+    ages = t0[:, None] + jnp.arange(k + 1)
+    if pad_opening:
+        entry = age[row] - history[row, col]
+        ages = jnp.clip(ages, entry[:, None], buf["size"] - 1)
+    rows = _rows(buf, ages)
     w = gather(buf, rows, env[:, None])
     nxt_q, nxt_v = w["s_qpos"][:, 1:], w["s_qvel"][:, 1:]
     jump = (jnp.abs(nxt_q - w["s1_qpos"][:, :-1]).max(-1) > 1e-5) | (jnp.abs(nxt_v - w["s1_qvel"][:, :-1]).max(-1) > 1e-5)
     cut = (w["done"][:, :-1] > 0) | jump
+    if pad_opening:
+        # Repeating a pose produces no transition. Check continuity only across physical steps.
+        cut &= ages[:, :-1] != ages[:, 1:]
     w = {key_: v[:, :-1] for key_, v in w.items()}
     ok = jnp.cumprod(w["ok"], -1)
     w["mask"] = ok * jnp.cumprod(jnp.concatenate((jnp.ones((B, 1)), 1 - cut[:, :-1].astype(jnp.float32)), -1), -1)
+    if pad_opening:
+        w["mask"] *= prefix[-1] > 0
     return w
 
 

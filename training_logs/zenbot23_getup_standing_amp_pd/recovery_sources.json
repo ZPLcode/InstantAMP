@@ -1,0 +1,32 @@
+{
+  "source_bank": "source/legged_lab/legged_lab/data/MotionData/zenbot_23dof_43kg/amp/get_up_frax",
+  "source_manifest_sha256": "eea2c8bdfd00f86afa835930a788a56335d0b56761b951e1c9d132fd2b9a6ace",
+  "original_bvh": "fallAndGetUp1_subject1.bvh",
+  "original_bvh_sha256": "8187569b98c3642fb1d491ad9fc483077804d8a6be2bc2e14180dfb26d56f495",
+  "source_files_sha256": {
+    "fallAndGetUp1_subject1_458_565.pkl": "deb63d71299e7c72ce97702965c9c8b7c5f6a846377eaa0911da459ea16be5af",
+    "fallAndGetUp1_subject1_670_785.pkl": "9e0374c245ae3f3c278ba2fcfe46c3939a50f2e61a39a1acec4e441881a95fc5",
+    "fallAndGetUp1_subject1_845_936.pkl": "998eae141c871e5f5655a8f6fda1c5dcc000739adfeed778010f37dbf0c09e0a",
+    "fallAndGetUp1_subject1_1058_1140.pkl": "ba61b4ed44d3f53c4530d7c8fe9961bf2be7fd85c3f02280764195e42b83297f",
+    "fallAndGetUp1_subject1_1262_1320.pkl": "94041649f230548981ccced4c0bed638aa5cec8e861d59fb44ec90ffd4bf8295",
+    "fallAndGetUp1_subject1_1395_1461.pkl": "bb2e5c43d24f6fd232434f392e57711f20b7682646ea001365221729def1af61",
+    "fallAndGetUp1_subject1_1584_1684.pkl": "fcfcff414b8ffcabfddb723a6a5d89b8770a51a243d63c74630d82a0e38d8a71",
+    "fallAndGetUp1_subject1_1808_1916.pkl": "d385610363b0f5ffc7c67603ad2d71f14c7bcc96b166da238e16ae6f6be54ff3",
+    "fallAndGetUp1_subject1_2088_2210.pkl": "b6b02a1b13697ce6014f279bac64663809ea488ff1f0dc78eea3b2080e041fa2",
+    "fallAndGetUp1_subject1_2301_2391.pkl": "172d240e30aece38a4747448c51bce32005de400a22f613b0e84c5abdf0390e3",
+    "fallAndGetUp1_subject1_4873_4962.pkl": "28e08f59c7716b484de08b47698aeedc6b89c5e3a59dffd17401c89f982c2cf3"
+  },
+  "prepared_files_sha256": {
+    "fallAndGetUp1_subject1_1058_1140.npz": "eacdf7dd961fb0b6465592e191039fc6e64d39d0e5e2b3f162e04dbe3c6c501b",
+    "fallAndGetUp1_subject1_1262_1320.npz": "4094fb5de988b11d6318f54912c3e9c077b8c0e1dce230b4be771e734cb6fb70",
+    "fallAndGetUp1_subject1_1395_1461.npz": "8edf2d1292b50990cdbdda1cb22a03b5e6ae9d8a09577c9980da356ef9a1e103",
+    "fallAndGetUp1_subject1_1584_1684.npz": "c65162e888297de92261a44b4912dc04537bd257340c15d9bbea01da8d3daa72",
+    "fallAndGetUp1_subject1_1808_1916.npz": "dd88c8978b978e07571e96808302bb6ba8a7356c4bbe9787c740d724fbfde724",
+    "fallAndGetUp1_subject1_2088_2210.npz": "39e71a1cf7574616cef2730c76afbfa9077a87aa5d59f77c583892ae62f99546",
+    "fallAndGetUp1_subject1_2301_2391.npz": "6f760324b59661433c719ff66bb7a378a3920ff89c63dd213c91de0cb07622c9",
+    "fallAndGetUp1_subject1_458_565.npz": "fddd55990dc21f4bc96e25384a878e4c1beac3fb30cab5e18d3b753cd23fb28e",
+    "fallAndGetUp1_subject1_4873_4962.npz": "b7c6869c93117224e6c1b00ccafbab190d9eaec56b6444caa1356215c5e2e7ce",
+    "fallAndGetUp1_subject1_670_785.npz": "7c5f4625c3816a72419e947ab7df841d5c8b72742e2eafe251d5c2e6e7f7716c",
+    "fallAndGetUp1_subject1_845_936.npz": "57a510e722353850694603396b6619fcc772cc19de67edf5a348b68c75619865"
+  }
+}

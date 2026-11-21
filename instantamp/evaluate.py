@@ -26,9 +26,9 @@ import numpy as np
 
 from . import env, nets, zenbot
 from .stability import stability
-from .inference import load, policy_memory, policy_output, policy_step
+from .inference import load, policy_memory, policy_step, reset_policy_memory
 from .rot import mv3, quat_to_mat, tr3
-from .sim import Sim, robot_profile, unflatten
+from .sim import NCONMAX, NJMAX, Sim, robot_profile, unflatten
 
 
 def fallen_starts(directory, lift=zenbot.RESET_LIFT, protocol="fallen"):
@@ -60,7 +60,8 @@ def evaluate_recovery(cfg, paths, args):
     if protocol != "fallen" and cfg["robot"] != "g1_getup":
         raise ValueError("Source PLAY starts apply to the named G1 get-up task")
     names, poses, velocities = fallen_starts(cfg["floor_dir"], robot.RESET_LIFT, protocol)
-    sim = Sim(len(names), cfg["nconmax"], cfg["njmax"], floor_dir=cfg["floor_dir"], robot=cfg["robot"],
+    sim = Sim(len(names), cfg.get("nconmax", NCONMAX), cfg.get("njmax", NJMAX), floor_dir=cfg["floor_dir"], robot=cfg["robot"],
+              clip_pd_targets=bool(cfg.get("clip_pd_targets", False)),
               random_start=False, assist_newtons=0., obs_noise=randomized, randomize_world=randomized)
     velocities = sim.reference_velocity(poses, velocities)
     reference = zenbot.RecoveryReference(cfg["floor_dir"], sim.key_positions, sim.J)
@@ -248,14 +249,17 @@ def main(argv=None):
         p.error("--trajectories is available for fixed-start recovery evaluations")
     sim = Sim(a.n, cfg.get("nconmax", 64), cfg.get("njmax", 640), cfg["walk_dir"], cfg["floor_dir"], True, 123, cfg["reset_floor"], cfg["prob_shove"],
               bool(cfg["push"]), robot=cfg.get("robot", "g1"), g1_style=bool(cfg.get("g1_style", 0)),
+              recovery_amp_seconds=cfg.get("recovery_amp_seconds", 0.), fall_push_speed=cfg.get("fall_push_speed", 0.),
+              legged_support=cfg.get("recovery_amp_loss") == "legged_support",
+              support_rsi=cfg.get("support_rsi", 0.),
               getup_rise_weight=cfg.get("getup_rise_weight", -0.25),
               g1_support_friction=bool(cfg.get("g1_support_friction", 0)), getup_reset_frames=cfg.get("getup_reset_frames", 20),
-              g1_phase_amp=bool(cfg.get("g1_phase_share", 0.)))  # fmt: skip
+              g1_phase_amp=bool(cfg.get("g1_phase_share", 0.)), zenbot_episode_steps=cfg.get("zenbot_episode_steps", 500))  # fmt: skip
 
     def run(pi, norm, ode, key):
         def body(carry, k):
-            s, acc = carry
-            out = policy_output(pi, norm, s.obs, a.obs_clip)
+            s, memory, acc = carry
+            out, memory = policy_step(pi, norm, s.obs, memory, a.obs_clip)
             act = nets.ode_step(out, s.a_ode, *ode) if ode is not None else out
             s1, tr = sim.step(s, act)
             S1 = unflatten(tr.qpos1, tr.qvel1)
@@ -266,17 +270,20 @@ def main(argv=None):
             err = jnp.linalg.norm(vb - s.c_obs[:, :2], axis=-1)
             fin = (tr.terminated | tr.truncated).astype(jnp.float32)
             up_ep, down_ep = fin * ~s.down, fin * s.down
-            rose = s.was_up | sim.is_up(S1[0][:, 2], S1[1])
+            rose = sim.next_upright(s.was_up, S1[0][:, 2], S1[1])
+            fell = acc["fell"] | (s.was_up & ~rose) | tr.terminated
             acc = {"parts": acc["parts"] + tr.parts.sum(0), "steps": acc["steps"] + a.n,
-                   "ep_up": acc["ep_up"] + up_ep.sum(), "fall_up": acc["fall_up"] + (up_ep * tr.terminated).sum(),
+                   "ep_up": acc["ep_up"] + up_ep.sum(), "fall_up": acc["fall_up"] + (up_ep * fell).sum(),
+                   "fell": fell & ~(tr.terminated | tr.truncated),
                    "ep_down": acc["ep_down"] + down_ep.sum(), "rose": acc["rose"] + (down_ep * rose).sum(),
                    "err": acc["err"] + (err * upright).sum(), "n_err": acc["n_err"] + upright.sum()}  # fmt: skip
-            return (s1, acc), None
+            return (s1, reset_policy_memory(memory, tr.terminated | tr.truncated), acc), None
 
         s = sim.init(key)
         z = jnp.zeros(())
-        acc = {"parts": jnp.zeros((len(env.TERMS),)), "steps": z, "ep_up": z, "fall_up": z, "ep_down": z, "rose": z, "err": z, "n_err": z}
-        (_, acc), _ = jax.lax.scan(body, (s, acc), jax.random.split(key, int(a.seconds / env.DT)))
+        acc = {"parts": jnp.zeros((len(sim.terms),)), "steps": z, "ep_up": z, "fall_up": z,
+               "fell": jnp.zeros(a.n, bool), "ep_down": z, "rose": z, "err": z, "n_err": z}
+        (_, _, acc), _ = jax.lax.scan(body, (s, policy_memory(pi, s.obs), acc), jax.random.split(key, int(a.seconds / env.DT)))
         return acc
 
     run_j = jax.jit(run, static_argnums=(2,))
@@ -288,7 +295,7 @@ def main(argv=None):
         acc = jax.device_get(run_j(pi, norm, ode, jax.random.PRNGKey(0)))
         per_s = acc["parts"] / (acc["steps"] * env.DT)  # weighted terms per env-second
         rec = {"ckpt": os.path.basename(path), **json.load(open(path[:-4] + ".json")),
-               **{f"rew_{k}": float(v) for k, v in zip(env.TERMS, per_s)},
+               **{f"rew_{k}": float(v) for k, v in zip(sim.terms, per_s)},
                "fall_rate": float(acc["fall_up"] / max(acc["ep_up"], 1)), "getup_rate": float(acc["rose"] / max(acc["ep_down"], 1)),
                "down_episodes": float(acc["ep_down"]), "vel_err": float(acc["err"] / max(acc["n_err"], 1))}  # fmt: skip
         out.write(json.dumps(rec) + "\n")

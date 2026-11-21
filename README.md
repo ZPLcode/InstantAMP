@@ -620,7 +620,70 @@ python tools/track_g1_reference.py export /path/to/ckpt_latest.pt g1_reference_a
   --seconds 6 --out runs/g1_actor_reference.npz
 ```
 
+## Zenbot 23-DoF walk, run and recover
+
+`zenbot23_walk_run_recovery` trains one velocity-conditioned actor on the 43.0678 kg robot. The locomotion discriminator samples the positive-weight clips in motion_train's Zenbot AMP configuration with its published weights. The default recovery discriminator samples the eleven native Zenbot `get_up_frax` clips in LeggedLab with equal clip probability. Both banks use 50 Hz motion data with named joints reordered into the Zenbot MJCF.
+
+```bash
+.venv/bin/python -m tools.prepare_zenbot /path/to/motion_train --legged-lab /path/to/legged_lab --locomotion
+.venv/bin/python -m instantamp.train --robot zenbot23_walk_run_recovery --log_dir runs/zenbot_mixed
+JAX_PLATFORMS=cpu .venv/bin/python -m tools.evaluate_zenbot_walk_recovery runs/zenbot_mixed
+```
+
+The default reset mix is 35% floor starts and 65% gait starts. Floor resets sample non-upright AMP motion states. After a fall, the recovery discriminator scores the robot through the ground phase and its transition to balance. Its ten poses span 0.54 s and include hand, knee and foot heights. The least-squares discriminator compares independently sampled expert and policy windows. During the first four seconds the low-height and tilt penalty is zero. At the end of this interval a balance check penalizes an unfinished recovery. A robot that remains down then receives one quarter of the original low-height and tilt cost. The single penalty for falling during gait still applies. Velocity rewards resume once the scoring interval ends and the robot is upright. Set `--recovery_amp_seconds 0` to select the legacy gait-style discriminator and height-gated rewards. The exported actor uses only its IMU, joint, previous-action and velocity-command history. Training and evaluation use zero lifting force.
+
+For the Wasserstein recovery discriminator, set `--recovery_amp_loss wasserstein`. It independently draws expert windows from a broad pelvis-height range shared with each policy window. The optional `--fall_push_speed` training setting adds random horizontal velocity disturbances to upright robots outside the recovery interval. The value gives the maximum disturbance in m/s.
+
+The `legged_support` recovery mode uses the LeggedLab Zenbot get-up discriminator layout. Ten consecutive 50 Hz frames contain local pelvis orientation, body angular velocity, 23 joint angles and velocities, and six landmarks in the pelvis frame. A second adversarial discriminator reads longer windows of sole, knee and palm motion, using the MJCF collision surfaces to measure floor clearance. Both discriminate independently sampled motion windows. The low-pose task rewards use the LeggedLab regularizers and standing terms activate above 0.58 m. Floor starts use the eleven opening poses with the source 2 cm clearance. `--support_rsi` sets the fraction that instead start at intermediate non-upright demonstration states. The actor receives the velocity command and its own sensor history.
+
+For a run with a frozen native discriminator, pass a converted checkpoint to `--legged_prior_file`. The converter maps the Isaac joint order and normalizer into the native model. Training extends the discriminator reward smoothly below the source cutoff. The independent evaluator reports the original LeggedLab score. The optional `--recovery_base_actor` enables two AMP policy branches with an IMU-based blend. Without this option one policy network learns both gait and recovery.
+
+The fixed evaluation commands 1.0 m/s and 2.5 m/s from three walking and three running reference phases. It also commands 1.0 m/s from the first frame of each recovery clip. Two additional trials apply a 400 N lateral torso push for 0.2 s and check whether gait resumes after a measured fall. Set `--seconds 14 --push-at 6` to allow six seconds of gait before the push. The report records sustained standing separately from recovery followed by walking. Gait success requires sustained upright posture, alternating single support and speed tracking over the last two seconds. Running also requires two flight intervals of at least 10 ms, measured at the 200 Hz physics rate. Use `--traces DIR` to save physical trajectories and limb contact loads. Offline rise metrics compare the policy with the source at its original speed and measure how long the hands and knees carry at least 8% of body weight.
+
+The manual player opens the selected controller in `runs/zenbot23_leggedlab_prior_recovery` when available. Start walking with `JAX_PLATFORMS=cpu .venv/bin/python -m tools.play_zenbot_walk_recovery --speed 1.0 --play`. W/S adjust the forward command by 0.1 m/s, X sets it to zero, and Space pauses or resumes the simulation.
+
+The selected 15,250-update checkpoint started from the original 10,000-update learner. That fine-tuning run used the least-squares recovery discriminator, 45% floor resets, `--pi_lr 0.000018 --imag_down 0.15 --ppo_frac 0.2 --ppo_len 16 --warmup_steps 64`. Its local `config.json` records all training settings. The three-seed comparison and random-direction push trials are in `runs/zenbot23_amp_style/amp_style_results_15250.json`.
+
+The optional packer combines a jointly trained ODE actor with a motion_train `ZENBOT-AMP` gait export. The packer reads the 23 named joints, maps its three term-major frames to the actor's recent history, and checks the translated gait network against the source ONNX graph. During rollout, tilt selects recovery. The gait actor reads the velocity command and sensor history. The combined 5,400-update motion_train gait and 17,250-update recovery export preserves the two original recovery branches. It hands control back to them below a pelvis upright projection of 0.8. After measuring 0.36 s of quiet upright posture, it allows 1.2 s to settle under the recovery controller and blends into the gait actor over the next 1.2 s. Reproduce this handoff with `--handoff-frames 60 --fall-upright .8` when packing the gait and recovery exports. The packer needs NumPy and ONNX. The resulting archive runs with the standard InstantAMP inference dependencies.
+
+```bash
+python -m tools.pack_zenbot_walk_recovery runs/zenbot_mixed/ckpt/0015.npz /path/to/policy.onnx /path/to/motion_train runs/zenbot_mixed/controller/combined.npz
+JAX_PLATFORMS=cpu .venv/bin/python -m tools.evaluate_zenbot_walk_recovery runs/zenbot_mixed --checkpoint runs/zenbot_mixed/controller/combined.npz
+```
+
 ## Zenbot 23-DoF get-up
+
+### Standalone AMP recovery and standing
+
+One policy and one shared AMP discriminator cover getting up and standing. The two expert banks contain the eleven native LeggedLab get-ups and six free-base MuJoCo recordings of the Zenbot balancing close to its default joint angles with its torso vertical. Each independent window contains ten ordered poses spanning 0.54 seconds, including joint velocities and foot, knee and hand clearances. The full actor learns from unassisted MuJoCo rollouts using PPO.
+
+During training the discriminator scores each window under both conditions. As the robot gets its weight onto its feet, its style reward blends from the get-up score to the standing score. The blend reaches one after a continuous second within the standing height and tilt limits, with the feet supporting at least half the robot's weight for 45 of the last 50 control steps. There is also a task reward for maintaining foot support. The actor observes the robot's sensor history. The training-only discriminator receives the condition and motion window.
+
+Standalone Zenbot get-up training clamps each delayed PD position target to the 23 MJCF hinge ranges before applying torque. PPO and the five-frame actor history retain the raw policy action. The training log reports the fraction of requested joint targets outside those ranges in `pd_request_outside_fraction`. Native playback reads the target setting from the checkpoint. Use `--clip_pd_targets 0` to reproduce earlier training.
+
+Use `--standing_amp 0` to reproduce the earlier hand-designed standing rewards. In that mode `--default_stand 1 --support_weight 8` scores default angles and vertical posture. `--default_stand 0 --support_weight 8` credits sustained support alongside the original quiet-standing term. `--support_weight 0` selects the original smooth transition.
+
+Both 50 Hz training banks are included. To retrain from the same initial actor in a fresh output directory, use the command below. The preparation tools can regenerate the banks from the source motions and robot model. [Get-up motions](data/zenbot23_walk_run_recovery/recovery) · [Standing motions and measurements](data/zenbot23_walk_run_recovery/standing) · [Source checksums](training_logs/zenbot23_getup_standing_amp_pd/recovery_sources.json)
+
+```bash
+python -m instantamp.train_zenbot_getup_stand_amp --init_policy runs/zenbot23_getup_default_from1000/ckpt/001000.npz --log_dir runs/zenbot23_getup_standing_amp_retrain --iterations 5000
+```
+
+To start from an existing LeggedLab PPO/AMP actor, run `python -m tools.convert_zenbot_getup_actor MODEL.pt MANIFEST.json ACTOR.npz` and pass `--init_policy ACTOR.npz` to the trainer. Native evaluation records the first sustained rise, subsequent falls, support motion, and whether the robot held a quiet stance for the final two seconds.
+
+For a persistent MuJoCo window, pass a symlink to a standalone Zenbot policy as `--checkpoint` to `python -m tools.play_zenbot_getup --play`. Pointing the symlink to another compatible checkpoint loads its weights into the running simulation. Space pauses or resumes, R restarts the current pose, and N selects the next starting pose.
+
+#### Standing AMP checkpoint at iteration 2575
+
+Training stopped at 94,924,800 environment steps. The actor uses bounded PD targets, five actuator-group delays and zero assistance. It rose in 21 of 22 native MuJoCo trials with seed 42 and maintained a quiet stance for the final two seconds in 20. All 11 perturbed opening poses with seed 101 passed both checks. For the seed 42 holds, the median absolute chest pitch was 19.6 degrees and the median joint error from the default stance was 41.8 degrees. The policy still deviates substantially from the expert standing poses. [Training log](training_logs/zenbot23_getup_standing_amp_pd/log.jsonl) · [Checkpoint comparisons](training_logs/zenbot23_getup_standing_amp_pd/evaluations.json) · [Final MuJoCo video](runs/zenbot23_getup_standing_amp_pd/eval_002575/mujoco_measurements_trial08.mp4)
+
+To play the saved policy, install the 26 Zenbot visual meshes and launch trial 8 with the included recovery motions. The overlay shows chest pitch, joint error, pelvis height and foot loads. [Mesh setup](#prepare-the-g1-and-zenbot-get-up-releases)
+
+```bash
+python -m tools.play_zenbot_getup --checkpoint runs/zenbot23_getup_standing_amp_pd/ckpt/002575.npz --reference data/zenbot23_walk_run_recovery/recovery --seed 42 --trial 8 --play
+```
+
+### Zenbot recovery releases
 
 The `zenbot23_getup` task uses the 43.0678308 kg articulation from
 `motion_train/robolab/data/robots/roboparty/zenbot`. The released policy uses [G1 get-up references retargeted to Zenbot](#prepare-the-g1-and-zenbot-get-up-releases). For a separate experiment using an existing native Zenbot `get_up_frax` database, the following commands prepare that database in its own directory and train with it.

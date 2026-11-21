@@ -17,7 +17,9 @@ LSGAN: the policy follows the reward's gradient through the world model, so the 
 from __future__ import annotations
 
 import glob
+import json
 import os
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -54,13 +56,83 @@ def frame(S, key_pos, joints=None):
     return jnp.concatenate((q[..., joints], qd[..., joints], mv3(tr3(R), w), -R[..., 2, :], mv3(tr3(yaw_mat(R))[..., None, :, :], key_pos - p[..., None, :]).reshape(*p.shape[:-1], -1)), -1)
 
 
+SUPPORT_FRAME_DIM = 22
+
+
+def gait_window(window, joints, stride, dt):
+    """Compute joint motion from sampled poses identically for mocap and simulated trajectories."""
+    samples = window[..., ::stride, :]
+    q = samples[..., :joints]
+    velocity = jnp.diff(q, axis=-2) / (stride * dt)
+    velocity = jnp.concatenate((velocity[..., :1, :], velocity), axis=-2)
+    return samples.at[..., joints:2*joints].set(velocity)
+
+
+SUPPORT_FEATURE_DIM = 52
+ORIENTED_SUPPORT_DIM = SUPPORT_FEATURE_DIM + 9
+
+
+def support_window(raw, dt, oriented=False):
+    """Embed a physical Zenbot pose sequence for the ground-support discriminator.
+
+    A raw frame contains pelvis height, body-frame gravity, six pelvis-relative
+    horizontal landmark positions in the heading frame, then six collision
+    clearances from forward kinematics. The order is feet, knees, hands.
+    The same finite differences and contact geometry apply to every window.
+    """
+    if raw.shape[-1] != SUPPORT_FRAME_DIM or raw.shape[-2] == 0 or dt <= 0:
+        raise ValueError("Expected a nonempty Zenbot support window with positive frame spacing")
+    pelvis = raw[..., :1]
+    gravity = raw[..., 1:4]
+    points = raw[..., 4:16].reshape(*raw.shape[:-1], 6, 2)
+    # The native motion clips can intersect the plane. Group contact and small
+    # penetrations together so depth below the ground cannot identify the source.
+    above = jnp.maximum(raw[..., 16:22] - .025, 0.)
+    clearance = jnp.tanh(above / .40)
+    proximity = 1. / (1. + jnp.square(above / .07))
+    bilateral = proximity[..., ::2] * proximity[..., 1::2]
+
+    def difference(sequence):
+        return jnp.diff(sequence, axis=-2, prepend=sequence[..., :1, :])
+
+    def distance(xy):
+        return jnp.sqrt(jnp.sum(jnp.square(xy), axis=-1) + 1e-6)
+
+    # Pelvis heading is ill-defined when its forward axis is vertical.
+    # Distances remain valid in those poses and across heading wraparounds.
+    heading_confidence = jnp.sqrt(jnp.maximum(1. - gravity[..., :1]**2, 1e-6))
+    xy = jnp.tanh(points.reshape(*raw.shape[:-1], 12) / .50) * heading_confidence
+    radius = distance(points)
+    hand_to_foot = distance(points[..., 4:6, :] - points[..., :2, :])
+    posture = jnp.concatenate((pelvis / .75, gravity), axis=-1)
+    rates = jnp.tanh(difference(jnp.concatenate((posture, clearance, radius, hand_to_foot), axis=-1)) / dt)
+
+    # Record what changed while the palms were planted. A stationary prone
+    # hold and raising the pelvis over planted hands have different windows.
+    hands = bilateral[..., 2:3]
+    preceding = jnp.concatenate((hands[..., :1, :], hands[..., :-1, :]), axis=-2)
+    planted = .5 * (preceding + hands)
+    elapsed = jnp.broadcast_to(jnp.arange(raw.shape[-2])[:, None] * dt, hands.shape)
+    changes = difference(jnp.concatenate((elapsed, pelvis, radius[..., :2].mean(-1, keepdims=True)), axis=-1))
+    during_support = jnp.tanh(jnp.cumsum(planted * changes, axis=-2) / .35)
+    features = jnp.concatenate((posture, xy, clearance, proximity, bilateral, rates, during_support), axis=-1)
+    if oriented:
+        # A palm behind a supine torso and one in front of a prone torso can
+        # have the same clearance. Let the discriminator learn this joint distribution.
+        palms = jnp.concatenate((proximity[..., 4:6], hands), -1)
+        palm_orientation = (palms[..., :, None] * gravity[..., None, :]).reshape(*raw.shape[:-1], 9)
+        features = jnp.concatenate((features, palm_orientation), -1)
+    return features
+
+
 class Demos:
     """The frame features of all demo clips, and the start of every window of `frames` frames that stays inside a clip."""
 
-    def __init__(self, directory: str, sim, frames: int):
+    def __init__(self, directory: str, sim, frames: int, *, per_clip=False, frame_fn=None):
         from . import g1_getup
         self.g1_bank = g1_getup.load_reference(directory) if sim.robot is g1_getup else None
         self.amp_frame = sim.amp_frame
+        self.frame_fn = frame_fn
         files = sorted(glob.glob(os.path.join(directory, "*.npz")))
         assert files, f"no clips in {directory} (bash tools/download_data.sh)"
         feats, starts, n = [], [], 0
@@ -71,18 +143,30 @@ class Demos:
             R = quat_to_mat(jnp.stack([w, x, y, z], -1))
             assert d["dof_pos"].shape[1] == sim.J, f
             q, qd = jnp.asarray(d["dof_pos"]), jnp.asarray(d["dof_vel"])
-            S = (jnp.asarray(d["root_pos"]), R, None, jnp.asarray(d["root_ang_vel"]), q, qd)
-            feats.append(sim.amp_frame(S, d.get("key_body_pos")))
+            S = (jnp.asarray(d["root_pos"]), R, jnp.asarray(d["root_lin_vel"]) if frame_fn is not None or getattr(sim, "mixed", False) else None,
+                 jnp.asarray(d["root_ang_vel"]), q, qd)
+            feats.append(frame_fn(S) if frame_fn is not None else sim.amp_frame(S, d.get("key_body_pos")))
             starts.append(np.arange(n, n + len(x) - frames + 1))
             n += len(x)
         self.frames = jnp.concatenate(feats, 0)
         self.starts = jnp.asarray(np.concatenate(starts), jnp.int32)
         self.window = frames
-        self.clip_lengths = jnp.array([len(a) for a in starts]) if sim.recovery else None
+        self.clip_lengths = jnp.array([len(a) for a in starts]) if sim.recovery or per_clip else None
+        self.clip_probabilities = None
         if self.clip_lengths is not None:
             if min(map(len, starts)) < 1:
                 raise ValueError("A get-up clip is shorter than the discriminator window")
             self.clip_offsets = jnp.array([a[0] for a in starts])
+            sampling = Path(directory) / "sampling.json"
+            if per_clip and sampling.exists():
+                weights = json.loads(sampling.read_text())["weights"]
+                names = [Path(f).stem for f in files]
+                if set(weights) != set(names):
+                    raise ValueError(f"Sampling manifest and motion files differ in {directory}")
+                values = np.asarray([weights[name] for name in names], np.float32)
+                if not np.isfinite(values).all() or np.any(values <= 0):
+                    raise ValueError(f"Invalid clip weights in {sampling}")
+                self.clip_probabilities = jnp.asarray(values / values.sum())
 
     def sample(self, key, B):
         """Sample recovery windows uniformly by clip, or locomotion windows uniformly by start frame."""
@@ -90,13 +174,50 @@ class Demos:
             from .g1_getup import sample_reference
             f = sample_reference(self.g1_bank, key, B, self.window)
             state = (f["pos"], quat_to_mat(f["quat"]), f["v"], f["w"], f["q"], f["qd"])
-            return self.amp_frame(state, f.get("points"))
+            return self.frame_fn(state) if self.frame_fn is not None else self.amp_frame(state, f.get("points"))
         i = self.starts[jax.random.randint(key, (B,), 0, len(self.starts))]
         if self.clip_lengths is not None:
             kc, kt = jax.random.split(key)
             clip = jax.random.randint(kc, (B,), 0, len(self.clip_lengths))
+            if self.clip_probabilities is not None:
+                clip = jax.random.choice(kc, len(self.clip_lengths), (B,), p=self.clip_probabilities)
             i = self.clip_offsets[clip] + jax.random.randint(kt, (B,), 0, self.clip_lengths[clip])
         return self.frames[i[:, None] + jnp.arange(self.window)]
+
+    def sample_opening_windows(self, key, B):
+        """Draw independent clip/end-frame samples, including short histories at clip start."""
+        if self.clip_lengths is None:
+            raise ValueError("Opening-window sampling requires per-clip motion data")
+        kc, kt = jax.random.split(key)
+        clip = jax.random.choice(kc, len(self.clip_lengths), (B,), p=self.clip_probabilities)
+        frame_counts = self.clip_lengths[clip] + self.window - 1
+        end = jax.random.randint(kt, (B,), 0, frame_counts)
+        history = end[:, None] + jnp.arange(1 - self.window, 1)
+        return self.frames[self.clip_offsets[clip, None] + jnp.maximum(history, 0)]
+
+    def prepare_ground_heights(self):
+        """Group recovery windows by coarse pelvis height, retaining equal clip weights within each group."""
+        starts = np.asarray(self.starts)
+        height = np.asarray(self.frames)[starts + self.window - 1, -4]
+        groups = np.searchsorted([.35, .55], height)
+        clip_id = np.repeat(np.arange(len(self.clip_lengths)), np.asarray(self.clip_lengths))
+        cdfs = []
+        for group in range(3):
+            chosen = groups == group
+            if not chosen.any():
+                chosen = np.ones(len(starts), dtype=bool)
+            counts = np.bincount(clip_id[chosen], minlength=len(self.clip_lengths))
+            weight = chosen / np.maximum(counts[clip_id], 1)
+            cdfs.append(np.cumsum(weight) / weight.sum())
+        self.height_cdf = jnp.asarray(np.stack(cdfs), jnp.float32)
+
+    def sample_ground_heights(self, key, heights):
+        # Each independent expert draw can come from any clip in the height group.
+        group = (heights > .35).astype(jnp.int32) + (heights > .55).astype(jnp.int32)
+        u = jax.random.uniform(key, heights.shape)
+        indices = jax.vmap(lambda cdf: jnp.searchsorted(cdf, u, side="right"))(self.height_cdf)
+        start = self.starts[jnp.minimum(indices[group, jnp.arange(len(u))], len(self.starts)-1)]
+        return self.frames[start[:, None] + jnp.arange(self.window)]
 
 
 # ---------------------------------------------------------------- the critic
@@ -180,7 +301,7 @@ def recovery_loss(net, norm, demo, robot, wt, key, leggedlab=False):
     return loss, {"d_demo": dd.mean(), "d_robot": (wt * dr).sum() / n, "gp": gp}
 
 
-def train_step(st, demo, robot, wt, key, lr: float, recovery=False, leggedlab=False):
+def train_step(st, demo, robot, wt, key, lr: float, recovery=False, leggedlab=False, include_demo_norm=False):
     """One critic step on a batch of demo and robot windows; the robot windows with weight 0 take no part."""
     args = (st["net"], st["norm"], demo, robot, wt, key)
     if recovery:
@@ -198,7 +319,7 @@ def train_step(st, demo, robot, wt, key, lr: float, recovery=False, leggedlab=Fa
     # update_normalization and applies Adam directly to the discriminator.
     norm = nets.rn_update(st["norm"], robot.reshape(-1, robot.shape[-1]), weights=jnp.repeat(wt, robot.shape[1]),
                           max_count=1e8 if leggedlab else 2e8)
-    if recovery and not leggedlab:
+    if (recovery and not leggedlab) or include_demo_norm:
         norm = nets.rn_update(norm, demo.reshape(-1, demo.shape[-1]))
     first = (st["mu"][0] == 0) & (st["mu"][1] == 0)
     now = jnp.stack([aux["d_demo"], aux["d_robot"]])

@@ -12,6 +12,7 @@ from . import env, nets
 from .g1_rise import LocalRise
 from .g1_capture import CaptureGate
 from . import g1_inplace
+from .zenbot_ground_policy import ZenbotGroundPolicy, combine as combine_zenbot_increments
 from .zenbot_rise import ZenbotLibrary, ZenbotRisePolicy, residual_weight
 
 
@@ -20,6 +21,14 @@ class G1LimbBlend(NamedTuple):
     style: list
     weights: object
     gated: object
+
+
+class ZenbotWalkRecovery(NamedTuple):
+    rise: list | ZenbotGroundPolicy
+    gait: list
+    ode_limits: tuple
+    handoff_frames: int = 0
+    fall_upright: float = .60
 
 
 @register_static
@@ -95,6 +104,37 @@ def _actor(archive, which, prefix=""):
 def load(path, which="avg"):
     """Return (policy, observation normalizer, ODE limits) for an NPZ export."""
     with np.load(path, allow_pickle=False) as archive:
+        if "ground_max_share" in archive:
+            base, base_norm, _ = _actor(archive, "avg", "ground_base/")
+            rise, rise_norm, ode = _actor(archive, which)
+            share = archive["ground_max_share"]
+            if (share.shape != () or not np.isfinite(share) or not 0. <= share <= 1. or ode is None
+                    or any(p[0]["w"].shape[0] != 390 or p[-1]["b"].shape != (23,) for p in (base, rise))
+                    or any(n[k].shape != (390,) for n in (base_norm, rise_norm) for k in ("mean", "var"))):
+                raise ValueError("Expected two 390-input Zenbot ODE actors and a recovery share in [0, 1]")
+            supine = np.asarray(archive.get("ground_supine_only", False))
+            limits = np.asarray(archive.get("ground_supine_limits", [0., .6]))
+            if (supine.shape or supine.item() not in (0, 1) or limits.shape != (2,) or
+                    not np.isfinite(limits).all() or not -1. <= limits[0] < limits[1] <= 1.):
+                raise ValueError("Invalid Zenbot supine orientation gate")
+            rise = ZenbotGroundPolicy(base, rise, jnp.asarray(share), bool(supine), tuple(map(float, limits)))
+            rise_norm = (base_norm, rise_norm)
+            if "gait/pi/0/w" not in archive:
+                return rise, rise_norm, ode
+        if "gait/pi/0/w" in archive:
+            if "ground_max_share" not in archive:
+                rise, rise_norm, ode = _actor(archive, which)
+            gait, gait_norm, gait_ode = _actor(archive, which, "gait/")
+            layers = rise.rise if isinstance(rise, ZenbotGroundPolicy) else rise
+            if (ode is None or gait_ode is not None or any(actor[0]["w"].shape[0] != 390 or
+                    actor[-1]["b"].shape != (23,) for actor in (layers, gait))):
+                raise ValueError("Expected a 390-input Zenbot ODE recovery actor and direct gait actor")
+            handoff = np.asarray(archive.get("gait/handoff_frames", 0))
+            tilt = np.asarray(archive.get("gait/fall_upright", .6))
+            if (handoff.shape or handoff.dtype.kind not in "iu" or not 0 <= handoff <= 250 or
+                    tilt.shape or not np.isfinite(tilt) or not 0. < tilt < .9):
+                raise ValueError("Invalid Zenbot gait handoff parameters")
+            return ZenbotWalkRecovery(rise, gait, ode, int(handoff), float(tilt)), (rise_norm, gait_norm), None
         if "zenbot_library/keys" in archive:
             layers, norm, ode = _actor(archive, which)
             scale = archive["zenbot_library/residual_scale"]
@@ -181,8 +221,11 @@ def policy_output(policy, norm, obs, obs_clip=10.):
             return nets.pi_apply(layers, obs)
         return nets.pi_apply(layers, jnp.clip(nets.rn_apply(stats, obs), -obs_clip, obs_clip))
 
-    if isinstance(policy, G1StandController):
-        raise ValueError("A G1 stand controller needs per-environment memory. Use policy_step().")
+    if isinstance(policy, ZenbotGroundPolicy):
+        return combine_zenbot_increments(apply(policy.base, norm[0]), apply(policy.rise, norm[1]), obs,
+                                         policy.max_share, policy.supine_only, policy.supine_limits)
+    if isinstance(policy, (G1StandController, ZenbotWalkRecovery)):
+        raise ValueError("This controller needs per-environment memory. Use policy_step().")
     if isinstance(policy, ZenbotRisePolicy):
         if policy.stance is not None:
             raise ValueError("A Zenbot stance controller needs per-environment memory. Use policy_step().")
@@ -198,6 +241,8 @@ def policy_output(policy, norm, obs, obs_clip=10.):
 
 def policy_memory(policy, obs):
     """Initial per-environment controller state at an episode boundary."""
+    if isinstance(policy, ZenbotWalkRecovery):
+        return jnp.zeros((*obs.shape[:-1], 4), dtype=obs.dtype)
     if isinstance(policy, ZenbotRisePolicy) and policy.stance is not None:
         return jnp.zeros((*obs.shape[:-1], 3), dtype=obs.dtype)
     if isinstance(policy, G1StandController):
@@ -227,6 +272,33 @@ def _posture_features(obs):
 
 def policy_step(policy, norm, obs, memory, obs_clip=10.):
     """Return the raw action and the controller memory for the next physical step."""
+    if isinstance(policy, ZenbotWalkRecovery):
+        # The last 78 channels contain one IMU/encoder/command/action frame.
+        frame = obs[..., -78:]
+        upright = -frame[..., 5]
+        mode, quiet, share, runup = (memory[..., i] for i in range(4))
+        fresh = mode == 0
+        gait_mode = jnp.where(fresh, upright > .8, mode > 0)
+        fallen = upright < policy.fall_upright
+        ready = (upright > .90) & (jnp.linalg.norm(frame[..., :3], axis=-1) < 1.4)
+        quiet = jnp.where(ready & ~gait_mode, quiet + 1, 0.)
+        gait_mode = (gait_mode | (quiet >= 18)) & ~fallen
+        # Motion-start resets can have substantial momentum and no action history.
+        # First settle under the joint actor, then blend over the same duration.
+        initial_share = -1. if policy.handoff_frames else gait_mode.astype(obs.dtype)
+        share = jnp.where(fresh, initial_share, share)
+        increment = 1. / policy.handoff_frames if policy.handoff_frames else .05
+        share = jnp.where(gait_mode, jnp.minimum(1., share + increment), -1. if policy.handoff_frames else 0.)
+        rise = policy_output(policy.rise, norm[0], obs, obs_clip)
+        rise = nets.ode_step(rise, frame[..., -23:], *policy.ode_limits)
+        runup = jnp.where(fresh & gait_mode, 1., jnp.where(gait_mode, jnp.minimum(1., runup + 1./80), 0.))
+        # When the rise finishes at rest, accelerate into the requested gait over 1.6 seconds.
+        hist = obs.reshape(*obs.shape[:-1], 5, 78)
+        scaled = hist if policy.handoff_frames else hist.at[..., 6:9].multiply((.15 + .85 * runup)[..., None, None])
+        gait = nets.pi_apply(policy.gait, nets.rn_apply(norm[1], scaled.reshape(obs.shape)))
+        blend = jnp.maximum(share[..., None], 0.)
+        action = jnp.where(blend >= 1., gait, rise + blend * (gait - rise))
+        return action, jnp.stack((jnp.where(gait_mode, 1., -1.), quiet, share, runup), -1)
     if isinstance(policy, ZenbotRisePolicy) and policy.stance is not None:
         action = policy_output(policy._replace(stance=None), norm, obs, obs_clip)
         return policy.stance.step(obs, action, memory)

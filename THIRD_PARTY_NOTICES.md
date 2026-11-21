@@ -143,10 +143,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Motion data
 
-The clips are not part of this repository; `tools/download_data.sh` downloads them from their sources, whose licenses apply:
-legged_lab's G1 walk-and-run clips (https://github.com/zitongbai/legged_lab; retargets of AMASS / ACCAD, under AMASS's license) and
-Unitree's G1 retarget of LAFAN1 (https://huggingface.co/datasets/lvhaidong/LAFAN1_Retargeting_Dataset; LAFAN1 by Ubisoft La Forge,
-CC BY-NC-ND 4.0).
+`tools/download_data.sh` retrieves the G1 walk-and-run clips from LeggedLab (AMASS / ACCAD retargets under AMASS's license) and Unitree's G1 retarget of LAFAN1. LAFAN1 is by Ubisoft La Forge and carries the CC BY-NC-ND 4.0 license. [LeggedLab](https://github.com/zitongbai/legged_lab) · [Unitree LAFAN1 retarget](https://huggingface.co/datasets/lvhaidong/LAFAN1_Retargeting_Dataset)
+
+The eleven Zenbot recovery motions originate from the LAFAN1 recording `fallAndGetUp1_subject1.bvh`. The LeggedLab `get_up_frax` pipeline retargeted selected frame ranges to the 43 kg Zenbot using Frax differential inverse kinematics and MuJoCo ground-contact refinement. InstantAMP converted those results to 50 Hz NPZ files in the robot's joint order. [Source file and clip hashes](training_logs/zenbot23_getup_standing_amp_pd/recovery_sources.json) · [LAFAN1 license](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+
+The six Zenbot standing motions were generated separately in MuJoCo using the Zenbot model. [Generator and recording method](tools/prepare_zenbot_standing_amp.py) · [Standing dataset manifest](data/zenbot23_walk_run_recovery/standing/manifest.json)
 
 ## Dependencies
 

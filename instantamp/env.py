@@ -135,9 +135,9 @@ class Cmd(NamedTuple):
     time_left: jax.Array  # (N,) seconds until the next draw
 
 
-def sample_cmd(key, n) -> Cmd:
+def sample_cmd(key, n, ranges=CMD_RANGE) -> Cmd:
     k = jax.random.split(key, 5)
-    vel = jax.random.uniform(k[0], (n, 3), minval=CMD_RANGE[:, 0], maxval=CMD_RANGE[:, 1])
+    vel = jax.random.uniform(k[0], (n, 3), minval=ranges[:, 0], maxval=ranges[:, 1])
     heading = jax.random.uniform(k[1], (n,), minval=HEADING_RANGE[0], maxval=HEADING_RANGE[1])
     return Cmd(vel, heading, jax.random.uniform(k[2], (n,)) <= REL_HEADING, jax.random.uniform(k[3], (n,)) <= REL_STANDING,
                jax.random.uniform(k[4], (n,), minval=RESAMPLE_S[0], maxval=RESAMPLE_S[1]))  # fmt: skip
@@ -163,10 +163,10 @@ def command(c: Cmd, R):
     return jnp.where(c.is_standing[:, None], 0.0, out)
 
 
-def tick(c: Cmd, key) -> Cmd:
+def tick(c: Cmd, key, ranges=CMD_RANGE) -> Cmd:
     """One policy step of the command term: time_left -= dt, then a fresh draw where it ran out."""
     c = c._replace(time_left=c.time_left - DT)
-    return where_cmd(c.time_left <= 0.0, sample_cmd(key, c.vel.shape[0]), c)
+    return where_cmd(c.time_left <= 0.0, sample_cmd(key, c.vel.shape[0], ranges), c)
 
 
 # ------------------------------------------------------------------ observations (4 frames, time-major)

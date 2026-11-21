@@ -103,13 +103,13 @@ class GetupPlayer:
         self.data.qvel[:2] += 0.20 * np.array([np.cos(angle), np.sin(angle)])
 
 
-def run(player, palm_load=None):
+def run(player, palm_load=None, *, play=False, poll_policy=None, measurements=None):
     keys = SimpleQueue()
     if palm_load is None:
         contacts = HandContacts(player.model)
         def palm_load():
             return contacts.forces(player.data)[:, 0]
-    paused = True
+    paused = not play
     print("Ready. SPACE play/pause | R restart | N next start | ENTER push (+X)", flush=True)
     print("Mouse: double-click a body, then hold Ctrl and drag with the right button.", flush=True)
     with mujoco.viewer.launch_passive(player.model, player.data, key_callback=keys.put,
@@ -123,7 +123,11 @@ def run(player, palm_load=None):
         with view.lock():
             reset_camera()
         deadline = time.monotonic()
+        next_policy_check = deadline
         while view.is_running():
+            if poll_policy is not None and time.monotonic() >= next_policy_check:
+                poll_policy()
+                next_policy_check = time.monotonic() + .5
             with view.lock():
                 while True:
                     try:
@@ -145,11 +149,13 @@ def run(player, palm_load=None):
                         print("Push +X (0.20 m/s)", flush=True)
                 if not paused:
                     player.step()
+                measured = measurements() if measurements is not None else ""
             status = f"{'PAUSED' if paused else 'LIVE'}   |   Start {player.trial + 1}/{len(player.names)}   |   {player.data.time:.2f} s"
             hand_load = palm_load()
             status += f"   |   Palm load   L {hand_load[0]:.0%}  R {hand_load[1]:.0%} BW"
             view.set_texts((mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT,
-                            status + f"   |   {player.policy_label}\nSpace play/pause   R restart   N next   Enter push\nDouble-click torso, then Ctrl + right-drag", ""))
+                            status + f"   |   {player.policy_label}\n" + (measured + "\n" if measured else "")
+                            + "Space play/pause   R restart   N next   Enter push\nDouble-click torso, then Ctrl + right-drag", ""))
             # Sync both renders the new pose and transfers the mouse wrench to the same MjData used by advance().
             view.sync()
             deadline = max(deadline + env.DT, time.monotonic())

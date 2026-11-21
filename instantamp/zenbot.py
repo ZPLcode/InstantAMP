@@ -1,7 +1,9 @@
 """23-DoF Zenbot AMP controls in MJCF hinge order (motion_train, 43 kg variant)."""
 
 from pathlib import Path
+from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -40,6 +42,9 @@ KNEES = ("left_knee_Link", "right_knee_Link")
 KEY_BODIES = FEET + KNEES + HANDS
 UP_HEIGHT, RISE_HEIGHT = 0.58, 0.68
 MASS = 43.0678308
+MIXED_TASK = "zenbot23_walk_run_recovery"
+# Forward walking/running and the lateral steps present in the motion_train AMP bank.
+GAIT_COMMANDS = np.asarray([[0., 3.8], [-.35, .35], [-.5, .5]], np.float32)
 INITIAL_ASSIST = 200 * MASS / 33.341142
 ASSIST_DECREMENT = INITIAL_ASSIST / 20
 FULL_FORCE_HEIGHT, RESET_LIFT = 0.48, 0.02
@@ -61,6 +66,59 @@ def actuator_ctrl(q, qd, target):
 WEIGHTS = {"joint_acc_l2": -1e-7, "action_rate_l2": -0.005, "joint_torques_l2": -2e-6,
            "joint_pos_limits": -10., "ang_vel_xy": 2., "lin_vel_xy": 2., "target_orientation": 2.,
            "target_base_height": 5., "target_joint_deviation_l2": -0.1}
+
+
+def standing_posture(height, up_cos):
+    return (height > UP_HEIGHT) & (height <= 2 * RISE_HEIGHT - UP_HEIGHT) & (up_cos > np.cos(np.pi / 6))
+
+
+class SupportedStand(NamedTuple):
+    """LeggedLab's one-second upright streak and foot-load history, independently for each world."""
+
+    upright_steps: jax.Array
+    loaded: jax.Array
+
+    @classmethod
+    def empty(cls, num_envs, dt):
+        window = max(1, round(1. / dt))
+        return cls(jnp.zeros(num_envs, dtype=jnp.int32), jnp.zeros((num_envs, window), dtype=bool))
+
+    def reset(self, done):
+        return SupportedStand(jnp.where(done, 0, self.upright_steps), self.loaded & ~done[:, None])
+
+    def advance(self, posture, loaded):
+        window = self.loaded.shape[1]
+        upright_steps = jnp.where(posture, jnp.minimum(self.upright_steps + 1, window), 0)
+        history = jnp.concatenate((self.loaded[:, 1:], loaded[:, None]), axis=1)
+        support_fraction = history.sum(axis=1) / int(np.ceil(.90 * window))
+        progress = jnp.minimum(upright_steps / window, support_fraction)
+        score = progress * (loaded | (progress >= 1.))
+        return SupportedStand(upright_steps, history), score
+
+
+def _standing_velocity_costs(vel, ang, qd):
+    return 5. * (vel**2).sum(-1), 2. * (ang**2).sum(-1), jnp.mean(qd**2, axis=-1)
+
+
+def quiet_stand(state, foot_force, weight):
+    """Reward the default pose and low velocity only while the feet carry the upright robot."""
+    pos, rot, vel, ang, q, qd = state
+    standing = standing_posture(pos[..., 2], rot[..., 2, 2]) & (foot_force >= .5 * weight)
+    linear, angular, joint_speed = _standing_velocity_costs(vel, ang, qd)
+    error = 4. * jnp.mean((q - DEFAULT_Q)**2, axis=-1) + linear + angular + joint_speed + 2. * (1. - rot[..., 2, 2])
+    return standing, jnp.where(standing, jnp.exp(-jnp.maximum(error, 0.)), 0.)
+
+
+def default_stand_terms(state, hold):
+    """Score the measured default joint pose and upright pelvis after the feet support the robot."""
+    _, rot, vel, ang, q, qd = state
+    tolerance = np.deg2rad(10.)
+    joints = jnp.mean(jnp.square((q - DEFAULT_Q) / tolerance), axis=-1)
+    tilt = (1. - jnp.clip(rot[..., 2, 2], -1., 1.)) / (1. - np.cos(tolerance))
+    pose = 1. / (1. + joints + tilt)
+    quiet = jnp.exp(-sum(_standing_velocity_costs(vel, ang, qd)))
+    return (jnp.where(hold > 0., hold * pose * quiet, 0.),
+            jnp.where(hold > 0., hold * (.25 + .75 * pose), 0.))
 
 
 class RecoveryReference:

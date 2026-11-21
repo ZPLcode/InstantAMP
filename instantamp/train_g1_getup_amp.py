@@ -45,8 +45,18 @@ class Settings:
 
 
 class GetUpAMP:
-    def __init__(self, cfg):
-        self.c = c = cfg
+    amp_stride = 1
+    score_terminal_window = False
+    max_lr = .01
+    disc_lr = .001
+    extra_rollout_stats = ()
+    motion_metric_names = ()
+    condition_dim = 0
+    gamma = .99
+    gae_lambda = .95
+
+    @staticmethod
+    def validate(c):
         if min(c.num_envs, c.rollout, c.epochs, c.minibatches, c.save_every, c.log_every) <= 0:
             raise ValueError("Environment, rollout, optimizer and checkpoint counts must be positive")
         if c.num_envs * c.rollout % c.minibatches or c.rollout > 244:
@@ -55,6 +65,10 @@ class GetUpAMP:
             raise ValueError("Expected positive initial std and learning rate and a warmup shorter than training")
         if not np.isfinite(c.rise_anchor) or c.rise_anchor < 0 or (c.rise_anchor and not (c.init_policy and c.reference_weight > 0)):
             raise ValueError("A positive rise anchor requires an initial actor and an active reference reward")
+
+    def __init__(self, cfg):
+        self.c = c = cfg
+        self.validate(c)
         self.sim = Sim(
             c.num_envs,
             robot="g1_getup",
@@ -70,14 +84,38 @@ class GetUpAMP:
         self.demos = amp.Demos(c.floor_dir, self.sim, 10)
         self.disc_batch = c.disc_batch or c.num_envs * c.rollout // c.minibatches
 
+    def critic_input(self, state):
+        return state.critic_obs
+
+    def motion_features(self, window):
+        return window
+
+    def motion_reward(self, disc, motion, transition):
+        return env.DT * amp.recovery_style(disc, motion, 50.0, leggedlab=True)
+
+    def rollout_motion(self, disc, motion, transition):
+        return self.motion_reward(disc, motion, transition), motion, ()
+
+    def discriminator_examples(self, key, policy):
+        expert = self.demos.sample(key, len(policy))
+        return self.motion_features(expert[:, ::self.amp_stride]), policy
+
+    def fix_condition_norm(self, disc):
+        if not self.condition_dim:
+            return disc
+        # A binary condition has a fixed scale even during rollouts that see only one skill.
+        norm = disc["norm"]
+        return {**disc, "norm": {**norm, "mean": norm["mean"].at[-self.condition_dim:].set(.5),
+                                 "var": norm["var"].at[-self.condition_dim:].set(.25)}}
+
     def init(self):
         ks = jax.random.split(jax.random.PRNGKey(self.c.seed), 5)
         s = self.sim.init(ks[0])
         frame = self.sim.amp_frame(unflatten(s.data.qpos, s.data.qvel))
-        history = jnp.repeat(frame[:, None, :], 10, axis=1)
+        history = jnp.repeat(frame[:, None, :], 1 + 9 * self.amp_stride, axis=1)
         ac = {
             "pi": nets.mlp_init(ks[2], [self.sim.obs_dim, 512, 256, 128, self.sim.J]),
-            "v": nets.mlp_init(ks[3], [s.critic_obs.shape[-1], 512, 256, 128, 1]),
+            "v": nets.mlp_init(ks[3], [self.critic_input(s).shape[-1], 512, 256, 128, 1]),
             "std": jnp.full(self.sim.J, self.c.init_std),
         }
         self.obs_norm = {"raw": True, **nets.rn_init(self.sim.obs_dim)}
@@ -89,8 +127,8 @@ class GetUpAMP:
             self.anchor_pi = jax.tree.map(jnp.copy, ac["pi"])
             self.pose_term = self.sim.terms.index("motion_reference")
         self.mask = jax.tree.map(lambda _: False, ac)
-        disc = amp.init(ks[4], 10, frame_dim=self.sim.amp_dim)
-        replay = jnp.zeros((244, *history.shape), dtype=frame.dtype)
+        disc = self.fix_condition_norm(amp.init(ks[4], 10, frame_dim=self.sim.amp_dim + self.condition_dim))
+        replay = jnp.zeros((244, frame.shape[0], 10, frame.shape[-1] + self.condition_dim), dtype=frame.dtype)
         return (s, history, replay, jnp.int32(0)), (ac, optim.init(ac, self.mask), jnp.float32(self.c.init_lr)), disc
 
     def collect(self, live, ac, disc, key):
@@ -101,18 +139,21 @@ class GetUpAMP:
             mu = policy_output(ac["pi"], self.obs_norm, s.obs)
             std = jnp.maximum(ac["std"], 0.01)
             action = mu + std * jax.random.normal(key, mu.shape)
-            value = nets.mlp_apply(ac["v"], s.critic_obs, jax.nn.elu)[:, 0]
+            critic_obs = self.critic_input(s)
+            value = nets.mlp_apply(ac["v"], critic_obs, jax.nn.elu)[:, 0]
             nxt, tr = sim.step(s, action)
             end = tr.terminated | tr.truncated
             frame = sim.amp_frame(unflatten(tr.qpos1, tr.qvel1))
             window = jnp.concatenate([hist[:, 1:], frame[:, None]], axis=1)
             first = sim.amp_frame(unflatten(nxt.data.qpos, nxt.data.qvel))
             hist = jnp.where(end[:, None, None], first[:, None], window)
-            # IsaacLab computes its observation groups after resetting the ended worlds.
-            style = env.DT * amp.recovery_style(disc, hist, 50.0, leggedlab=True)
+            # The G1 port follows IsaacLab's post-reset observation convention.
+            raw = window if self.score_terminal_window else hist
+            motion = self.motion_features(raw[:, ::self.amp_stride])
+            style, replay_window, motion_metrics = self.rollout_motion(disc, motion, tr)
             reward = 0.5 * (tr.reward + style)
-            replay = replay.at[written % len(replay)].set(hist)
-            row = (s.obs, s.critic_obs, mu, action, value, reward, end, tr.truncated)
+            replay = replay.at[written % len(replay)].set(replay_window)
+            row = (s.obs, critic_obs, mu, action, value, reward, end, tr.truncated)
             if c.rise_anchor:
                 step = s.reference_start + s.t + 1
                 pose_score = tr.parts[:, self.pose_term] / (env.DT * c.reference_weight)
@@ -126,14 +167,14 @@ class GetUpAMP:
                     tr.stats["down_done"],
                     tr.stats["down_up"],
                     tr.stats["diverged"],
-                ]
+                ] + [tr.stats[name] for name in self.extra_rollout_stats] + list(motion_metrics)
             )
             return (nxt, hist, replay, written + 1), (row, stats)
 
         live, (rows, stats) = jax.lax.scan(step, live, jax.random.split(key, c.rollout))
         xs, cs, mu, actions, value, r, end, timeouts, *anchor = rows
-        bootstrap = nets.mlp_apply(ac["v"], live[0].critic_obs, jax.nn.elu)[:, 0]
-        adv, returns = gae(r, value, bootstrap, end, timeouts, 0.99, 0.95)
+        bootstrap = nets.mlp_apply(ac["v"], self.critic_input(live[0]), jax.nn.elu)[:, 0]
+        adv, returns = gae(r, value, bootstrap, end, timeouts, self.gamma, self.gae_lambda)
         adv = (adv - adv.mean()) / (adv.std() + 1e-8)
         batch = tuple(x.reshape(-1, *x.shape[2:]) for x in (xs, cs, mu, actions, value, adv, returns, *anchor))
         return live, batch, stats.mean(0)
@@ -178,25 +219,25 @@ class GetUpAMP:
             lr = jnp.where(
                 kl > 0.02,
                 jnp.maximum(1e-5, lr / 1.5),
-                jnp.where((kl > 0.0) & (kl < 0.005), jnp.minimum(0.01, lr * 1.5), lr),
+                jnp.where((kl > 0.0) & (kl < 0.005), jnp.minimum(self.max_lr, lr * 1.5), lr),
             )
             grad, _ = optim.clip_by_global_norm(grad, 1.0)
             ac, opt = optim.step(ac, grad, opt, self.mask, lr)
             kr, ke, kd = jax.random.split(key, 3)
-            sample = jax.random.randint(
-                kr, (self.disc_batch,), 0, jnp.minimum(written, len(replay)) * c.num_envs
-            )
+            sample = jax.random.randint(kr, (self.disc_batch,), 0, jnp.minimum(written, len(replay)) * c.num_envs)
             policy = replay[sample // c.num_envs, sample % c.num_envs]
+            expert, policy = self.discriminator_examples(ke, policy)
             disc, ds = amp.train_step(
                 disc,
-                self.demos.sample(ke, self.disc_batch),
+                expert,
                 policy,
                 jnp.ones(self.disc_batch),
                 kd,
-                0.001,
+                self.disc_lr,
                 recovery=True,
                 leggedlab=True,
             )
+            disc = self.fix_condition_norm(disc)
             return (ac, opt, lr, disc), jnp.array([kl, lr, loss_pi, loss_v, ds["d_demo"], ds["d_robot"]])
 
         def epoch(carry, key):
@@ -213,20 +254,23 @@ def main():
     for field in dataclasses.fields(Settings):
         parser.add_argument("--" + field.name, type=type(field.default), default=field.default)
     cfg = Settings(**vars(parser.parse_args()))
-    run = Path(cfg.log_dir)
-    (run / "ckpt").mkdir(parents=True, exist_ok=False)
-    config = {
-        **dataclasses.asdict(cfg),
+    train(cfg, GetUpAMP, {
         "task": g1_getup.TASK_ID,
         "robot": "g1_getup",
         "nconmax": 64,
         "njmax": 640,
         "learner": "on_policy_ppo_amp",
         "action_rate_l2_weight": g1_getup.ACTION_RATE_L2_WEIGHT,
-    }
+    })
+
+
+def train(cfg, trainer_type, metadata):
+    run = Path(cfg.log_dir)
+    (run / "ckpt").mkdir(parents=True, exist_ok=False)
+    config = {**dataclasses.asdict(cfg), **metadata}
     (run / "config.json").write_text(json.dumps(config, indent=2) + "\n")
     set_jax("~/.cache/instantamp/jax")
-    trainer = GetUpAMP(cfg)
+    trainer = trainer_type(cfg)
     live, opt, disc = trainer.init()
     collect = jax.jit(trainer.collect, donate_argnums=(0,))
     learn = jax.jit(trainer.learn, donate_argnums=(0, 1))
@@ -246,6 +290,8 @@ def main():
                     "down_done",
                     "down_up",
                     "diverged",
+                    *trainer.extra_rollout_stats,
+                    *trainer.motion_metric_names,
                     "kl",
                     "lr",
                     "policy_loss",
@@ -267,7 +313,8 @@ def main():
             if it % cfg.save_every == 0 or it == cfg.iterations:
                 policy = jax.device_get(opt[0]["pi"])
                 save_policy(
-                    str(run / "ckpt" / f"{it:06d}"), {"pi": policy, "avg": policy, "obs_norm": trainer.obs_norm}, meta
+                    str(run / "ckpt" / f"{it:06d}"), {"pi": policy, "avg": policy, "obs_norm": trainer.obs_norm}, meta,
+                    clip_pd_targets=trainer.sim.clip_pd_targets,
                 )
 
 

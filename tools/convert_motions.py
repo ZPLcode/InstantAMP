@@ -44,7 +44,9 @@ G1_DOF = ("left_hip_pitch", "left_hip_roll", "left_hip_yaw", "left_knee", "left_
 class NumpyUnpickler(pickle.Unpickler):
     """Rebuilds numpy arrays and plain Python values, nothing else."""
 
-    ALLOWED = {("numpy.core.multiarray", "_reconstruct"), ("numpy._core.multiarray", "_reconstruct"), ("numpy", "ndarray"), ("numpy", "dtype")}
+    ALLOWED = {("numpy.core.multiarray", "_reconstruct"), ("numpy._core.multiarray", "_reconstruct"),
+               ("numpy.core.numeric", "_frombuffer"), ("numpy._core.numeric", "_frombuffer"),
+               ("numpy", "ndarray"), ("numpy", "dtype")}
 
     def find_class(self, module, name):
         if (module, name) in self.ALLOWED:

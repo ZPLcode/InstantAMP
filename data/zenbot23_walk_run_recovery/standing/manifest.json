@@ -1,0 +1,109 @@
+{
+  "source": "Native free-base MuJoCo, DEFAULT_Q static contact equilibrium and offline ankle feedback",
+  "model": "assets/zenbot_23dof_43kg.xml",
+  "mujoco": "3.17.0",
+  "fps": 50,
+  "duration_s": 4.0,
+  "root_quaternion_order": "xyzw",
+  "root_velocity_frame": "world",
+  "key_body_names": [
+    "left_ankle_roll_Link",
+    "right_ankle_roll_Link",
+    "left_knee_Link",
+    "right_knee_Link",
+    "left_wrist_roll_rubber_hand",
+    "right_wrist_roll_rubber_hand"
+  ],
+  "equilibrium_pelvis_z_m": 0.6902958594396734,
+  "max_equilibrium_torque_nm": 8.157706166376729,
+  "files": {
+    "stand_default_011.npz": {
+      "frames": 200,
+      "max_chest_tilt_deg": 0.19021740729207748,
+      "max_joint_mae_deg": 0.5855172610948316,
+      "min_each_foot_bw": [
+        0.4861063669144531,
+        0.4946310900142955
+      ],
+      "total_bw_range": [
+        0.9874965893166235,
+        1.0044267699218308
+      ]
+    },
+    "stand_default_029.npz": {
+      "frames": 200,
+      "max_chest_tilt_deg": 0.06648420600321171,
+      "max_joint_mae_deg": 0.44570771936204223,
+      "min_each_foot_bw": [
+        0.46706428762524355,
+        0.4878193382360225
+      ],
+      "total_bw_range": [
+        0.9924668605713615,
+        1.0015392966844232
+      ]
+    },
+    "stand_default_047.npz": {
+      "frames": 200,
+      "max_chest_tilt_deg": 0.19881869817080894,
+      "max_joint_mae_deg": 0.5153731689463121,
+      "min_each_foot_bw": [
+        0.5014133174983016,
+        0.4771173966513338
+      ],
+      "total_bw_range": [
+        0.9879338865368048,
+        1.0013862065189296
+      ]
+    },
+    "stand_default_073.npz": {
+      "frames": 200,
+      "max_chest_tilt_deg": 0.20113110215811233,
+      "max_joint_mae_deg": 0.5292459567120732,
+      "min_each_foot_bw": [
+        0.49226870058168903,
+        0.45675873813112633
+      ],
+      "total_bw_range": [
+        0.9965193217157788,
+        1.0021376923460887
+      ]
+    },
+    "stand_default_101.npz": {
+      "frames": 200,
+      "max_chest_tilt_deg": 0.058057092852916756,
+      "max_joint_mae_deg": 0.49035268971091617,
+      "min_each_foot_bw": [
+        0.46917126511445456,
+        0.48820429940121735
+      ],
+      "total_bw_range": [
+        0.9988797995748111,
+        1.0052301005396498
+      ]
+    },
+    "stand_default_131.npz": {
+      "frames": 200,
+      "max_chest_tilt_deg": 0.045071399724353235,
+      "max_joint_mae_deg": 0.45982360667732836,
+      "min_each_foot_bw": [
+        0.49196682864311775,
+        0.47108119739836013
+      ],
+      "total_bw_range": [
+        0.995436236204023,
+        1.0038129030889646
+      ]
+    }
+  },
+  "reference_check": {
+    "clip": "stand_4s_120f.npz",
+    "sha256": "0cd974a8f9dd205dc774f7f09559e4c9dd1674f3cebebace159b64af16de5958",
+    "frames": 199,
+    "unique_poses": 1,
+    "sole_height_m_range": [
+      -0.032888048536422805,
+      -0.032888048536422805
+    ]
+  }
+}
