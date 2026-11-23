@@ -13,6 +13,7 @@ and runs on one GPU. The code builds on [XSoma](https://github.com/nico-bohlinge
 
 ## Contents
 
+- [Zenbot 训练交接](docs/zenbot-wm-handoff.md) · [版本历史和实测结果](docs/zenbot-wm-history.md) · [实验方案](docs/zenbot-wm-plan.md)
 - [What is trained](#what-is-trained)
 - [Results](#results)
 - [Setup](#setup)
