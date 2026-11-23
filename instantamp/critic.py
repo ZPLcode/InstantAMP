@@ -47,13 +47,17 @@ def lambda_targets(r, d, V, gamma: float, lam: float):
     return G
 
 
-def fit(st, x, r, d, key, gamma: float, lam: float, lr: float, epochs: int, minibatches: int):
+def fit(st, x, r, d, key, gamma: float, lam: float, lr: float, epochs: int, minibatches: int, *, real_values=None):
     """Fit the critic to the TD(lambda) targets of imagined rollouts: x (H + 1, B, in_dim) the inputs of the states s_0 .. s_H, r and d (H, B).
     Steps after a termination have no target. Returns the new critic state and the loss of the last minibatch."""
     alive_before = jnp.concatenate((jnp.ones_like(d[:1]), jnp.cumprod(1 - d, 0)[:-1]), 0)
     st = {**st, "norm": nets.rn_update(st["norm"], x.reshape(-1, x.shape[-1]))}
     G = jax.lax.stop_gradient(lambda_targets(r, d, value(st, x), gamma, lam))
     X, Y, W = x[:-1].reshape(-1, x.shape[-1]), G.reshape(-1), alive_before.reshape(-1)
+    if real_values is not None:
+        # Constrain bootstraps at contact transitions with the return seen in the PPO collector.
+        X, Y, W = (jnp.concatenate((imagined, real), axis=0)
+                   for imagined, real in zip((X, Y, W), real_values))
     n = X.shape[0]
     m = n // minibatches
     mask = jax.tree.map(lambda _: False, st["net"])

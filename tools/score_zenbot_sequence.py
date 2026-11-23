@@ -13,6 +13,25 @@ def first_run(mask, samples):
     return int(starts[0]) if len(starts) else None
 
 
+def ground_timing(q, v, rise):
+    """Time from reset to significant joint motion, pelvis lift, and upright at 50 Hz."""
+    stop = len(q) if rise is None else rise + 1
+    q, v = q[:stop], v[:stop]
+    joint_change = np.sqrt(np.square(q[:, 7:] - q[0, 7:]).mean(axis=1))
+    first_move = first_run(joint_change >= np.deg2rad(8.), 5)
+    height = q[:, 2]
+    lift = first_run(height - np.minimum.accumulate(height) >= .08, 10)
+    # Track true stillness separately from time spent moving the limbs to establish support.
+    still = ((height <= .46) & (np.linalg.norm(v[:, :3], axis=1) < .08)
+             & (np.linalg.norm(v[:, 3:6], axis=1) < .30)
+             & (np.sqrt(np.square(v[:, 6:]).mean(axis=1)) < .30))
+    boundaries = np.flatnonzero(np.diff(np.r_[False, still[:-1], False]))
+    durations = boundaries[1::2] - boundaries[::2]
+    return dict(first_joint_motion_s=None if first_move is None else .02 * first_move,
+                first_pelvis_lift_s=None if lift is None else .02 * lift,
+                longest_quiet_ground_s=.02 * int(durations.max(initial=0)))
+
+
 def support_diagnostics(q, v, load, rise, name, offset, directory):
     n = round(offset * 50)
     with np.load(directory / name) as clip:

@@ -1,8 +1,9 @@
-"""Bundle a joint InstantAMP Zenbot actor and a motion_train three-frame AMP gait actor."""
+"""Convert a motion_train Zenbot gait actor or bundle it with a recovery checkpoint."""
 import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import xml.etree.ElementTree as ET
 
 import numpy as np
@@ -13,7 +14,27 @@ from onnx.reference import ReferenceEvaluator
 from tools.convert_motions import lab_dof_names
 
 
-def convert_gait(path, source, *, joint_policy=False):
+def saved_gait_layout(path):
+    """Read the archived observation group for ONNX exports that omit history metadata."""
+    info = json.loads(path.with_name("export_info.json").read_text())
+    if info["onnx_sha256"] != hashlib.sha256(path.read_bytes()).hexdigest():
+        raise ValueError("The gait ONNX and export_info.json hashes differ")
+    config = path.parent.parent / "params/env.yaml"
+    group = re.search(r"^observations:\n  policy:\n((?:    [^\n]*\n)+)", config.read_text(), re.M)
+    if not group:
+        raise ValueError(f"Missing policy observation group in {config}")
+    # Read only direct keys of the saved policy group. Nested term options can
+    # carry a separate history_length and the config contains Isaac-specific YAML tags.
+    fields = dict(re.findall(r"^    (\w+): *([^\n]*)$", group[1], re.M))
+    terms = [name for name, value in fields.items() if not value]
+    expected = ["base_ang_vel", "projected_gravity", "velocity_commands", "joint_pos", "joint_vel", "actions"]
+    if (terms != expected or fields.get("concatenate_terms") != "true"
+            or fields.get("flatten_history_dim") != "true"):
+        raise ValueError(f"Unsupported policy observation layout in {config}")
+    return fields["history_length"], fields["history_order"]
+
+
+def convert_gait(path, source, *, joint_policy=False, verification=None):
     model = onnx.load(path)
     meta = {p.key: p.value for p in model.metadata_props}
     frames = meta.get("history_frames", meta.get("history_length"))
@@ -23,6 +44,11 @@ def convert_gait(path, source, *, joint_policy=False):
         if manifest["onnx_sha256"] != hashlib.sha256(path.read_bytes()).hexdigest():
             raise ValueError("The joint AMP export and observation manifest differ")
         frames, order_name = str(manifest["history_length"]), manifest["history_order"]
+    if meta.get("task") == "ZENBOT-AMP" and (frames is None or order_name is None):
+        saved_frames, saved_order = saved_gait_layout(path)
+        if frames not in (None, saved_frames) or order_name not in (None, saved_order):
+            raise ValueError("The ONNX and saved observation history settings disagree")
+        frames, order_name = saved_frames, saved_order
     tasks = ("ZENBOT-AMP-Loco-Flat", "ZENBOT-Dual-AMP-Flat") if joint_policy else ("ZENBOT-AMP",)
     if meta.get("task") not in tasks or frames not in ("3", "4") or order_name != "term":
         raise ValueError("Expected a motion_train AMP export with a supported term-major sensor history")
@@ -49,7 +75,9 @@ def convert_gait(path, source, *, joint_policy=False):
         raise ValueError("Invalid gait normalization")
     var[index] = std**2 - .01**2
     out = {"obs_norm/mean": mean, "obs_norm/var": var}
-    sample = np.random.default_rng(41).normal(0., .5, (12, 390)).astype(np.float32)
+    # Test 50 histories across the active range of the deployed normalizer.
+    # The source ONNX has no outlier clamp; InstantAMP caps normalized inputs at ±10.
+    sample = mean + np.sqrt(var + .01**2) * np.random.default_rng(41).uniform(-3., 3., (50, 390)).astype(np.float32)
     x = (sample - mean) / np.sqrt(var + .01**2)
     for i, node in enumerate(n for n in model.graph.node if n.op_type == "Gemm"):
         w, b = arrays[node.input[1]].T, arrays[node.input[2]]
@@ -68,6 +96,11 @@ def convert_gait(path, source, *, joint_policy=False):
     ref = ReferenceEvaluator(model)
     expected = np.concatenate([ref.run(None, {model.graph.input[0].name: row[None, index]})[0] for row in sample])
     np.testing.assert_allclose(x[:, order], expected, rtol=3e-5, atol=3e-5)
+    if verification is not None:
+        verification.update(observations=len(sample), actions_per_observation=len(order),
+                            normalized_input_range=[-3., 3.], max_absolute_action_error=float(np.max(np.abs(x[:, order] - expected))),
+                            history_frames=int(frames), history_order=order_name,
+                            task=meta["task"], iteration=meta.get("iteration"))
     return out
 
 
@@ -92,9 +125,23 @@ def pack(rise, gait, source, dest, handoff_frames=0, fall_upright=.6):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("rise", "gait", "motion_train", "dest"):
+    parser.add_argument("rise", nargs="?", type=Path)
+    for name in ("gait", "motion_train", "dest"):
         parser.add_argument(name, type=Path)
+    parser.add_argument("--gait-only", action="store_true", help="write only the 390-input, 23-output gait actor")
     parser.add_argument("--handoff-frames", type=int, default=0)
     parser.add_argument("--fall-upright", type=float, default=.6)
     args = parser.parse_args()
-    pack(args.rise, args.gait, args.motion_train, args.dest, args.handoff_frames, args.fall_upright)
+    if args.gait_only:
+        if args.rise is not None:
+            parser.error("--gait-only takes gait, motion_train and dest")
+        report = dict(source_onnx=str(args.gait.resolve()), source_sha256=hashlib.sha256(args.gait.read_bytes()).hexdigest())
+        fields = convert_gait(args.gait, args.motion_train, verification=report)
+        args.dest.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(args.dest, **fields)
+        report["checkpoint_sha256"] = hashlib.sha256(args.dest.read_bytes()).hexdigest()
+        args.dest.with_suffix(".json").write_text(json.dumps(report, indent=2) + "\n")
+    elif args.rise is None:
+        parser.error("Bundling requires a rise checkpoint")
+    else:
+        pack(args.rise, args.gait, args.motion_train, args.dest, args.handoff_frames, args.fall_upright)

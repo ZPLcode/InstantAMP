@@ -39,13 +39,13 @@ def mlp_init(key, sizes, layer_norm=False):
     return layers
 
 
-def mlp_apply(layers, x, act, ln_eps: float = 1e-5, out_bf16: bool = False):
+def mlp_apply(layers, x, act, ln_eps: float = 1e-5, out_bf16: bool = False, compute_dtype=BF16):
     """Apply an MLP: every layer but the last is Linear, then LayerNorm if the layer has `ln_g`, then `act`; the last layer is
     Linear only. Matmuls take bf16 inputs and accumulate in fp32; `out_bf16` makes their outputs bf16 too (see above)."""
     h = x
     out = BF16 if out_bf16 else jnp.float32
     for i, layer in enumerate(layers):
-        h = jnp.dot(h.astype(BF16), layer["w"].astype(BF16), preferred_element_type=out).astype(jnp.float32) + layer["b"]
+        h = jnp.dot(h.astype(compute_dtype), layer["w"].astype(compute_dtype), preferred_element_type=out).astype(jnp.float32) + layer["b"]
         if i == len(layers) - 1:
             return h
         if "ln_g" in layer:

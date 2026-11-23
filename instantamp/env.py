@@ -163,10 +163,11 @@ def command(c: Cmd, R):
     return jnp.where(c.is_standing[:, None], 0.0, out)
 
 
-def tick(c: Cmd, key, ranges=CMD_RANGE) -> Cmd:
+def tick(c: Cmd, key, ranges=CMD_RANGE, *, sample=None) -> Cmd:
     """One policy step of the command term: time_left -= dt, then a fresh draw where it ran out."""
     c = c._replace(time_left=c.time_left - DT)
-    return where_cmd(c.time_left <= 0.0, sample_cmd(key, c.vel.shape[0], ranges), c)
+    fresh = sample_cmd(key, c.vel.shape[0], ranges) if sample is None else sample(key)
+    return where_cmd(c.time_left <= 0.0, fresh, c)
 
 
 # ------------------------------------------------------------------ observations (4 frames, time-major)

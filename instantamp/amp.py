@@ -128,13 +128,21 @@ def support_window(raw, dt, oriented=False):
 class Demos:
     """The frame features of all demo clips, and the start of every window of `frames` frames that stays inside a clip."""
 
-    def __init__(self, directory: str, sim, frames: int, *, per_clip=False, frame_fn=None):
+    def __init__(self, directory: str, sim, frames: int, *, per_clip=False, frame_fn=None, extra_clip=None):
         from . import g1_getup
         self.g1_bank = g1_getup.load_reference(directory) if sim.robot is g1_getup else None
         self.amp_frame = sim.amp_frame
         self.frame_fn = frame_fn
-        files = sorted(glob.glob(os.path.join(directory, "*.npz")))
+        files = [str(directory)] if Path(directory).is_file() else sorted(glob.glob(os.path.join(directory, "*.npz")))
         assert files, f"no clips in {directory} (bash tools/download_data.sh)"
+        source_names = [Path(f).stem for f in files]
+        if extra_clip is not None:
+            extra_clip = Path(extra_clip)
+            if not extra_clip.is_file():
+                raise FileNotFoundError(f"Missing additional AMP reference: {extra_clip}")
+            if any(Path(f).resolve() == extra_clip.resolve() for f in files):
+                raise ValueError(f"Additional AMP reference already in {directory}: {extra_clip}")
+            files.append(str(extra_clip))
         feats, starts, n = [], [], 0
         for f in files:
             d = np.load(f)
@@ -160,10 +168,11 @@ class Demos:
             sampling = Path(directory) / "sampling.json"
             if per_clip and sampling.exists():
                 weights = json.loads(sampling.read_text())["weights"]
-                names = [Path(f).stem for f in files]
-                if set(weights) != set(names):
+                if set(weights) != set(source_names):
                     raise ValueError(f"Sampling manifest and motion files differ in {directory}")
-                values = np.asarray([weights[name] for name in names], np.float32)
+                values = np.asarray([weights[name] for name in source_names], np.float32)
+                if extra_clip is not None:
+                    values = np.append(values, values.mean())
                 if not np.isfinite(values).all() or np.any(values <= 0):
                     raise ValueError(f"Invalid clip weights in {sampling}")
                 self.clip_probabilities = jnp.asarray(values / values.sum())
@@ -194,6 +203,27 @@ class Demos:
         end = jax.random.randint(kt, (B,), 0, frame_counts)
         history = end[:, None] + jnp.arange(1 - self.window, 1)
         return self.frames[self.clip_offsets[clip, None] + jnp.maximum(history, 0)]
+
+    def sample_wrong_tempo(self, key, batch, frames, stride, joints, *, freeze_start=False):
+        """Negative Zenbot examples from moving expert segments, frozen or played at twice the recorded rate."""
+        kc, kt, ks = jax.random.split(key, 3)
+        clip = jax.random.choice(kc, len(self.clip_lengths), (batch,), p=self.clip_probabilities)
+        lengths = self.clip_lengths[clip] + self.window - 1
+        span = 2 * stride * (frames - 1) + 1
+        start = jax.random.randint(kt, (batch,), 0, jnp.maximum(lengths - span + 1, 1))
+        frame = jnp.minimum(start[:, None] + 2 * stride * jnp.arange(frames), lengths[:, None] - 1)
+        fast = self.frames[self.clip_offsets[clip, None] + frame]
+        # Keep stationary intervals as valid demonstrations of resting or standing.
+        trim = frames // 4
+        joint_range = jnp.ptp(fast[:, trim:frames-trim, :joints], axis=1)
+        moving = (lengths >= span) & (joint_range.max(-1) > np.deg2rad(12.))
+        speed = 2. * jax.random.bernoulli(ks, .5, (batch, 1, 1))
+        # Freezing the beginning also covers prone poses that normally start moving within this segment.
+        anchor = 0 if freeze_start else frames // 2
+        raw = jnp.where(speed > 0, fast, fast[:, anchor:anchor+1])
+        # Scale joint, pelvis angular and pelvis linear velocities together with the time base.
+        raw = raw.at[..., joints:2*joints+3].multiply(speed)
+        return raw.at[..., -3:].multiply(speed), moving
 
     def prepare_ground_heights(self):
         """Group recovery windows by coarse pelvis height, retaining equal clip weights within each group."""
@@ -282,10 +312,14 @@ def recovery_features(norm, window, leggedlab):
     return normalize(norm, window)
 
 
-def recovery_style(st, window, scale, leggedlab=False):
+def recovery_style(st, window, scale, leggedlab=False, *, soft_floor=False):
     x = recovery_features(st["norm"], window, leggedlab).reshape(*window.shape[:-2], -1)
     d = nets.mlp_apply(st["net"], x, jax.nn.leaky_relu)[..., 0]
-    return scale * jnp.maximum(1. - 0.25 * (d - 1.)**2, 0.)
+    quality = 1. - 0.25 * (d - 1.)**2
+    if soft_floor:
+        # Keep a slope for imagined gait windows just below the least-squares cutoff.
+        return scale * jax.nn.softplus(10. * quality) / jax.nn.softplus(10.)
+    return scale * jnp.maximum(quality, 0.)
 
 
 def recovery_loss(net, norm, demo, robot, wt, key, leggedlab=False):
@@ -299,6 +333,18 @@ def recovery_loss(net, norm, demo, robot, wt, key, leggedlab=False):
     gp = 10. * jnp.square(jax.vmap(jax.grad(predict))(xd)).sum(-1).mean()
     loss = 0.5 * (jnp.square(dd - 1).mean() + (wt * (dr + 1)**2).sum() / n) + gp
     return loss, {"d_demo": dd.mean(), "d_robot": (wt * dr).sum() / n, "gp": gp}
+
+
+def train_step_with_robot(st, demo, robot, wt, key, lr, **kwargs):
+    """Keep the prior and its normalization fixed until the collector supplies a valid negative."""
+    def update():
+        return train_step(st, demo, robot, wt, key, lr, **kwargs)
+
+    def skip():
+        zero = jnp.zeros((), jnp.float32)
+        return st, {"d_demo": zero, "d_robot": zero, "gp": zero}
+
+    return jax.lax.cond((wt > 0).any(), update, skip)
 
 
 def train_step(st, demo, robot, wt, key, lr: float, recovery=False, leggedlab=False, include_demo_norm=False):
@@ -317,10 +363,11 @@ def train_step(st, demo, robot, wt, key, lr: float, recovery=False, leggedlab=Fa
     net, opt = optim.step(st["net"], grads, st["opt"], jax.tree.map(lambda _: False, st["net"]), lr, betas=(0.9, 0.999) if recovery else (0.5, 0.9))
     # In dev/get_up, PPOAMP.update feeds only the replayed policy windows into
     # update_normalization and applies Adam directly to the discriminator.
+    max_count = 1e8 if leggedlab else 2e8
     norm = nets.rn_update(st["norm"], robot.reshape(-1, robot.shape[-1]), weights=jnp.repeat(wt, robot.shape[1]),
-                          max_count=1e8 if leggedlab else 2e8)
+                          max_count=max_count)
     if (recovery and not leggedlab) or include_demo_norm:
-        norm = nets.rn_update(norm, demo.reshape(-1, demo.shape[-1]))
+        norm = nets.rn_update(norm, demo.reshape(-1, demo.shape[-1]), max_count=max_count)
     first = (st["mu"][0] == 0) & (st["mu"][1] == 0)
     now = jnp.stack([aux["d_demo"], aux["d_robot"]])
     live = wt.sum() > 0  # no usable robot window: the scores of this step say nothing about the robot

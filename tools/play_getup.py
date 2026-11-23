@@ -103,7 +103,7 @@ class GetupPlayer:
         self.data.qvel[:2] += 0.20 * np.array([np.cos(angle), np.sin(angle)])
 
 
-def run(player, palm_load=None, *, play=False, poll_policy=None, measurements=None):
+def run(player, palm_load=None, *, play=False, poll_policy=None, measurements=None, handle_key=None):
     keys = SimpleQueue()
     if palm_load is None:
         contacts = HandContacts(player.model)
@@ -147,6 +147,8 @@ def run(player, palm_load=None, *, play=False, poll_policy=None, measurements=No
                         player.push()
                         paused = False
                         print("Push +X (0.20 m/s)", flush=True)
+                    elif handle_key is not None:
+                        handle_key(key)
                 if not paused:
                     player.step()
                 measured = measurements() if measurements is not None else ""

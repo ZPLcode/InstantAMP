@@ -31,6 +31,8 @@ import numpy as np
 import warp as wp
 from mujoco import mjx
 
+from .zenbot_motion_train_obs import MotionTrainSensors, advance_sensors
+from . import zenbot_source_gait as source_gait
 from . import amp, env, g1_getup, resets, zenbot
 from .kin import Kinematics
 from .rot import axis_angle_to_mat, mm3, mv3, quat_to_mat, tr3, yaw_mat
@@ -39,6 +41,8 @@ XML = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "
 wp.config.log_level = wp.LOG_WARNING
 WORLD_FIELDS = ("body_ipos", "geom_friction")  # the model fields that differ between envs
 DIVERGED = 1e3  # |qvel| beyond this counts as a physics failure
+MIXED_STAY_HEIGHT = .48
+MIXED_STAY_UP_COS = .50
 NCONMAX, NJMAX = 64, 640  # contact and constraint pools per world
 WALK_DIR = "data/amp/walk_run"
 FLOOR_DIR = "data/recovery/lafan1"
@@ -255,6 +259,12 @@ class State(NamedTuple):
     episode_limit: jax.Array | None = None  # first timeout can be staggered while the reference starts at elapsed time zero
     recovery_left: jax.Array | None = None  # post-fall AMP scoring interval in physical control steps
     supported_hold: zenbot.SupportedStand | None = None
+    gait_ready: jax.Array | None = None  # can follow a travel command after rising onto the feet
+    motion_train_sensors: MotionTrainSensors | None = None
+    first_supported_stand: jax.Array | None = None  # first successful floor recovery step in the assisted scratch trial
+    gait_curriculum: source_gait.Curriculum | None = None
+    gait_window: jax.Array | None = None  # physical gait start row and exclusive end; -1 for ordinary episodes
+    gait_velocity: jax.Array | None = None  # filtered body-frame velocity used by training reward
 
 
 class Transition(NamedTuple):
@@ -315,39 +325,123 @@ def load_bank(directory: str, joints: int = env.J, first_only=False, sample_clip
 
 
 class Sim:
+    zenbot_source_gait = False
+    zenbot_motion_train_wm = False
+    zenbot_wm_reference_training = False
+    zenbot_wm_getup_only = False
+    wm_min_rise_score = 0.
+    wm_floor_amp = False
+    wm_floor_locomotion = False
+    wm_lift_gate = 0.
+    gait_velocity_alpha = 0.
+    floor_stop_command_share = 0.
+    gait_source_commands = False
+    wm_command_speeds = zenbot.DIRECTIONAL_COMMANDS
+
     def __init__(self, num_envs: int = 4096, nconmax: int = NCONMAX, njmax: int = NJMAX, walk_dir: str | None = None,
                  floor_dir: str | None = None, random_start: bool = True, seed: int = 0, reset_floor: float = 0.2,
-                 prob_shove: float = 0.0, push: bool = True, physics: bool = True, robot: str = "g1", amp_wrists: bool = True, assist_newtons=None, obs_noise=True, randomize_world=True, reference_weight=0., g1_style=False, getup_rise_weight=-0.25, g1_support_friction=False, getup_reset_frames=20, g1_phase_amp=False, reference_hold_scale=1., action_rate_l2_weight=None, zenbot_phase_resets=0., zenbot_episode_steps=500, recovery_amp_seconds=0., fall_push_speed=0., legged_support=False, support_rsi=0., zenbot_getup_stand=False, zenbot_support_weight=0., zenbot_default_stand=False, clip_pd_targets=False, zenbot_standing_amp=False):  # fmt: skip
+                 prob_shove: float = 0.0, push: bool = True, physics: bool = True, robot: str = "g1", amp_wrists: bool = True, assist_newtons=None, obs_noise=True, randomize_world=True, reference_weight=0., g1_style=False, getup_rise_weight=-0.25, g1_support_friction=False, getup_reset_frames=20, g1_phase_amp=False, reference_hold_scale=1., action_rate_l2_weight=None, zenbot_phase_resets=0., zenbot_episode_steps=500, recovery_amp_seconds=None, fall_push_speed=0., legged_support=False, support_rsi=0., zenbot_getup_stand=False, zenbot_support_weight=0., zenbot_default_stand=False, zenbot_standing_amp=False, zenbot_command_gait=False, zenbot_directional_gait=False, zenbot_motion_train_obs=False, zenbot_scratch_resets=False, zenbot_scratch_curriculum=False, zenbot_source_gait=False,
+                 zero_motor_delay_probability=None, zenbot_motion_train_wm=False, zenbot_wm_reference_training=False, zenbot_wm_getup_only=False,
+                 wm_stance_start_share=0., wm_min_rise_score=0., wm_floor_amp=False, wm_stand_reference=None, wm_lift_gate=0.,
+                 gait_velocity_time_constant=0., floor_stop_command_share=0., gait_source_commands=False):  # fmt: skip
         """physics=False: everything but MuJoCo Warp's model and data (no GPU): the scene, kinematics, reset banks and `_fresh`, for
         checks on the CPU."""
         self.N, self.random_start, self.seed = num_envs, random_start, seed
-        self.reset_floor, self.prob_shove, self.push = reset_floor, prob_shove, push
         self.robot = profile = robot_profile(robot)
+        self.zenbot_motion_train_wm = bool(zenbot_motion_train_wm)
+        self.zenbot_wm_reference_training = bool(zenbot_wm_reference_training)
+        self.zenbot_wm_getup_only = bool(zenbot_wm_getup_only)
+        self.wm_stance_start_share = wm_stance_start_share
+        self.wm_min_rise_score = wm_min_rise_score
+        self.wm_floor_amp = bool(wm_floor_amp)
+        self.wm_floor_locomotion = self.wm_floor_amp and not self.zenbot_wm_getup_only
+        self.gait_source_commands = bool(gait_source_commands)
+        if self.gait_source_commands and not self.wm_floor_locomotion:
+            raise ValueError("Recorded command speeds require the joint floor and locomotion task")
+        if (not np.isfinite(gait_velocity_time_constant) or gait_velocity_time_constant < 0. or
+                not 0. <= floor_stop_command_share <= 1. or
+                ((gait_velocity_time_constant or floor_stop_command_share) and not self.wm_floor_locomotion)):
+            raise ValueError("Gait velocity smoothing and floor stop commands require joint locomotion training")
+        self.gait_velocity_alpha = -np.expm1(-env.DT / gait_velocity_time_constant) if gait_velocity_time_constant else 0.
+        self.floor_stop_command_share = floor_stop_command_share
+        if not 0. <= wm_lift_gate < zenbot.UP_HEIGHT or (wm_lift_gate and not self.wm_floor_amp):
+            raise ValueError("The late lift reward needs a floor AMP task and a gate below upright pelvis height")
+        self.wm_lift_gate = wm_lift_gate
+        if self.wm_floor_amp and (not zenbot_motion_train_wm or zenbot_wm_reference_training or wm_stance_start_share
+                                  or (self.wm_floor_locomotion and (reference_weight or not 0. < reset_floor < 1.))):
+            raise ValueError("Floor-opening AMP needs independent motion windows and both floor and gait starts for locomotion")
+        if not 0. <= wm_min_rise_score < 1. or (wm_min_rise_score and not (self.zenbot_wm_getup_only and self.zenbot_wm_reference_training)):
+            raise ValueError("A minimum rise score requires paired get-up training and a threshold in [0, 1)")
+        if not 0. <= wm_stance_start_share <= .5 or (wm_stance_start_share and not self.zenbot_wm_getup_only):
+            raise ValueError("Supported stance starts require the zero-command get-up stage and a share in [0, .5]")
+        self.wm_start_quantiles = None
+        if wm_min_rise_score and wm_stance_start_share:
+            # Failed rises reset sooner than stable stands. Reserve worlds for each kind so long stands cannot fill the buffer.
+            # Adjacent deterministic and noisy collectors share a kind, including the worlds providing real PPO data.
+            pairs = (num_envs + 1) // 2
+            ranks = np.random.default_rng(seed).permutation(pairs)
+            self.wm_start_quantiles = jnp.asarray(np.repeat((ranks + .5) / pairs, 2)[:num_envs], jnp.float32)
+        if self.zenbot_wm_getup_only:
+            if not self.zenbot_motion_train_wm:
+                raise ValueError("Zenbot get-up-only WM requires the Motion Train world-model task")
+            reset_floor, prob_shove, push = 1., 0., False
+        self.reset_floor, self.prob_shove, self.push = reset_floor, prob_shove, push
+        self.wm_physical_resets = (self.zenbot_wm_reference_training or self.zenbot_wm_getup_only) and not self.wm_floor_amp
+        if self.zenbot_wm_reference_training and not self.zenbot_motion_train_wm:
+            raise ValueError("Paired Zenbot reference resets require the Motion Train world-model task")
+        if self.zenbot_motion_train_wm and robot != zenbot.MIXED_TASK:
+            raise ValueError("Motion Train world-model control requires the mixed Zenbot task")
+        if zero_motor_delay_probability is None:
+            zero_motor_delay_probability = .5 if self.zenbot_motion_train_wm else 0.
+        if recovery_amp_seconds is None:
+            recovery_amp_seconds = 4. if self.zenbot_motion_train_wm else 0.
+        if not 0. <= zero_motor_delay_probability <= 1. or (zero_motor_delay_probability and profile is not zenbot):
+            raise ValueError("Motor delay mixing requires a Zenbot and probability in [0, 1]")
+        self.zero_motor_delay_probability = float(zero_motor_delay_probability)
         self.J = len(profile.DOF)
         self.mixed = robot == zenbot.MIXED_TASK
         self.zenbot_getup_stand = bool(zenbot_getup_stand)
-        if self.zenbot_getup_stand and (robot != "zenbot23_getup" or reference_weight or g1_style):
-            raise ValueError("Get-up and stand AMP requires the standalone Zenbot task with reference tracking disabled")
+        self.physical_floor_starts = None
+        self.physical_gait_starts = None
+        self.zenbot_scratch_resets = bool(zenbot_scratch_resets)
+        self.zenbot_source_gait = bool(zenbot_source_gait)
+        if self.zenbot_source_gait and not (self.zenbot_scratch_resets and zenbot_motion_train_obs and zenbot_command_gait and zenbot_support_weight > 0):
+            raise ValueError("Source locomotion requires the mixed scratch task and 234-value observations")
+        self.zenbot_scratch_curriculum = bool(zenbot_scratch_curriculum)
+        if self.zenbot_scratch_curriculum and not self.zenbot_scratch_resets:
+            raise ValueError("The training assistance curriculum requires scratch floor resets")
+        if self.zenbot_scratch_resets and not (zenbot_command_gait and self.zenbot_getup_stand):
+            raise ValueError("Scratch reference resets require the commanded Zenbot get-up task")
+        if self.zenbot_getup_stand and (robot != "zenbot23_getup" or (reference_weight and not self.zenbot_scratch_resets) or g1_style):
+            raise ValueError("Get-up and stand AMP requires the standalone Zenbot task; tracking requires scratch resets")
         if not np.isfinite(zenbot_support_weight) or zenbot_support_weight < 0 or (zenbot_support_weight and not self.zenbot_getup_stand):
             raise ValueError("zenbot_support_weight requires a finite nonnegative weight on the standalone get-up and stand task")
         self.zenbot_support_weight = float(zenbot_support_weight)
-        self.clip_pd_targets = bool(clip_pd_targets)
-        if self.clip_pd_targets and robot != "zenbot23_getup":
-            raise ValueError("PD target clipping is configured for standalone Zenbot get-up")
         self.zenbot_default_stand = bool(zenbot_default_stand)
         if self.zenbot_default_stand and not (self.zenbot_getup_stand and self.zenbot_support_weight > 0.):
             raise ValueError("zenbot_default_stand requires the standalone get-up and stand task and positive zenbot_support_weight")
         self.zenbot_standing_amp = bool(zenbot_standing_amp)
         if self.zenbot_standing_amp and (not self.zenbot_support_weight or self.zenbot_default_stand):
             raise ValueError("Standing AMP requires foot support and exclusive control of the standing style reward")
+        self.zenbot_command_gait = bool(zenbot_command_gait)
+        self.zenbot_directional_gait = bool(zenbot_directional_gait)
+        self.zenbot_motion_train_obs = bool(zenbot_motion_train_obs or self.zenbot_motion_train_wm)
+        if self.zenbot_motion_train_obs and not (self.zenbot_command_gait or self.zenbot_motion_train_wm):
+            raise ValueError("Motion Train observations require the Zenbot command actor")
+        if self.zenbot_directional_gait and not self.zenbot_command_gait:
+            raise ValueError("Directional locomotion requires the Zenbot command actor")
+        if self.zenbot_command_gait and not self.zenbot_standing_amp:
+            raise ValueError("Velocity commands on the get-up actor require the standing AMP task")
+        if self.zenbot_command_gait and (not walk_dir or not 0. <= reset_floor <= 1.):
+            raise ValueError("Commanded gait requires a walk_dir and reset_floor probability in [0, 1]")
         if not np.isfinite(recovery_amp_seconds) or recovery_amp_seconds < 0 or (recovery_amp_seconds and not self.mixed):
             raise ValueError("Recovery AMP interval requires the mixed Zenbot task and a finite nonnegative duration")
         self.recovery_amp_steps = round(recovery_amp_seconds / env.DT)
         self.legged_support = bool(legged_support)
         if self.legged_support and not self.recovery_amp_steps:
             raise ValueError("LeggedLab support rewards require a mixed Zenbot recovery interval")
-        if not 0. <= support_rsi <= 1. or (support_rsi and not self.legged_support):
-            raise ValueError("Support RSI probability must be in [0,1] and requires LeggedLab support AMP")
+        if not 0. <= support_rsi <= 1. or (support_rsi and not (self.legged_support or (self.wm_floor_amp and not reference_weight))):
+            raise ValueError("Intermediate ground starts require a probability in [0,1] and unpaired floor or support AMP")
         self.support_rsi = float(support_rsi)
         if not np.isfinite(fall_push_speed) or fall_push_speed < 0 or (fall_push_speed and not self.recovery_amp_steps):
             raise ValueError("Fall perturbations require the mixed recovery AMP interval")
@@ -375,7 +469,23 @@ class Sim:
             self.weights = {**self.weights, **zenbot.WEIGHTS}
         if profile is g1_getup and action_rate_l2_weight is None:
             action_rate_l2_weight = g1_getup.ACTION_RATE_L2_WEIGHT
-        if action_rate_l2_weight is not None:
+        if self.zenbot_command_gait and action_rate_l2_weight is None:
+            action_rate_l2_weight = 3. * zenbot.WEIGHTS["action_rate_l2"]
+        if self.zenbot_motion_train_wm:
+            rate_weight = 3. * zenbot.WEIGHTS["action_rate_l2"]
+            if action_rate_l2_weight is not None and not np.isclose(action_rate_l2_weight, rate_weight):
+                raise ValueError("The Motion Train world-model task uses threefold Zenbot action rate")
+            self.weights = {name: env.WEIGHTS[name] for name in ("track_lin", "track_ang", "rise", "termination")}
+            self.weights.update(action_rate=rate_weight, recovery_timeout_cost=-100.)
+            if self.zenbot_wm_reference_training:
+                self.weights["motion_reference"] = 5.
+            if self.wm_floor_amp:
+                self.weights = {"stand": 6., "action_rate": rate_weight}
+                if self.wm_lift_gate:
+                    self.weights["lift"] = .5
+                if self.wm_floor_locomotion:
+                    self.weights["velocity"] = self.weights["stand"]
+        elif action_rate_l2_weight is not None:
             if not self.recovery or not np.isfinite(action_rate_l2_weight) or action_rate_l2_weight > 0:
                 raise ValueError("Expected a nonpositive action-rate weight for a named get-up task")
             self.weights = {**self.weights, "action_rate_l2": action_rate_l2_weight}
@@ -388,15 +498,15 @@ class Sim:
         self.g1_reference = bool(g1_style and (self.reference_reward or self.g1_phase_amp) and profile is env)
         if not 0. <= zenbot_phase_resets <= 1. or zenbot_episode_steps <= 0:
             raise ValueError("Zenbot reference reset probability and episode length must be valid")
-        if zenbot_phase_resets and (profile is not zenbot or not self.reference_reward):
+        if zenbot_phase_resets and (profile is not zenbot or not (self.reference_reward or self.zenbot_scratch_resets)):
             raise ValueError("Zenbot phase resets require its tracking reward")
         self.zenbot_phase_resets = zenbot_phase_resets
-        self.track_getup = (profile is g1_getup or bool(zenbot_phase_resets)) and self.reference_reward
+        self.track_getup = self.zenbot_scratch_resets or ((profile is g1_getup or bool(zenbot_phase_resets)) and self.reference_reward)
         if not 0. <= reference_hold_scale <= 1.:
             raise ValueError("reference_hold_scale must be between 0 and 1")
         self.reference_hold_scale = reference_hold_scale
         if reference_weight:
-            if not (self.recovery or self.g1_reference) or not np.isfinite(reference_weight) or reference_weight < 0:
+            if not (self.recovery or self.g1_reference or self.wm_floor_amp) or not np.isfinite(reference_weight) or reference_weight < 0:
                 raise ValueError("reference_weight requires a finite positive weight and a recovery task")
             if self.g1_reference and self.reset_floor <= 0:
                 raise ValueError("G1 reference rewards require recovery resets")
@@ -409,6 +519,8 @@ class Sim:
         if profile is g1_getup:
             self.world_fields += ("body_inertia",)
         self.frame_dim = 9 + 3 * self.J + (18 if self.recovery else 0)
+        if self.zenbot_command_gait:
+            self.frame_dim += 3  # append commands after the existing 96 sensor and action channels
         self.obs_dim = self.history * self.frame_dim
         self.obs_noise = env.observation_noise(self.J)
         self.amp_joints = np.asarray([i for i in range(self.J) if amp_wrists or i not in profile.WRIST_IDX])
@@ -420,6 +532,8 @@ class Sim:
             if self.zenbot_getup_stand:
                 self.amp_dim += amp.SUPPORT_FRAME_DIM
             self.obs_noise = np.repeat([0.2, 0.05, 0.01, 1.5, 0.0, 0.08], [3, 6, self.J, self.J, self.J, 18]).astype(np.float32)
+        if self.zenbot_command_gait:
+            self.obs_noise = np.pad(self.obs_noise, (0, 3))
         self.m = m = build_scene(robot_name=robot, g1_support_friction=g1_support_friction)
         assert m.nu == self.J and m.nq == 7 + self.J
         assert tuple(m.joint(m.actuator_trnid[i, 0]).name.removeprefix("robot_").removesuffix("_joint") for i in range(m.nu)) == profile.DOF
@@ -448,6 +562,9 @@ class Sim:
         self.sole_local, self.sole_frame, self.sole_radius = collider_points(m, self.foot_geoms, frames)
         self.coll_local, self.coll_frame, self.coll_radius = collider_points(m, self.term_geoms, frames)
         self.kin_amp = Kinematics(m, [f"robot_{b}" for b in keys])
+        if self.wm_physical_resets:
+            from .zenbot_wm_reference import PHYSICAL_FLOOR, PhysicalRecoveryReference
+            self.wm_reference = PhysicalRecoveryReference(PHYSICAL_FLOOR, floor_dir or motion_dirs(robot)[1], self.key_positions)
         if self.mixed or self.zenbot_getup_stand:
             # In the Zenbot model the two soles are boxes and the knees and palms are capsules.
             ids = [m.geom("robot_" + body + "_collision").id for body in keys]
@@ -460,27 +577,109 @@ class Sim:
         self.foot_side = np.full(m.ngeom, -1, np.int32)
         for g in self.foot_geoms:
             self.foot_side[g] = feet.index(int(m.geom_bodyid[g]))
-        self.is_term = np.isin(np.arange(m.ngeom), self.term_geoms)
+        self.is_term = (source_gait.illegal_contact_geoms(m) if self.zenbot_source_gait else
+                        np.isin(np.arange(m.ngeom), self.term_geoms))
         supports = [m.body("robot_" + b).id for b in (profile.SUPPORT_BODIES if self.recovery else keys)]
         self.support_link = np.array([supports.index(b) if b in supports else -1 for b in m.geom_bodyid])
         self.floor_id = m.geom("floor").id
         self.robot_geom = np.asarray([m.body(int(m.geom_bodyid[g])).name.startswith("robot_") for g in range(m.ngeom)])
         walk_default, floor_default = motion_dirs(robot)
+        if self.gait_source_commands:
+            from .zenbot_gait_demos import source_command_speeds
+            self.wm_command_speeds = source_command_speeds(walk_dir or walk_default)
         bank_dir = (floor_dir or floor_default) if self.recovery else (walk_dir or walk_default)
-        self.walk = (g1_getup.load_reference(bank_dir) if profile is g1_getup and not self.track_getup else
-                     load_bank(bank_dir, self.J, first_only=robot == "zenbot23_getup" and not self.track_getup, sample_clip_times=self.track_getup))
+        if self.zenbot_wm_getup_only:
+            self.walk = {}
+            self.wm_gait_worlds = jnp.zeros(self.N, bool)
+        elif self.zenbot_command_gait:
+            bank = load_bank(walk_dir, self.J)
+            upright = self.is_up(bank["z"], quat_to_mat(bank["quat"]))
+            if not np.any(upright):
+                raise ValueError(f"No upright gait reset frames in {walk_dir}")
+            if self.zenbot_scratch_resets:
+                from .zenbot_gait_demos import command_reset_bank
+                self.walk = command_reset_bank(walk_dir, bank, upright, self.zenbot_directional_gait)
+            else:
+                self.walk = {name: value[upright] for name, value in bank.items()}
+        else:
+            self.walk = (g1_getup.load_reference(bank_dir) if profile is g1_getup and not self.track_getup else
+                         load_bank(bank_dir, self.J, first_only=robot == "zenbot23_getup" and not self.track_getup, sample_clip_times=self.track_getup))
+        if self.wm_floor_locomotion or (self.zenbot_wm_reference_training and not self.zenbot_wm_getup_only):
+            from .zenbot_gait_demos import command_reset_bank
+            self.wm_gait_worlds = (jnp.arange(self.N) // 2) % 4 == 0
+            upright = self.is_up(self.walk["z"], quat_to_mat(self.walk["quat"]))
+            self.walk["command_rows"] = command_reset_bank(
+                bank_dir, {"row": jnp.arange(len(upright))}, upright, directional=True,
+                command_speeds=self.wm_command_speeds if self.gait_source_commands else None)
         self.reference = None
         if self.g1_reference:
             from .g1_reference_reward import G1RecoveryReference
             self.reference = G1RecoveryReference(floor_dir or floor_default, self.key_positions)
         elif reference_weight:
             self.reference = zenbot.RecoveryReference(floor_dir or floor_default, self.key_positions, self.J,
-                                                      coupled_pose=self.track_getup)
+                                                      coupled_pose=self.track_getup or self.wm_floor_amp,
+                                                      with_rates=self.wm_floor_amp)
+            if self.wm_floor_amp:
+                # The recovery clips often end in mid-step. Use the upright AMP clip for quiet standing.
+                self.standing_reference = zenbot.RecoveryReference(
+                    wm_stand_reference or os.path.join(walk_dir or walk_default, "stand_4s_120f.npz"),
+                    self.key_positions, self.J, coupled_pose=True, with_rates=True)
+        if self.wm_lift_gate:
+            stand_clip = wm_stand_reference or os.path.join(walk_dir or walk_default, "stand_4s_120f.npz")
+            with np.load(stand_clip, allow_pickle=False) as data:
+                joints = data["dof_pos"]
+                self.floor_stand_joints = jnp.asarray(joints[len(joints) // 2])
         floor_frames = getup_reset_frames if g1_style or (self.mixed and not self.recovery_amp_steps) else None
+        if self.legged_support:
+            floor_frames = 1
         self.floor = resets.load(floor_dir or floor_default, "floor", profile.UP_HEIGHT, env.UP_TILT, self.J,
-                                 first_frames=1 if self.legged_support else floor_frames,
-                                 source_indices=self.g1_reference) if reset_floor > 0 and not self.recovery else resets.empty(self.J)
-        if self.support_rsi and reset_floor > 0:
+                                 first_frames=None if self.zenbot_motion_train_wm else floor_frames,
+                                 source_indices=self.g1_reference or self.zenbot_motion_train_wm) if reset_floor > 0 and not self.recovery else resets.empty(self.J)
+        if self.zenbot_motion_train_wm and reset_floor > 0:
+            frame = np.asarray(self.floor["frame"])
+            opening = (frame == 0) & (np.asarray(self.floor["z"]) + zenbot.RESET_LIFT <= .5)
+            if not opening.any() or not (frame > 0).any():
+                raise ValueError("Mixed Zenbot world-model floor starts need fallen opening poses and later recovery frames")
+            phases = frame > 0
+            if self.wm_floor_amp and self.support_rsi:
+                height = np.asarray(self.floor["z"])
+                phases &= height + zenbot.RESET_LIFT <= zenbot.UP_HEIGHT
+                if not self.wm_floor_locomotion:
+                    phases &= height > height[opening].max()
+                if not phases.any():
+                    raise ValueError("Floor support practice needs low intermediate recovery poses")
+            self.floor = {"openings": jax.tree.map(lambda x: x[opening], self.floor),
+                          "phases": jax.tree.map(lambda x: x[phases], self.floor)}
+            if self.wm_floor_amp and self.support_rsi:
+                self.floor["phases"] = jax.tree.map(lambda a, b: jnp.concatenate((a, b)),
+                                                    self.floor["openings"], self.floor["phases"])
+            if self.wm_physical_resets:
+                ref = self.wm_reference
+                files = sorted(glob.glob(os.path.join(floor_dir or floor_default, "*.npz")))
+                if tuple(map(os.path.basename, files)) != tuple(ref.clip_names):
+                    raise ValueError("Cold opening files must match the physical recovery reference clips")
+                up = np.asarray(self.is_up(ref.qpos[:, 2], quat_to_mat(ref.qpos[:, 3:7])))
+                limits = []
+                for first, count, support in zip(np.asarray(ref.offsets), np.asarray(ref.lengths), np.asarray(ref.first_support)):
+                    before_support = min(int(count), int(support) + 1)
+                    upright = np.flatnonzero(up[first:first + before_support])
+                    limits.append(int(upright[0]) if upright.size else before_support)
+                if min(limits) <= 1:
+                    raise ValueError("Each paired recovery needs fallen physical frames after its opening")
+                self.floor["phases"] = dict(qpos=ref.qpos, qvel=ref.qvel, offsets=ref.offsets, limits=jnp.asarray(limits, jnp.int32))
+        elif self.zenbot_scratch_resets:
+            self.floor = load_bank(floor_dir or floor_default, self.J, sample_clip_times=True)
+            up = np.asarray(self.is_up(self.floor["z"] + zenbot.RESET_LIFT, quat_to_mat(self.floor["quat"])))
+            down_counts = []
+            for start, count in zip(np.asarray(self.floor["offsets"]), np.asarray(self.floor["lengths"])):
+                first_up = np.flatnonzero(up[start:start + count])
+                down_counts.append(first_up[0] if first_up.size else count)
+            if min(down_counts) == 0:
+                raise ValueError("Each recovery clip must open with a pose on the floor")
+            self.floor["down_counts"] = jnp.asarray(down_counts, jnp.int32)
+        elif self.zenbot_command_gait and reset_floor > 0:
+            self.floor = load_bank(floor_dir or floor_default, self.J, first_only=True)
+        if self.support_rsi and reset_floor > 0 and not self.zenbot_motion_train_wm:
             self.floor_openings = len(self.floor["z"])
             # Keep each sampled state down after the ordinary 2 cm reset clearance is applied.
             states = resets.load(floor_dir or floor_default, "floor", profile.UP_HEIGHT - profile.RESET_LIFT, env.UP_TILT, self.J)
@@ -520,7 +719,40 @@ class Sim:
         """World positions (.., 4, 3) of the motion prior's key bodies (amp.KEY_BODIES)."""
         return self.kin_amp.forward(p, R, q)[0]
 
+    def sample_wm_command(self, key, n):
+        """Draw one fixed body-frame vx/vy/yaw-rate request per real or imagined world."""
+        velocity = (jnp.zeros((n, 3), jnp.float32) if self.zenbot_wm_getup_only else
+                    jax.random.choice(key, jnp.asarray(self.wm_command_speeds), (n,)))
+        interval = (jax.random.uniform(jax.random.fold_in(key, 1), (n,), minval=2., maxval=4.)
+                    if self.wm_floor_locomotion else jnp.full(n, 10.))
+        return env.Cmd(velocity, jnp.zeros(n), jnp.zeros(n, bool), jnp.all(velocity == 0., -1), interval)
+
+    def wm_velocity_command(self, cmd, rotation, upright, recovery_left=None):
+        """Return the velocity request visible to this task's actor."""
+        if self.zenbot_wm_getup_only:
+            return jnp.zeros_like(cmd.vel)
+        if self.wm_floor_locomotion:
+            # cmd.vel and c_obs are separate donated leaves of the simulator state.
+            return jnp.copy(cmd.vel)
+        if not self.zenbot_motion_train_wm:
+            return self.command(cmd, rotation)
+        ready = upright if recovery_left is None else upright & (recovery_left <= 0)
+        return jnp.where(ready[..., None], cmd.vel, 0.)
+
+    def sample_command(self, key, stage=0):
+        if self.zenbot_motion_train_wm:
+            return self.sample_wm_command(key, self.N)
+        if self.zenbot_source_gait:
+            return source_gait.sample_command(key, self.N, stage)
+        if self.zenbot_command_gait:
+            return zenbot.sample_gait_command(key, self.N, self.zenbot_directional_gait)
+        return env.sample_cmd(key, self.N, self.cmd_ranges)
+
     def command(self, command, rot):
+        if self.zenbot_source_gait:
+            return source_gait.command(command, rot)
+        if self.zenbot_command_gait:
+            return command.vel
         return jnp.zeros_like(command.vel) if self.recovery else env.command(command, rot)
 
     def recovery_command(self, cmd, down_start):
@@ -541,10 +773,19 @@ class Sim:
         if self.recovery:
             rot, ang, key_pos = self.recovery_features(state)
             x = jnp.concatenate((ang, rot, state[4], state[5], action, key_pos), -1)
+            if self.zenbot_command_gait:
+                x = jnp.concatenate((x, command), axis=-1)
             if self.noisy_obs and key is not None:
                 x += self.obs_noise * jax.random.uniform(key, x.shape, minval=-1., maxval=1.)
             return x
         return env.obs_frame(state, action, command, key if self.noisy_obs else None, self.robot.DEFAULT_Q, self.obs_noise)
+
+    def motion_train_sensors(self, state, rotation, command, fresh, key):
+        # The free joint stores angular velocity in the body frame. Gravity is world -Z in that frame.
+        qvel = state.data.qvel
+        imu = jnp.concatenate((qvel[:, 3:6], -rotation[:, 2, :]), axis=-1)
+        return advance_sensors(state.motion_train_sensors, imu, command, state.data.qpos[:, 7:],
+                               qvel[:, 6:], state.a_last, fresh, jax.random.fold_in(key, 234), self.noisy_obs)
 
     def push_actor(self, history, frame, fresh=None):
         if self.robot is g1_getup:
@@ -579,14 +820,34 @@ class Sim:
     def next_upright(self, previous, height, rotation):
         if self.mixed:
             # A crouch or single low step should not switch the motion prior.
-            still_up = (height > .48) & (rotation[..., 2, 2] > .50)
+            still_up = (height > MIXED_STAY_HEIGHT) & (rotation[..., 2, 2] > MIXED_STAY_UP_COS)
             return (previous & still_up) | self.is_up(height, rotation)
         return previous | self.is_up(height, rotation)
+
+    def wm_fall(self, previous_up, up, height, rotation):
+        """Hard stance-loss event with a local gradient at the actual hysteresis boundaries."""
+        hard = (previous_up & ~up).astype(height.dtype)
+        above = jax.nn.sigmoid((height - MIXED_STAY_HEIGHT) / .02)
+        aligned = jax.nn.sigmoid((rotation[..., 2, 2] - MIXED_STAY_UP_COS) / .04)
+        soft = previous_up * (1. - above * aligned)
+        return hard + (soft - jax.lax.stop_gradient(soft))
 
     def next_recovery_interval(self, remaining, previous_up, up):
         # Bouncing through the upright threshold during a rise does not restart the clock.
         fall = previous_up & ~up & (remaining == 0)
         return jnp.where(fall, self.recovery_amp_steps, jnp.maximum(remaining - 1, 0))
+
+    def floor_gait_interval(self, previous, upright, support):
+        """Release the gait reward after standing on the feet; retain it through running flight until a fall."""
+        ready = upright & ((previous == 0) | (support >= 1.))
+        return jnp.where(ready, 0, self.recovery_amp_steps)
+
+    def body_command_velocity(self, state, previous=None):
+        """Forward and lateral pelvis speed and world-Z angular rate at this control tick."""
+        _, rotation, speed, angular = state[:4]
+        body_xy = mv3(tr3(yaw_mat(rotation)), speed)[..., :2]
+        velocity = jnp.concatenate((body_xy, angular[..., 2:3]), axis=-1)
+        return velocity if previous is None else previous + self.gait_velocity_alpha * (velocity - previous)
 
     def recovery_features(self, state, key_pos=None):
         pos, rot, _, ang, q, _ = state
@@ -602,8 +863,17 @@ class Sim:
         pos, rot, _, _, q, _ = state
         return zenbot.RecoveryReference.pose(pos, rot, q, self.key_positions(pos, rot, q))
 
+    def advance_floor_stand(self, hold, posture, loaded, clip, step):
+        if self.reference_reward:
+            source = jnp.maximum(clip, 0)
+            pose = self.reference.at(source, step)
+            # Start counting foot support once the reference has also reached standing.
+            ready = (clip < 0) | (step >= self.reference.lengths[source]) | zenbot.standing_posture(pose[..., 0], pose[..., 3])
+            posture, loaded = posture & ready, loaded & ready
+        return hold.advance(posture, loaded)
+
     def reward_terms(self, *args, torque=None, joint_acc=None, clip=None, step=None, reference_start=None, reference_yaw=None,
-                     recovery_active=False, recovery_deadline=False):
+                     recovery_active=False, recovery_deadline=False, stand_blend=1., reference_rate_weight=1., gait_velocity=None):
         if self.recovery:
             terms = zenbot.reward_terms(args[0], args[1], args[3], args[4], torque, self.q_soft, env.DT,
                                         up_height=self.robot.UP_HEIGHT, target_height=self.robot.RISE_HEIGHT,
@@ -612,7 +882,11 @@ class Sim:
             if self.reference is not None:
                 # The named G1 task resets at an arbitrary frame in the clip. Keep
                 # the final standing pose as the target for the rest of the episode.
-                if self.track_getup:
+                if self.zenbot_scratch_resets:
+                    frame = reference_start + step
+                    score = self.reference.score(self.reference_pose(args[1]), jnp.maximum(clip, 0), frame)
+                    terms["motion_reference"] = jnp.where(clip >= 0, score, 0.)
+                elif self.track_getup:
                     frame = reference_start + step
                     end = self.reference.lengths[clip] - 1
                     score = self.reference.score(self.reference_pose(args[1]), clip, jnp.minimum(frame, end))
@@ -623,6 +897,60 @@ class Sim:
             return terms
         terms = env.reward_terms(*args, wrist_idx=self.robot.WRIST_IDX, default_q=self.robot.DEFAULT_Q,
                                  rise_height=self.robot.RISE_HEIGHT)
+        if self.wm_floor_amp:
+            floor_terms = {"stand": stand_blend * zenbot.floor_stand_score(args[1], args[8]),
+                           "action_rate": terms["action_rate"]}
+            if self.wm_lift_gate:
+                before = zenbot.lift_progress(args[0][0][..., 2], self.wm_lift_gate)
+                after = zenbot.lift_progress(args[1][0][..., 2], self.wm_lift_gate)
+                floor_terms["lift"] = (after - before) / env.DT
+                # Compare the quiet stance with the standing AMP clip once the feet support it.
+                joint_error = jnp.square((args[1][4] - self.floor_stand_joints) / .5).mean(axis=-1)
+                floor_terms["stand"] /= 1. + joint_error
+            if self.wm_floor_locomotion:
+                cmd = args[5]
+                moving = ~jnp.asarray(recovery_active) & jnp.any(cmd != 0., axis=-1)
+                velocity = self.body_command_velocity(args[1]) if gait_velocity is None else gait_velocity
+                error = velocity - cmd
+                tracking = jax.lax.rsqrt(1. + jnp.square(error / .5).sum(-1))
+                at_rest = jax.lax.rsqrt(1. + jnp.square(cmd / .5).sum(-1))
+                # Standing still earns zero for every movement command, reaching its velocity earns one.
+                gain = (tracking - at_rest) / jnp.maximum(1. - at_rest, 1e-6)
+                floor_terms["velocity"] = jnp.where(moving, jnp.maximum(gain, -1.), 0.)
+                floor_terms["stand"] = jnp.where(moving, 0., floor_terms["stand"])
+                if self.wm_lift_gate:
+                    floor_terms["lift"] = jnp.where(recovery_active, floor_terms["lift"], 0.)
+            if self.reference_reward:
+                pose = self.reference_pose(args[1])
+                source = jnp.maximum(clip, 0)
+                active = (clip >= 0) & (step < self.reference.lengths[source])
+                prev, curr = args[:2]
+                rates = self.reference.motion_rate(curr[0], curr[1], curr[4], prev[0], prev[4])
+                moving = self.reference.score(pose, source, step, smooth_l1=True, rates=rates,
+                                              rate_weight=reference_rate_weight)
+                stand = self.standing_reference
+                # A late recovery still needs to move after the reference has ended.
+                stationary = stand.score(pose, jnp.zeros_like(clip), stand.lengths[0] // 2,
+                                         smooth_l1=True, rates=rates, rate_weight=reference_rate_weight * stand_blend)
+                # Once the source has finished, keep its neutral standing target even for a late rise.
+                floor_terms["motion_reference"] = jnp.where(clip >= 0, jnp.where(active, moving, stationary), 0.)
+            return floor_terms
+        if self.zenbot_motion_train_wm:
+            pos, rotation, velocity, angular = args[1][:4]
+            command, recovering = args[5:7]
+            body_velocity = mv3(tr3(yaw_mat(rotation)), velocity)
+            track = ~jnp.asarray(recovering) & ~jnp.asarray(recovery_active)
+            lin_error = jnp.square(body_velocity[..., :2] - command[..., :2]).sum(axis=-1)
+            yaw_error = jnp.square(angular[..., 2] - command[..., 2])
+            terms["track_lin"] = jnp.where(track, jnp.exp(-lin_error / .5**2), 0.)
+            terms["track_ang"] = jnp.where(track, jnp.exp(-yaw_error / .5**2), 0.)
+            terms["rise"] *= .25
+            unbalanced = 1. - env.soft_up(pos[..., 2], rotation, self.robot.UP_HEIGHT)
+            terms["recovery_timeout_cost"] = jnp.where(recovery_deadline, unbalanced, 0.)
+            if self.zenbot_wm_reference_training:
+                terms["motion_reference"] = self.wm_reference.tracked_score(
+                    self.reference_pose(args[1]), clip, reference_start, step, recovery_active, args[7])
+            return {name: terms[name] for name in self.terms}
         if self.recovery_amp_steps:
             # Keep the one-off gait fall penalty. Posture and timing during recovery come from AMP.
             terms["rise"] = jnp.where(recovery_active, 0., .25 * terms["rise"])
@@ -685,7 +1013,7 @@ class Sim:
             return jnp.concatenate((frame, state[0][..., 2:3], mv3(tr3(yaw_mat(state[1])), state[2])), -1)
         return frame
 
-    def control_targets(self, action, bias, history, context, *, clip_pd_targets=None):
+    def control_targets(self, action, bias, history, context, *, elapsed=None):
         if self.robot is not zenbot:
             return self.robot.DEFAULT_Q + self.robot.ACTION_SCALE * action - bias
         # A 3–7 physics-step delay can reach either of the previous two policy
@@ -693,16 +1021,8 @@ class Sim:
         frames = history.reshape(*history.shape[:-1], self.history, self.frame_dim)
         start = 9 + 2 * self.J
         previous, older = frames[..., -1, start:start + self.J], frames[..., -2, start:start + self.J]
-        delay = context[..., 2 + zenbot.GROUP].astype(jnp.int32)
-        age = jnp.arange(env.DECIMATION)[:, None] - delay[..., None, :]
-        applied = jnp.where(age >= 0, action[..., None, :],
-                            jnp.where(age >= -env.DECIMATION, previous[..., None, :], older[..., None, :]))
-        targets = self.robot.DEFAULT_Q + self.robot.ACTION_SCALE * applied - bias[..., None, :]
-        clip = self.clip_pd_targets if clip_pd_targets is None else clip_pd_targets
-        if clip:
-            # Each delayed motor target is bounded before torque computation. History keeps the sampled action.
-            targets = jnp.clip(targets, self.joint_range[:, 0], self.joint_range[:, 1])
-        return targets.reshape(*action.shape[:-1], -1)
+        from .zenbot_wm_sensors import pd_targets
+        return pd_targets(action, previous, older, bias, context, elapsed=elapsed)
 
     def context(self, s: State):
         """Foot friction, torso CoM offset and (for Zenbot) group delays and assistance. Bias enters via the target."""
@@ -746,6 +1066,14 @@ class Sim:
                     materials = jax.random.uniform(kb, (64,), minval=.3, maxval=1.)
                     ids = jax.random.randint(ks, (N, m.ngeom - 1), 0, 64)
                     fr = tile(m.geom_friction).at[:, 1:, 0].set(materials[ids])
+        if self.physical_floor_starts is not None:
+            # The physical source trajectories were solved on the nominal Zenbot. Give most
+            # recovery worlds that same contact model, alongside randomized recovery worlds.
+            number = jnp.arange(N)
+            nominal = (number < round(self.reset_floor * N)) & (number % 4 != 3)
+            fr = jnp.where(nominal[:, None, None], m.geom_friction, fr)
+            mass = jnp.where(nominal[:, None], m.body_mass, mass)
+            subtree = jnp.where(nominal[:, None], m.body_subtreemass, subtree)
         return World(ipos, fr, bias, getattr(self, "mx", None), self.walk, mass, subtree, self.floor, inertia)
 
     def _push_interval(self, key):
@@ -753,10 +1081,107 @@ class Sim:
         u = jax.random.uniform(key, (self.N,), minval=interval[0], maxval=interval[1])
         return (u / env.DT).astype(jnp.int32)
 
-    def _fresh(self, key, world: World, clip=None, return_source=False):
+    def _scratch_start(self, key, world, command):
+        """Stratify parallel worlds so early falls cannot starve the gait training batch."""
+        gait_key, clip_key, phase_key, opening_key, noise_key = jax.random.split(key, 5)
+        walk, recovery = world.walk, world.floor
+        targets = jnp.asarray(zenbot.DIRECTIONAL_COMMANDS[:len(walk["counts"])])
+        group = jnp.sum((command[:, None] - targets) ** 2, axis=-1).argmin(axis=-1)
+        row = walk["offsets"][group] + jax.random.randint(gait_key, (self.N,), 0, walk["counts"][group])
+        clip = jax.random.randint(clip_key, (self.N,), 0, len(recovery["lengths"]))
+        minimum_phase = recovery["minimum_phase"][clip] if "minimum_phase" in recovery else 0
+        phase = jax.random.randint(phase_key, (self.N,), minimum_phase, recovery["down_counts"][clip])
+        phase = jnp.where(jax.random.uniform(opening_key, (self.N,)) < self.zenbot_phase_resets, phase, 0)
+        frame = recovery["offsets"][clip] + phase
+        floor = jnp.arange(self.N) < round(self.reset_floor * self.N)
+        z = jnp.where(floor, recovery["z"][frame] + zenbot.RESET_LIFT, walk["z"][row])
+        quat, v, w, q, qd = (jnp.where(floor[:, None], recovery[name][frame], walk[name][row])
+                             for name in ("quat", "v", "w", "q", "qd"))
+        # Match the native get-up evaluation's slight joint, roll/pitch and horizontal velocity perturbations.
+        noise = jax.random.uniform(noise_key, (self.N, self.J + 4), minval=-1., maxval=1.) * floor[:, None]
+        q = q + np.deg2rad(2.) * noise[:, :self.J]
+        roll, pitch = (np.deg2rad(1.) * noise[:, self.J:self.J+2]).T
+        tilt = jnp.stack((jnp.cos(roll)*jnp.cos(pitch), jnp.sin(roll)*jnp.cos(pitch),
+                          jnp.cos(roll)*jnp.sin(pitch), -jnp.sin(roll)*jnp.sin(pitch)), axis=-1)
+        quat = resets.qmul(quat, tilt)
+        v = v.at[:, :2].add(.07 * noise[:, -2:])
+        qpos = jnp.concatenate((jnp.zeros((self.N, 2)), z[:, None], quat, q), axis=-1)
+        qvel = jnp.concatenate((v, mv3(tr3(quat_to_mat(quat)), w), qd), axis=-1)
+        return (qpos, qvel, ~floor), (jnp.where(floor, clip, -1), jnp.where(floor, phase, 0))
+
+    def _wm_floor_start(self, key, bank):
+        """Draw fallen poses and optional intermediate recovery states for a physical reset."""
+        phase_key, opening_key, noise_key, mix_key = jax.random.split(key, 4)
+        opening = bank["openings"]
+        row = jax.random.randint(opening_key, (self.N,), 0, len(opening["z"]))
+        if self.wm_floor_amp and self.support_rsi:
+            first_count = len(opening["z"])
+            opening = bank["phases"]
+            phase_row = jax.random.randint(phase_key, (self.N,), first_count, len(opening["z"]))
+            row = jnp.where(jax.random.bernoulli(mix_key, self.support_rsi, (self.N,)), phase_row, row)
+        noise = jax.random.uniform(noise_key, (self.N, self.J + 4), minval=-1., maxval=1.)
+        # Same roll/pitch composition, joint perturbation, clearance and horizontal drift as source_getup.
+        roll, pitch = (np.deg2rad(1.) * noise[:, self.J:self.J + 2]).T
+        tilt = jnp.stack((jnp.cos(roll)*jnp.cos(pitch), jnp.sin(roll)*jnp.cos(pitch),
+                          jnp.cos(roll)*jnp.sin(pitch), -jnp.sin(roll)*jnp.sin(pitch)), axis=-1)
+        quat = resets.qmul(opening["quat"][row], tilt)
+        vel = jnp.zeros((self.N, 3)).at[:, :2].set(.07 * noise[:, -2:])
+        q = opening["q"][row] + np.deg2rad(2.) * noise[:, :self.J]
+        xy = jnp.zeros((self.N, 2))
+        cold_pos = jnp.concatenate((xy, opening["z"][row, None] + zenbot.RESET_LIFT,
+                                    quat / jnp.linalg.norm(quat, axis=-1, keepdims=True), q), axis=-1)
+        cold_vel = jnp.concatenate((vel, jnp.zeros_like(vel), jnp.zeros_like(q)), axis=-1)
+        if self.wm_floor_amp:
+            if self.wm_floor_locomotion and self.support_rsi:
+                # Resume intermediate motion from its recorded rates, including the early hand support.
+                body_gyro = mv3(tr3(quat_to_mat(quat)), opening["w"][row])
+                rates = jnp.concatenate((opening["v"][row], body_gyro, opening["qd"][row]), -1)
+                cold_vel += jnp.where(opening["frame"][row, None] > 0, rates, 0.)
+            return (cold_pos, cold_vel), (opening["clip"][row], opening["frame"][row], jnp.zeros(self.N))
+        mask = (self.wm_start_quantiles < .5 if self.wm_start_quantiles is not None else
+                jax.random.bernoulli(mix_key, .5, (self.N,)))
+        phases = bank["phases"]
+        if self.wm_physical_resets:
+            clip = opening["clip"][row]
+            frame = jax.random.randint(phase_key, (self.N,), 1, phases["limits"][clip])
+            if self.wm_stance_start_share:
+                # Half of all resets are still cold openings. Draw supported poses from the verified final two seconds.
+                stance_key, time_key = jax.random.split(jax.random.fold_in(phase_key, 1))
+                stance = (self.wm_start_quantiles >= 1. - self.wm_stance_start_share if self.wm_start_quantiles is not None else
+                          jax.random.bernoulli(stance_key, 2. * self.wm_stance_start_share, (self.N,)))
+                last = self.wm_reference.lengths[clip] - 1
+                standing_frame = last - jax.random.randint(time_key, (self.N,), 0, round(2. / env.DT))
+                frame = jnp.where(stance, standing_frame, frame)
+            index = phases["offsets"][clip] + frame
+            phase_pos, phase_vel = phases["qpos"][index], phases["qvel"][index]
+            yaw = jnp.zeros(self.N)
+        else:
+            phase, (clip, frame, yaw) = resets.states(phase_key, phases, self.N, "floor",
+                                                      self.q_soft[:, 0], self.q_soft[:, 1], return_source=True)
+            z, quat, v, w, joints, joint_velocity, _ = phase
+            phase_pos = jnp.concatenate((xy, z[:, None], quat, joints), -1)
+            phase_vel = jnp.concatenate((v, mv3(tr3(quat_to_mat(quat)), w), joint_velocity), -1)
+        state = jnp.where(mask[:, None], cold_pos, phase_pos), jnp.where(mask[:, None], cold_vel, phase_vel)
+        source = (jnp.where(mask, opening["clip"][row], clip), jnp.where(mask, 0, frame), jnp.where(mask, 0., yaw))
+        return state, source
+
+    def _fresh(self, key, world: World, clip=None, return_source=False, command=None):
         """Fresh start states for every env (`_reset` applies them where an episode ended): a walking frame (no noise, the clip's
         heading), or with probability reset_floor a not-up frame of a get-up clip (random heading, roll / pitch / joint / velocity
         noise); prob_shove of the starts that are up get a kick of the velocities."""
+        if self.zenbot_wm_getup_only:
+            (qpos, qvel), source = self._wm_floor_start(key, world.floor)
+            state = qpos, qvel, self.is_up(qpos[:, 2], quat_to_mat(qpos[:, 3:7]))
+            return (state, source[:2]) if return_source else state
+        if self.zenbot_scratch_resets:
+            if command is None:
+                command = self.sample_command(jax.random.fold_in(key, 10)).vel
+            state, source = self._scratch_start(key, world, command)
+            if self.zenbot_source_gait:
+                gait = source[0] < 0
+                q, v = source_gait.stand_reset(jax.random.fold_in(key, 508), self.N)
+                state = (jnp.where(gait[:, None], q, state[0]), jnp.where(gait[:, None], v, state[1]), state[2])
+            return (state, source) if return_source else state
         N, J = self.N, self.J
         kw, kf, ku, ks, kk1, kk2 = jax.random.split(key, 6)
         wb = world.walk
@@ -774,18 +1199,30 @@ class Sim:
                 i = wb["offsets"][track] + start
             else:
                 i = jax.random.randint(kw, (N,), 0, len(wb["z"])) if clip is None else clip
-            q = wb["q"][i] if self.recovery else jnp.clip(wb["q"][i], self.q_soft[:, 0], self.q_soft[:, 1])
+                if self.zenbot_wm_reference_training or self.wm_floor_locomotion:
+                    if command is None:
+                        command = self.sample_wm_command(jax.random.fold_in(key, 10), N).vel
+                    group = jnp.square(command[:, None] - jnp.asarray(self.wm_command_speeds)).sum(-1).argmin(-1)
+                    by_command = wb["command_rows"]
+                    row = by_command["offsets"][group] + jax.random.randint(
+                        jax.random.fold_in(kw, 1), (N,), 0, by_command["counts"][group])
+                    i = by_command["row"][row] if self.wm_floor_locomotion else jnp.where(self.wm_gait_worlds, by_command["row"][row], i)
+            q = wb["q"][i] if self.recovery or self.wm_floor_locomotion else jnp.clip(wb["q"][i], self.q_soft[:, 0], self.q_soft[:, 1])
+            if self.zenbot_wm_reference_training:
+                q = jnp.where(self.wm_gait_worlds[:, None], wb["q"][i], q)
             xy = wb["xy"][i] if self.track_getup else jnp.zeros((N, 2))
             qpos = jnp.concatenate((xy, wb["z"][i][:, None], wb["quat"][i], q), -1)
             qvel = jnp.concatenate((wb["v"][i], mv3(tr3(quat_to_mat(wb["quat"][i])), wb["w"][i]), wb["qd"][i]), -1)
-        if self.recovery:
+        if self.recovery and not self.zenbot_command_gait:
             qpos = qpos.at[:, 2].add(self.robot.RESET_LIFT)
             state = qpos, self.reference_velocity(qpos, qvel), self.is_up(qpos[:, 2], quat_to_mat(qpos[:, 3:7]))
             if self.track_getup and return_source:
                 return state, (track, i - wb["offsets"][track])
             return state
         if self.reset_floor > 0:
-            if self.legged_support:
+            if self.zenbot_motion_train_wm:
+                (fpos, fvel), (source_clip, source_frame, source_yaw) = self._wm_floor_start(kf, world.floor)
+            elif self.legged_support or self.zenbot_command_gait:
                 # LeggedLab centers the opening pose in XY and preserves its orientation and velocities.
                 bank = world.floor
                 if self.support_rsi:
@@ -802,19 +1239,29 @@ class Sim:
                 if return_source:
                     sample, (source_clip, source_frame, source_yaw) = sample
                 z, quat, v, w, fq, fqd, _ = sample
-            fpos = jnp.concatenate((jnp.zeros((N, 2)), z[:, None], quat, fq), -1)
-            fvel = jnp.concatenate((v, mv3(tr3(quat_to_mat(quat)), w), fqd), -1)
+            if not self.zenbot_motion_train_wm:
+                fpos = jnp.concatenate((jnp.zeros((N, 2)), z[:, None], quat, fq), -1)
+                fvel = jnp.concatenate((v, mv3(tr3(quat_to_mat(quat)), w), fqd), -1)
             floor = jax.random.uniform(ku, (N,)) < self.reset_floor
+            if self.zenbot_wm_reference_training or self.wm_floor_locomotion:
+                floor &= ~self.wm_gait_worlds
             qpos, qvel = jnp.where(floor[:, None], fpos, qpos), jnp.where(floor[:, None], fvel, qvel)
         was_up = self.is_up(qpos[:, 2], quat_to_mat(qpos[:, 3:7]))
         if self.prob_shove > 0:
             shove = was_up & (jax.random.uniform(ks, (N,)) < self.prob_shove)
             if self.g1_phase_amp:
                 shove &= ~floor
+            if self.zenbot_wm_reference_training:
+                shove &= ~self.wm_gait_worlds
             kick = jnp.concatenate((jax.random.uniform(kk1, (N, 6), minval=-1.0, maxval=1.0) * jnp.asarray(env.SHOVE_ROOT),
                                     env.SHOVE_JOINT * jax.random.uniform(kk2, (N, J), minval=-1.0, maxval=1.0)), -1)  # fmt: skip
             qvel = qvel + jnp.where(shove[:, None], kick, 0.0)  # (the root's angular part is in the body frame, as MuJoCo's)
         if return_source:
+            if self.zenbot_wm_reference_training:
+                empty = jnp.zeros(N, jnp.int32)
+                source = ((jnp.where(floor, source_clip, -1), jnp.where(floor, source_frame, 0))
+                          if self.reset_floor > 0 else (empty - 1, empty))
+                return (qpos, qvel, was_up), source
             source = (jnp.where(floor, source_clip, -1), source_frame, source_yaw)
             return (qpos, qvel, was_up), source
         return qpos, qvel, was_up
@@ -822,33 +1269,75 @@ class Sim:
     def _reset(self, s: State, done, key) -> State:
         """Reset the envs where `done`: start state (`_fresh`), command drawn anew, last action zero, push schedule restarted."""
         kf, kc, kp = jax.random.split(key, 3)
+        sampled_cmd = (self.sample_command(kc, s.gait_curriculum.stage) if self.zenbot_source_gait else
+                       self.sample_command(kc))
         clip = None
         if self.g1_reference:
             (qpos, qvel, was_up), (clip, start, yaw) = self._fresh(kf, s.world, return_source=True)
             s = s._replace(reference_clip=jnp.where(done, clip, s.reference_clip),
                            reference_start=jnp.where(done, start, s.reference_start),
                            reference_yaw=jnp.where(done, yaw, s.reference_yaw))
-        elif self.track_getup:
-            (qpos, qvel, was_up), (clip, start) = self._fresh(kf, s.world, return_source=True)
+        elif self.wm_floor_amp and self.reference_reward:
+            (qpos, qvel, was_up), (clip, _) = self._fresh(kf, s.world, return_source=True)
+            s = s._replace(reference_clip=jnp.where(done, clip, s.reference_clip))
+        elif self.track_getup or self.zenbot_wm_reference_training:
+            if self.zenbot_scratch_resets or self.zenbot_wm_reference_training:
+                (qpos, qvel, was_up), (clip, start) = self._fresh(kf, s.world, return_source=True, command=sampled_cmd.vel)
+            else:
+                (qpos, qvel, was_up), (clip, start) = self._fresh(kf, s.world, return_source=True)
             s = s._replace(reference_clip=jnp.where(done, clip, s.reference_clip),
                            reference_start=jnp.where(done, start, s.reference_start))
         else:
             if self.reference is not None:
                 clip = jax.random.randint(jax.random.split(kf, 6)[0], (self.N,), 0, len(self.reference.files))
                 s = s._replace(reference_clip=jnp.where(done, clip, s.reference_clip))
-            qpos, qvel, was_up = self._fresh(kf, s.world, clip)
+            first_command = sampled_cmd.vel if self.wm_floor_locomotion else None
+            qpos, qvel, was_up = self._fresh(kf, s.world, clip, command=first_command)
+        if self.physical_gait_starts is not None:
+            window, qpos, qvel, sampled_cmd, window_delays = self.physical_gait_starts.reset(
+                s, jax.random.fold_in(key, 759), done, clip < 0, qpos, qvel, sampled_cmd)
+            s = s._replace(gait_window=window)
         if s.episode_limit is not None:
-            s = s._replace(episode_limit=jnp.where(done, self.episode_steps, s.episode_limit))
+            limit = jnp.where(clip < 0, source_gait.GAIT_STEPS, self.episode_steps) if self.zenbot_source_gait else self.episode_steps
+            s = s._replace(episode_limit=jnp.where(done, limit, s.episode_limit))
+        if self.zenbot_scratch_curriculum:
+            s = s._replace(first_supported_stand=jnp.where(done, -1, s.first_supported_stand))
         on = done[:, None]
         d = s.data.replace(qpos=jnp.where(on, qpos, s.data.qpos), qvel=jnp.where(on, qvel, s.data.qvel), qacc_warmstart=jnp.where(on, 0.0, s.data.qacc_warmstart))
         down = jnp.where(done, clip >= 0 if self.g1_phase_amp else ~was_up, s.down)
+        if s.gait_velocity is not None:
+            initial = self.body_command_velocity(unflatten(qpos, qvel))
+            s = s._replace(gait_velocity=jnp.where(on, initial, s.gait_velocity))
+        if self.floor_stop_command_share:
+            # Practice standing after a rise as well as rising under a live movement command.
+            stop = ~was_up & jax.random.bernoulli(jax.random.fold_in(kc, 22), self.floor_stop_command_share, (self.N,))
+            sampled_cmd = sampled_cmd._replace(
+                vel=jnp.where(stop[:, None], 0., sampled_cmd.vel),
+                is_standing=sampled_cmd.is_standing | stop,
+                time_left=jnp.where(stop, (self.episode_steps + 1) * env.DT, sampled_cmd.time_left),
+            )
         if self.recovery_amp_steps:
             s = s._replace(recovery_left=jnp.where(done, jnp.where(was_up, 0, self.recovery_amp_steps), s.recovery_left))
-        if self.zenbot_support_weight:
+        if s.supported_hold is not None:
             s = s._replace(supported_hold=s.supported_hold.reset(done))
-        cmd = self.recovery_command(env.where_cmd(done, env.sample_cmd(kc, self.N, self.cmd_ranges), s.cmd), down)
+        if self.zenbot_command_gait:
+            s = s._replace(gait_ready=jnp.where(done, was_up, s.gait_ready))
+        if self.zenbot_scratch_resets:
+            if self.zenbot_source_gait:
+                hold = jax.random.uniform(jax.random.fold_in(kc, 4), (self.N,), minval=2., maxval=4.)
+                sampled_cmd = sampled_cmd._replace(time_left=jnp.where(was_up, sampled_cmd.time_left, hold))
+            sampled_cmd = sampled_cmd._replace(vel=jnp.where(was_up[:, None], sampled_cmd.vel, 0.),
+                                               is_standing=sampled_cmd.is_standing | ~was_up)
+        cmd = self.recovery_command(env.where_cmd(done, sampled_cmd, s.cmd), down)
         if self.robot is zenbot:
             delays = jax.random.randint(jax.random.fold_in(key, 9), s.delay_steps.shape, 3, 8)
+            if self.physical_gait_starts is not None:
+                delays = jnp.where(window_delays >= 0, window_delays, delays)
+            if self.zero_motor_delay_probability:
+                immediate = jax.random.bernoulli(
+                    jax.random.fold_in(key, 760), self.zero_motor_delay_probability, (self.N, 1)
+                )
+                delays = jnp.where(immediate, 0, delays)
             s = s._replace(delay_steps=jnp.where(on, delays, s.delay_steps))
         return s._replace(data=d, a_last=jnp.where(on, 0.0, s.a_last), a_ode=jnp.where(on, 0.0, s.a_ode), cmd=cmd, t=jnp.where(done, 0, s.t),
                           was_up=jnp.where(done, was_up, s.was_up), down=down, push_t=jnp.where(done, 0, s.push_t),
@@ -863,31 +1352,57 @@ class Sim:
         cmd = env.Cmd(jnp.zeros((N, 3)), z, zb, zb, z)
         s = State(data, world, jnp.zeros((N, self.obs_dim)), jnp.zeros((N, J)), jnp.zeros((N, J)), cmd, jnp.zeros((N, 3)), zi, jnp.ones((N,), bool),
                   jnp.zeros((N,), bool), zi, zi, jnp.zeros((N, len(self.terms))), key, jnp.full((N,), self.assist_newtons, jnp.float32), jnp.zeros((N, 5 if self.robot is zenbot else 0), jnp.int32))  # fmt: skip
-        if self.reference is not None:
+        if self.reference is not None or self.zenbot_scratch_resets or self.zenbot_wm_reference_training:
             s = s._replace(reference_clip=zi)
             if self.g1_reference:
                 s = s._replace(reference_start=zi, reference_yaw=z)
-            elif self.track_getup:
+            elif self.track_getup or self.zenbot_wm_reference_training:
                 s = s._replace(reference_start=zi)
         if self.recovery_amp_steps:
             s = s._replace(recovery_left=zi)
-        if self.zenbot_support_weight:
+        if self.zenbot_support_weight or self.wm_floor_amp:
             s = s._replace(supported_hold=zenbot.SupportedStand.empty(N, env.DT))
+        if self.zenbot_command_gait:
+            s = s._replace(gait_ready=zb)
+        if self.zenbot_scratch_curriculum:
+            s = s._replace(first_supported_stand=jnp.full_like(zi, -1))
+        if self.zenbot_source_gait:
+            s = s._replace(gait_curriculum=source_gait.Curriculum.empty(N), episode_limit=zi)
+        if self.physical_gait_starts is not None:
+            s = s._replace(gait_window=jnp.full((N, 2), -1, jnp.int32))
+        if self.wm_floor_amp:
+            s = s._replace(episode_limit=zi)
+        if self.gait_velocity_alpha:
+            s = s._replace(gait_velocity=jnp.zeros((N, 3), jnp.float32))
         s = self._reset(s, jnp.ones((N,), bool), k_reset)
-        if self.random_start and (self.track_getup or self.zenbot_getup_stand):
+        if self.random_start and self.wm_floor_amp:
+            # Every robot starts at t=0. Spread the first timeouts across control ticks.
+            s = s._replace(episode_limit=jax.random.randint(k_t, (N,), self.episode_steps // 2, self.episode_steps + 1))
+        elif self.random_start and (self.track_getup or self.zenbot_getup_stand or self.wm_stance_start_share):
             # Spread first resets across the collection buffer while t continues to measure
             # the actual time since the sampled motion pose. Later episodes run to full length.
-            s = s._replace(episode_limit=jax.random.randint(k_t, (N,), 1, self.episode_steps + 1))
+            horizon = s.episode_limit if self.zenbot_source_gait else self.episode_steps
+            limit = jax.random.randint(k_t, (N,), 1, horizon + 1)
+            if self.zenbot_scratch_curriculum:
+                limit = jnp.where(s.reference_clip >= 0, self.episode_steps, limit)
+            s = s._replace(episode_limit=limit)
         elif self.random_start and self.robot is g1_getup:
             # The source PPO runner randomizes the initial episode counter once.
             s = s._replace(t=jax.random.randint(k_t, (N,), 0, self.episode_steps))
         elif self.random_start and not self.recovery:  # episodes then end at different times (a get-up start keeps its full time to rise)
             s = s._replace(t=jnp.where(s.down, 0, jax.random.randint(k_t, (N,), 0, self.episode_steps)))
         S = unflatten(s.data.qpos, s.data.qvel)
-        c_obs = self.command(s.cmd, S[1])
+        c_obs = self.wm_velocity_command(s.cmd, S[1], s.was_up, s.recovery_left)
         frame = self.obs_frame(S, s.a_last, c_obs, k_obs)
         critic_obs = self.push_critic(None, S, s.a_last) if self.robot is g1_getup else None
-        return s._replace(c_obs=c_obs, obs=self.push_actor(None, frame), critic_obs=critic_obs)
+        if self.zenbot_motion_train_obs:
+            s = s._replace(motion_train_sensors=self.motion_train_sensors(s, S[1], c_obs, jnp.ones_like(zb), k_obs))
+        s = s._replace(c_obs=c_obs, obs=self.push_actor(None, frame), critic_obs=critic_obs)
+        if self.physical_floor_starts is not None:
+            s = self.physical_floor_starts.restore(self, s, jnp.ones_like(zb), k_obs)
+        if self.physical_gait_starts is not None:
+            s = self.physical_gait_starts.restore(self, s, jnp.ones_like(zb), k_obs)
+        return s
 
     # ------------------------------------------------------------------ physics
     def contact_stats(self, data):
@@ -909,7 +1424,7 @@ class Sim:
         tc = valid & floor & (term[g0] | term[g1]) & (jnp.abs(normal) > env.CONTACT_FORCE)
         touch = jnp.zeros((N,)).at[w].max(tc.astype(jnp.float32)) > 0
         loads = None
-        if self.recovery:
+        if self.recovery or self.wm_floor_amp:
             support = jnp.asarray(self.support_link)
             link = jnp.maximum(support[g0], support[g1])
             loads = jnp.zeros((N, len(self.robot.SUPPORT_BODIES))).at[w, jnp.maximum(link, 0)].add(
@@ -928,11 +1443,9 @@ class Sim:
             if self.robot is g1_getup:
                 # LeggedLab's reset event writes a persistent world-Z force on the torso.
                 d = d.replace(xfrc_applied=d.xfrc_applied.at[:, self.torso, 2].set(assist))
-            elif self.recovery and not self.zenbot_getup_stand:
-                # The Zenbot assistance depends on support and fades with pelvis height.
+            elif self.zenbot_scratch_curriculum or (self.recovery and not self.zenbot_getup_stand):
                 loads = self.contact_stats(d)[3]
-                scale = jnp.clip((self.robot.RISE_HEIGHT - d.qpos[:, 2]) / (self.robot.RISE_HEIGHT - self.robot.FULL_FORCE_HEIGHT), 0., 1.)
-                force = assist * scale * (loads > 1.).any(-1) * (~fresh | (i > 0))
+                force = zenbot.supported_lift(assist, d.qpos[:, 2], loads, fresh, i)
                 d = d.replace(xfrc_applied=d.xfrc_applied.at[:, self.torso, 2].set(force))
             qd0 = d.qvel[:, self.va]
             d = step(mx, d, self.robot.actuator_ctrl(d.qpos[:, self.qa], d.qvel[:, self.va], tgt))
@@ -941,15 +1454,20 @@ class Sim:
             return (d, hits + hit), (found, touch, loads, acc)
 
         (data, hits), (found, touch, loads, acc) = jax.lax.scan(sub, (data, jnp.zeros((self.N,))), jnp.arange(env.DECIMATION))
-        return data, found[-1], hits, touch[-1], loads[-1] if self.recovery else None, acc[-1] if acc is not None else None
+        illegal = touch.any(axis=0) if self.zenbot_source_gait else touch[-1]
+        return data, found[-1], hits, illegal, loads[-1] if loads is not None else None, acc[-1] if acc is not None else None
 
     # ------------------------------------------------------------------ one policy step
-    def step(self, s: State, action, clean=None, *, auto_reset=True):
+    def step(self, s: State, action, clean=None, *, auto_reset=True, reference_rate_weight=1.):
         N = self.N
         key, k_reset, k_cmd, k_obs, k_push, k_push_at = jax.random.split(s.key, 6)
         a = action.astype(jnp.float32)
-        target = self.control_targets(a, s.world.bias, s.obs, self.context(s))
-        data, contact, hits, touch, loads, joint_acc = self.physics(s.world, s.data, target, s.assist, s.t == 0)
+        target = self.control_targets(a, s.world.bias, s.obs, self.context(s),
+                                      elapsed=s.t if self.wm_floor_amp else None)
+        assist = s.assist
+        if self.zenbot_scratch_curriculum:
+            assist = jnp.where((s.reference_clip >= 0) & (s.first_supported_stand < 0), assist, 0.)
+        data, contact, hits, touch, loads, joint_acc = self.physics(s.world, s.data, target, assist, s.t == 0)
         S0, S1 = unflatten(s.data.qpos, s.data.qvel), unflatten(data.qpos, data.qvel)
         t = s.t + 1
         v = self.view_state(S1)
@@ -961,21 +1479,43 @@ class Sim:
             terminated = diverged
         limit = self.episode_steps if s.episode_limit is None else s.episode_limit
         timeout = (t >= limit) | self.recovery_timeout(s.reference_clip, s.reference_start, t)
+        if self.zenbot_wm_reference_training:
+            timeout |= self.wm_gait_worlds & s.was_up & ~was_up1
+        if self.wm_floor_locomotion:
+            terminated |= self.wm_gait_worlds & s.was_up & ~was_up1
         fall = (s.was_up & ~was_up1) | terminated if self.mixed else terminated
         remaining, active, deadline = None, None, False
         if self.recovery_amp_steps:
             remaining = self.next_recovery_interval(s.recovery_left, s.was_up, was_up1)
             active, deadline = remaining > 0, s.recovery_left == 1
+        hold, gait_ready = s.supported_hold, s.gait_ready
+        hold_score = None
+        if self.wm_floor_amp:
+            weight = s.world.body_mass.sum(-1) * abs(self.m.opt.gravity[2])
+            posture = zenbot.standing_posture(v.height, S1[1][..., 2, 2])
+            hold, hold_score = self.advance_floor_stand(
+                hold, posture & ~diverged, loads[:, :2].sum(-1) >= .5 * weight, s.reference_clip, t)
+            if self.wm_floor_locomotion:
+                remaining = self.floor_gait_interval(s.recovery_left, was_up1, hold_score)
+                active = remaining > 0
+        gait_velocity = self.body_command_velocity(S1, s.gait_velocity) if s.gait_velocity is not None else None
         terms = self.reward_terms(S0, S1, v.kin, a, s.a_last, s.c_obs, ~was_up1, fall.astype(jnp.float32), contact, hits, self.q_soft,
+                                  gait_velocity=gait_velocity,
                                   torque=data.actuator_force if self.robot is g1_getup or self.legged_support else data.ctrl,
                                   joint_acc=joint_acc, clip=s.reference_clip, step=t, reference_start=s.reference_start, reference_yaw=s.reference_yaw,
-                                  recovery_active=active, recovery_deadline=deadline)
-        hold = s.supported_hold
+                                  recovery_active=active, recovery_deadline=deadline, stand_blend=hold_score,
+                                  reference_rate_weight=reference_rate_weight)
+        if self.wm_min_rise_score:
+            terminated |= self.wm_reference.failed_rise(terms["motion_reference"], s.reference_clip, s.reference_start,
+                                                        t, active, s.was_up & ~was_up1, self.wm_min_rise_score)
         if self.zenbot_getup_stand:
             weight = s.world.body_mass.sum(-1) * abs(self.m.opt.gravity[2])
             foot_force = loads[:, :2].sum(-1)
             posture = zenbot.standing_posture(v.height, S1[1][..., 2, 2])
             loaded = (foot_force >= .5 * weight) & ~diverged
+            if self.zenbot_command_gait:
+                nonfoot_load_bw = loads[:, 2:].sum(-1) / weight
+                posture &= nonfoot_load_bw < .10
             standing = posture & loaded
             if not self.zenbot_standing_amp:
                 _, stand_quality = zenbot.quiet_stand(S1, foot_force, weight)
@@ -983,10 +1523,33 @@ class Sim:
             if self.zenbot_support_weight:
                 hold, hold_score = hold.advance(posture & ~diverged, loaded)
                 terms["supported_hold"] = hold_score
+                if self.zenbot_command_gait:
+                    gait_ready = zenbot.ready_for_gait(gait_ready, hold_score, v.height, S1[1][..., 2, 2],
+                                                       nonfoot_load_bw, diverged)
+                    if self.zenbot_source_gait:
+                        source_active = (s.reference_clip < 0) | s.gait_ready
+                        gait_fell = source_gait.failed(v.height, S1[1][:, 2, 2], touch, diverged)
+                        terminated |= source_active & gait_fell
+                        gait_ready = jnp.where(source_active, ~gait_fell, gait_ready)
+                    elif self.zenbot_scratch_resets:
+                        # Ground-born episodes can retry a fall. Gait-born episodes reset on loss of support.
+                        terminated |= (s.reference_clip < 0) & ~gait_ready
+                    moving = jnp.any(jnp.abs(s.c_obs) > .05, axis=-1)
+                    terms["supported_hold"] = jnp.where(gait_ready & moving, 0., hold_score)
                 if self.zenbot_default_stand:
                     terms["stand_pose"], terms["supported_hold"] = zenbot.default_stand_terms(S1, hold_score)
+        first_stand = s.first_supported_stand
+        if self.zenbot_scratch_curriculum:
+            first_stand, failed, timeout = zenbot.scratch_recovery_end(
+                s.reference_clip, s.reference_start, s.world.floor["lengths"], t, first_stand, gait_ready,
+                self.episode_steps, timeout)
+            terminated |= failed
         parts = self.weighted(terms)
         parts = jnp.where(diverged[:, None], 0.0, jnp.stack([parts[k] for k in self.terms], -1))
+        if self.zenbot_source_gait:
+            # In locomotion the task consists of velocity tracking (trainer) and the existing threefold action-rate cost.
+            rate = jnp.asarray([name == "action_rate_l2" for name in self.terms])
+            parts = jnp.where(source_active[:, None] & ~rate, 0., parts)
         reward = parts.sum(-1)
         done = terminated | timeout
         ep_sums = s.ep_sums + parts
@@ -998,7 +1561,17 @@ class Sim:
                  "down_done": (fin * s.down).sum(), "down_up": (fin * s.down * was_up1).sum(), "up_frac": was_up1.mean(),
                  "self_hits": hits.mean(), "foot_contact": contact.mean()}  # fmt: skip
         s1 = s._replace(data=data, a_last=a, a_ode=a if clean is None else clean.astype(jnp.float32), t=t,
-                        was_up=was_up1, ep_sums=ep_sums, recovery_left=remaining, supported_hold=hold)
+                        was_up=was_up1, ep_sums=ep_sums, recovery_left=remaining, supported_hold=hold, gait_ready=gait_ready,
+                        first_supported_stand=first_stand, gait_velocity=gait_velocity)
+        if self.zenbot_wm_reference_training:
+            # A later fall belongs to a new recovery; its phase cannot be matched to the birth clip.
+            s1 = s1._replace(reference_clip=jnp.where(s.was_up & ~was_up1, -1, s1.reference_clip))
+        if self.wm_floor_amp:
+            stats["stand_blend"] = jnp.where(active, hold_score, 1.) if self.wm_floor_locomotion else hold_score
+        if self.zenbot_scratch_curriculum:
+            stats["failed_floor_recovery"] = failed
+            stats["applied_lift_n"] = data.xfrc_applied[:, self.torso, 2].mean()
+            stats["failed_floor_resets"] = failed.sum()
         if self.mixed:
             stats["gait_falls"] = (s.was_up & ~was_up1 & ~diverged).sum()
             stats["rises"] = (~s.was_up & was_up1 & ~diverged).sum()
@@ -1006,8 +1579,10 @@ class Sim:
             valid = ~diverged
             if self.g1_reference:
                 valid &= self.reference.active(s.reference_clip, s.reference_start, t)
+            elif self.zenbot_scratch_resets:
+                valid &= (s.reference_clip >= 0) & (s.reference_start + t < self.reference.lengths[jnp.maximum(s.reference_clip, 0)])
             elif not self.track_getup:
-                valid &= t < self.reference.lengths[s.reference_clip]
+                valid &= (s.reference_clip >= 0) & (t < self.reference.lengths[jnp.maximum(s.reference_clip, 0)])
             score = terms.get("reference_pose_score", terms["motion_reference"])
             stats["reference_score_sum"] = jnp.where(valid, score, 0.).sum()
             stats["reference_frames"] = valid.sum()
@@ -1017,12 +1592,19 @@ class Sim:
                 stats["reference_moving_frames"] = moving.sum()
         if self.recovery:
             if self.zenbot_getup_stand:
-                if self.clip_pd_targets:
-                    requested = self.robot.DEFAULT_Q + self.robot.ACTION_SCALE * a - s.world.bias
-                    stats["pd_request_outside_fraction"] = ((requested < self.joint_range[:, 0]) |
-                                                            (requested > self.joint_range[:, 1])).mean()
+                requested = self.robot.DEFAULT_Q + self.robot.ACTION_SCALE * a - s.world.bias
+                stats["pd_request_outside_fraction"] = ((requested < self.joint_range[:, 0]) |
+                                                        (requested > self.joint_range[:, 1])).mean()
+                if self.zenbot_command_gait:
+                    stats["gait_command"] = s.c_obs
+                    stats["gait_ready"] = gait_ready
+                    local_speed = mv3(tr3(yaw_mat(S1[1])), S1[2])
+                    velocity = jnp.column_stack((local_speed[:, :2], S1[3][:, 2]))
+                    stats["gait_velocity_error"] = velocity - s.c_obs
                 stats["standing_now"] = standing
                 stats["supported_stand"] = stats["standing_now"].mean()
+                if self.zenbot_standing_amp:
+                    stats["min_foot_load_bw"] = loads[:, :2].min(axis=-1) / weight
                 if not self.zenbot_standing_amp:
                     stats["stand_quality"] = jnp.where(diverged, 0., stand_quality)
                 if self.zenbot_support_weight:
@@ -1035,12 +1617,36 @@ class Sim:
                 dec = done & (avg > 0.6 * self.weights["target_base_height"])
                 s1 = s1._replace(assist=jnp.maximum(0., s.assist - dec * self.robot.ASSIST_DECREMENT))
             stats.update(assist_n=s.assist.mean(), foot_load=loads[:, :2].sum(-1))
+        if self.zenbot_source_gait:
+            velocity_score, velocity_error = source_gait.tracking(S1, s.c_obs)
+            # The source command curriculum measures ordinary starts. A physical window can
+            # prescribe a run above the current training stage and assist its first steps.
+            assessed = source_active if s.gait_window is None else source_active & (s.gait_window[:, 0] < 0)
+            curriculum = s.gait_curriculum.advance(s.c_obs[:, 0], velocity_error, assessed, terminated, timeout)
+            if s.gait_window is not None:
+                first, end = s.gait_window.T
+                stats["physical_gait_window_fraction"] = ((first >= 0) & (first + s.t < end)).mean()
+            s1 = s1._replace(gait_curriculum=curriculum)
+            stats.update(source_gait_active=source_active, source_standing=s.cmd.is_standing,
+                         source_tilt_l2=jnp.square(S1[1][:, 2, :2]).sum(axis=-1),
+                         source_velocity_score=jnp.where(diverged, 0., velocity_score),
+                         source_speed_stage=curriculum.stage, source_completed_episodes=curriculum.completed[7],
+                         source_tracking_error=curriculum.last_metrics[0], source_fall_rate=curriculum.last_metrics[3])
         reset_history = done if auto_reset else jnp.zeros_like(done)
         if not auto_reset and self.recovery:
             stats["support_load"] = loads
         if auto_reset:
             s1 = self._reset(s1, done, k_reset)
-        cmd = self.recovery_command(env.tick(s1.cmd, k_cmd, self.cmd_ranges), s1.down)
+        sample = (lambda key: self.sample_command(key, s1.gait_curriculum.stage)) if self.zenbot_source_gait else self.sample_command
+        cmd = self.recovery_command(env.tick(s1.cmd, k_cmd, self.cmd_ranges, sample=sample), s1.down)
+        if self.zenbot_motion_train_wm and auto_reset:
+            # The transition belonged to the old episode. A newborn world gets its full command interval.
+            cmd = env.where_cmd(reset_history, s1.cmd, cmd)
+        if self.zenbot_scratch_resets:
+            # Freeze a zero command and its timer until the ground-born actor has held its feet for a second.
+            recovering = (s1.reference_clip >= 0) & ~s1.gait_ready
+            stopped = s1.cmd._replace(vel=jnp.zeros_like(s1.cmd.vel), is_standing=jnp.ones_like(s1.cmd.is_standing))
+            cmd = env.where_cmd(recovering, stopped, cmd)
         push_t = s1.push_t + 1
         push_due = (push_t == s1.push_at) & (self.push and not self.recovery)
         push = push_due
@@ -1059,9 +1665,15 @@ class Sim:
         s1 = s1._replace(data=s1.data.replace(qvel=qvel), push_t=jnp.where(push_due, 0, push_t), push_at=jnp.where(push_due, self._push_interval(k_push_at), s1.push_at))
         stats["pushes"] = push.sum().astype(jnp.float32)
         S2 = unflatten(s1.data.qpos, s1.data.qvel)
-        c_obs = self.command(cmd, S2[1])
+        c_obs = self.wm_velocity_command(cmd, S2[1], s1.was_up, s1.recovery_left)
         obs = self.push_actor(s.obs, self.obs_frame(S2, s1.a_last, c_obs, k_obs), reset_history)
         critic_obs = self.push_critic(s.critic_obs, S2, s1.a_last, reset_history) if self.robot is g1_getup else None
+        if self.zenbot_motion_train_obs:
+            s1 = s1._replace(motion_train_sensors=self.motion_train_sensors(s1, S2[1], c_obs, reset_history, k_obs))
         s2 = s1._replace(obs=obs, critic_obs=critic_obs, cmd=cmd, c_obs=c_obs, key=key)
+        if self.physical_floor_starts is not None and auto_reset:
+            s2 = self.physical_floor_starts.restore(self, s2, reset_history, k_reset)
+        if self.physical_gait_starts is not None and auto_reset:
+            s2 = self.physical_gait_starts.restore(self, s2, reset_history, k_reset)
         return s2, Transition(s.data.qpos, s.data.qvel, target, data.qpos, data.qvel, reward, terminated, timeout & ~terminated, diverged, parts,
                               contact, v.clearance, stats)  # fmt: skip

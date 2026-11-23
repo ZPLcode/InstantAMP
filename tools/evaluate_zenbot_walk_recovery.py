@@ -9,14 +9,16 @@ from scipy.spatial.transform import Rotation
 
 from instantamp import env, zenbot
 from instantamp.native_zenbot import ZenbotNative
+from tools.score_zenbot_gait import straight_walk_clips
 
 
 def starts(walk_dir, floor_dir):
+    walk = straight_walk_clips(walk_dir)[0]
     for task, paths, speed in (
-        ("walk", [walk_dir / "143_02_stageii.npz"], 1.),
+        ("walk", [walk], 1.),
         ("run", [walk_dir / "run__C3_-_run_stageii.npz"], 2.5),
         ("recover_to_walk", sorted(floor_dir.glob("*.npz")), 1.),
-        ("walk_fall_resume", [walk_dir / "143_02_stageii.npz"], 1.),
+        ("walk_fall_resume", [walk], 1.),
         ("run_fall_resume", [walk_dir / "run__C3_-_run_stageii.npz"], 2.5),
     ):
         for path in paths:

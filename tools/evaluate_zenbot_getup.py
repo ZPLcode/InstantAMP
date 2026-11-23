@@ -12,22 +12,26 @@ import mujoco
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from instantamp import zenbot
-from tools.evaluate_zenbot_walk_recovery import rise_style, support_sequence
-from tools.play_zenbot_getup import REFERENCE, RELEASE, ZenbotPlayer
+from instantamp import env, zenbot
+from tools.evaluate_zenbot_walk_recovery import rise_style, score, support_sequence
+from tools.play_zenbot_getup import RELEASE, ZenbotPlayer
 from tools.score_getup_in_place import pre_rise_attempts
-from tools.score_zenbot_sequence import first_run, support_diagnostics
+from tools.score_zenbot_sequence import first_run, ground_timing, support_diagnostics
 
 DT = 0.02
 
 
-def evaluate(player, trial, seed, steps, push_step, plan_out=None):
+def evaluate(player, trial, seed, steps, push_step, plan_out=None, *, immediate_motors=False, cold_start=False):
     rng = np.random.default_rng([seed, trial, 7143])
     lags = np.random.default_rng(seed).integers(3, 8, (len(player.names), 5))[trial]
+    if immediate_motors:
+        lags = np.zeros_like(lags)
     q, v = (
         np.array(player.poses[trial], float),
         np.array(player.velocities[trial], float),
     )
+    if cold_start:
+        v.fill(0.)
     if seed != 42:
         q[7:] += np.deg2rad(rng.uniform(-2.0, 2.0, 23))
         rotation = Rotation.from_quat(q[3:7], scalar_first=True)
@@ -35,14 +39,15 @@ def evaluate(player, trial, seed, steps, push_step, plan_out=None):
         q[3:7] = (rotation * tilt).as_quat(scalar_first=True)
         v[:2] += rng.uniform(-0.07, 0.07, 2)
     sim = player.native
-    sim.reset(q, v, lags)
+    sim.reset(q, v, lags, command=(player.speed, 0., 0.))
     player.update_view()
     feet = [sim.model.body("robot_" + name).id for name in zenbot.FEET]
     Q = np.empty((steps + 1, 30))
     V = np.empty((steps + 1, 29))
     F = np.empty((steps, 2, 2))
     loads = np.empty(steps)
-    support = np.empty((steps, 6))
+    support = np.empty((steps, len(sim.support_load)))
+    flight = np.empty((steps, env.DECIMATION), dtype=bool) if player.speed else None
     Q[0], V[0] = q, v
     for k in range(steps):
         if k == push_step:
@@ -62,6 +67,8 @@ def evaluate(player, trial, seed, steps, push_step, plan_out=None):
             )
         Q[k + 1], V[k + 1] = sim.data.qpos, sim.data.qvel
         F[k], support[k] = sim.data.xpos[feet, :2], sim.support_load
+        if flight is not None:
+            flight[k] = sim.flight
     up_cos = 1.0 - 2.0 * np.square(Q[:, 4:6]).sum(-1)
     upright = (Q[:, 2] > 0.58) & (Q[:, 2] <= 0.78) & (up_cos > 0.8660254)
     tick = first_run(upright, 10)
@@ -84,7 +91,7 @@ def evaluate(player, trial, seed, steps, push_step, plan_out=None):
         push_step=push_step,
         clip=clip,
         offset=offset,
-        lags=lags.tolist(),
+        lags=np.asarray(sim.delays).tolist(),
         rise=duration,
         refall=refall,
         held=held,
@@ -92,9 +99,16 @@ def evaluate(player, trial, seed, steps, push_step, plan_out=None):
         feet_cm=foot_drift,
         throughout=bool(tick is not None and upright[tick:].all()),
         pre_rise_attempts=pre_rise_attempts(Q[:, 2], DT, duration),
+        ground_timing=ground_timing(Q, V, tick),
     )
     row.update(support_diagnostics(Q, V, support, tick, clip, offset, player.reference))
-    return row, dict(qpos=Q, qvel=V, feet_xy=F, loads=loads, support_load_bw=support)
+    arrays = dict(qpos=Q, qvel=V, feet_xy=F, loads=loads, support_load_bw=support)
+    if flight is not None:
+        task = "walk" if player.speed < 1.5 else "run"
+        row["gait"] = score(task, player.speed, Q[1:], V[1:], support[:, :2], flight, None)
+        row["command_mps"] = player.speed
+        arrays.update(airborne_substeps=flight, command_mps=player.speed, fps=1./DT)
+    return row, arrays
 
 
 def style_case(row, qpos, model, reference_dir):
@@ -107,18 +121,28 @@ def style_case(row, qpos, model, reference_dir):
     # Elevation of the chest's forward axis is independent of world heading. Forward lean is positive.
     torso = model.body("robot_" + zenbot.TORSO).id
     data = mujoco.MjData(model)
-    torso_pitch = []
+    torso_pitch, torso_tilt = [], []
     for pose in qpos[-100:]:
         data.qpos[:] = pose
         mujoco.mj_kinematics(model, data)
-        x, y, z = data.xmat[torso].reshape(3, 3)[:, 0]
+        rotation = data.xmat[torso].reshape(3, 3)
+        x, y, z = rotation[:, 0]
         torso_pitch.append(np.degrees(np.arctan2(-z, np.hypot(x, y))))
+        torso_tilt.append(np.degrees(np.arccos(np.clip(rotation[2, 2], -1., 1.))))
     return {
         "seed": row["seed"], "trial": row["trial"], "clip": row["clip"], "offset_s": row["offset"],
-        "rose": row["rise"] is not None, "rise_s": row["rise"], "held": row["held"],
+        "rose": row["rise"] is not None, "rise_s": row["rise"], "held": row["held"], "refall": row.get("refall"),
+        "first_attempt_held": bool(row["held"] and row["rise"] is not None and not row.get("refall")
+                                   and not row.get("pre_rise_attempts", {}).get("retries")),
+        "post_rise_drift_cm": row.get("drift_cm"), "reference_rise_s": row.get("reference_rise_s"),
+        "hip_velocity_p90_rad_s": row.get("hip_velocity_p90_rad_s"),
+        "reference_hip_velocity_p90_rad_s": row.get("reference_hip_velocity_p90_rad_s"),
+        "vertical_velocity_p90_m_s": row.get("vertical_velocity_p90_m_s"),
+        "reference_vertical_velocity_p90_m_s": row.get("reference_vertical_velocity_p90_m_s"),
         "default_pose_mae_deg": float(np.degrees(np.abs(qpos[-100:, 7:] - zenbot.DEFAULT_Q).mean())),
         "final_torso_pitch_deg": float(np.mean(torso_pitch)),
         "final_torso_abs_pitch_deg": float(np.mean(np.abs(torso_pitch))),
+        "final_torso_tilt_deg": float(np.mean(torso_tilt)),
         "style": rise_style(qpos, reference), "support": support_sequence(model, qpos, reference),
     }
 
@@ -132,10 +156,22 @@ def summarize_cases(cases):
     held = [case for case in cases if case["held"]]
     return {
         "trials": len(cases), "rise": len(rose), "quiet_final_2s": len(held),
+        "refalls_after_first_stand": sum(c["refall"] for c in rose) if all(c.get("refall") is not None for c in rose) else None,
+        "first_attempt_held": sum(case["first_attempt_held"] for case in cases),
         "median_rise_s_on_success": median(c["rise_s"] for c in rose),
+        "median_rise_to_reference_ratio": median(c["rise_s"] / c["reference_rise_s"] for c in rose if c["reference_rise_s"]),
+        "median_hip_velocity_p90_rad_s": median(c.get("hip_velocity_p90_rad_s") for c in rose),
+        "median_reference_hip_velocity_p90_rad_s": median(c.get("reference_hip_velocity_p90_rad_s") for c in rose),
+        "median_vertical_velocity_p90_m_s": median(c.get("vertical_velocity_p90_m_s") for c in rose),
+        "median_reference_vertical_velocity_p90_m_s": median(c.get("reference_vertical_velocity_p90_m_s") for c in rose),
+        "median_peak_post_rise_pelvis_drift_cm": median(c["post_rise_drift_cm"] for c in rose),
+        "median_source_time_joint_mae_deg": median(c["style"].get("source_time_joint_mae_deg") for c in cases),
+        "median_source_time_hand_knee_iou": median(c["support"]["source_time_iou"].get("hand_with_knee") for c in cases
+                                                   if c["support"]["reference_duration_s"]["hand_with_knee"] > 0.),
         "median_phase_aligned_joint_mae_deg_on_rises": median(c["style"]["phase_aligned_joint_mae_deg"] for c in rose),
         "median_default_pose_mae_deg_on_quiet_holds": median(c["default_pose_mae_deg"] for c in held),
         "median_abs_torso_pitch_deg_on_quiet_holds": median(c.get("final_torso_abs_pitch_deg") for c in held),
+        "median_torso_tilt_deg_on_quiet_holds": median(c.get("final_torso_tilt_deg") for c in held),
         "median_hand_knee_near_policy_s": median(c["support"]["policy_duration_s"]["hand_with_knee"] for c in cases),
         "median_hand_knee_near_reference_s": median(c["support"]["reference_duration_s"]["hand_with_knee"] for c in cases),
         "median_knee_mae_deg_during_reference_hand_support": median(
@@ -146,9 +182,15 @@ def summarize_cases(cases):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--checkpoint", type=Path, default=RELEASE)
-    p.add_argument("--reference", type=Path, default=REFERENCE)
+    p.add_argument("--reference", type=Path)
+    p.add_argument("--speed", type=float, default=0., help="Forward command in m/s for a command-conditioned get-up actor")
     p.add_argument("--seeds", type=int, nargs="+", default=[42])
-    p.add_argument("--trials", type=int, nargs="+", help="Indices of floor starts (default: all available starts)")
+    selection = p.add_mutually_exclusive_group()
+    selection.add_argument("--trials", type=int, nargs="+", help="Indices of floor starts (default: all available starts)")
+    selection.add_argument("--openings-only", action="store_true", help="Use the first frame of every motion clip")
+    p.add_argument("--cold-start", action="store_true", help="Start at rest with only the sampled horizontal perturbation")
+    p.add_argument("--motor-reset", choices=("checkpoint", "first-command", "default-pose"), default="checkpoint",
+                   help="How delayed targets are filled immediately after a cold reset")
     p.add_argument("--seconds", type=float, default=30.0)
     p.add_argument(
         "--push-time",
@@ -172,16 +214,21 @@ def main():
         p.error(
             "Use a duration of at least two seconds and a push time inside the recording"
         )
-    player = ZenbotPlayer(args.checkpoint, args.reference, use_plan_cache=not (args.no_plan_cache or args.save_plans))
+    player = ZenbotPlayer(args.checkpoint, args.reference, use_plan_cache=not (args.no_plan_cache or args.save_plans),
+                          speed=args.speed, visuals=False)
+    if args.motor_reset != "checkpoint":
+        player.native.delay_uses_first_command = args.motor_reset == "first-command"
     args.out.mkdir(parents=True, exist_ok=True)
     step = -1 if args.push_time is None else round(args.push_time / DT)
     trials = range(len(player.names)) if args.trials is None else args.trials
+    if args.openings_only:
+        trials = [i for i, (_, offset) in enumerate(player.names) if offset == 0.]
     cases = []
     for seed in args.seeds:
         for trial in trials:
             if not 0 <= trial < len(player.names):
                 p.error(f"Trial must be between 0 and {len(player.names) - 1}")
-            row, arrays = evaluate(player, trial, seed, round(args.seconds / DT), step, args.save_plans)
+            row, arrays = evaluate(player, trial, seed, round(args.seconds / DT), step, args.save_plans, cold_start=args.cold_start)
             prefix = args.out / f"{seed}_{trial:02}"
             if args.trajectories:
                 np.savez_compressed(prefix.with_suffix(".npz"), **arrays)
@@ -205,7 +252,8 @@ def main():
         report = {
             "checkpoint": str(args.checkpoint.resolve()), "checkpoint_sha256": digest,
             "reference": str(player.reference.resolve()), "seeds": args.seeds, "trial_indices": list(trials),
-            "seconds": round(args.seconds / DT) * DT, "push_step": step, "plan_cache": not (args.no_plan_cache or args.save_plans),
+            "motor_reset": "first-command" if player.native.delay_uses_first_command else "default-pose",
+            "seconds": round(args.seconds / DT) * DT, "cold_start": args.cold_start, "push_step": step, "plan_cache": not (args.no_plan_cache or args.save_plans),
             "summary": summarize_cases(cases), "opening_only": summarize_cases([c for c in cases if c["offset_s"] == 0.]),
             "cases": cases,
         }

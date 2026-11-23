@@ -139,7 +139,7 @@ def test_default_stand_crossfade_depends_on_each_worlds_time_on_its_feet(monkeyp
     np.testing.assert_allclose(style / (10. * env.DT), 1. - blend, atol=1e-6)
 
 
-def test_standing_amp_uses_support_reward_and_keeps_pd_target_limits_independent(tmp_path):
+def test_standing_amp_uses_support_reward_and_the_same_pd_law(tmp_path):
     q = np.tile(zenbot.DEFAULT_Q, (32, 1))
     pos = np.zeros((len(q), 3), np.float32)
     np.savez(tmp_path / "rise.npz", fps=50., root_pos=pos, root_quat=np.tile([0, 0, 0, 1], (len(q), 1)),
@@ -147,7 +147,7 @@ def test_standing_amp_uses_support_reward_and_keeps_pd_target_limits_independent
     options = dict(robot="zenbot23_getup", floor_dir=str(tmp_path), physics=False,
                    zenbot_getup_stand=True, zenbot_support_weight=8.)
     prior = Sim(1, **options, zenbot_default_stand=True)
-    standing_amp = Sim(1, **options, zenbot_standing_amp=True, clip_pd_targets=True)
+    standing_amp = Sim(1, **options, zenbot_standing_amp=True)
     assert prior.weights["stand_pose"] == 15.
     assert "stand_pose" not in standing_amp.weights
     assert "target_joint_deviation_l2" not in standing_amp.weights
@@ -157,9 +157,9 @@ def test_standing_amp_uses_support_reward_and_keeps_pd_target_limits_independent
     history = jnp.zeros((1, prior.obs_dim))
     context = jnp.zeros((1, 8))
     old = prior.control_targets(action, jnp.zeros_like(action), history, context).reshape(-1, prior.J)
-    limited = standing_amp.control_targets(action, jnp.zeros_like(action), history, context).reshape(-1, prior.J)
+    targets = standing_amp.control_targets(action, jnp.zeros_like(action), history, context).reshape(-1, prior.J)
     assert np.all(old > prior.joint_range[:, 1])
-    np.testing.assert_allclose(limited, np.broadcast_to(standing_amp.joint_range[:, 1], limited.shape))
+    np.testing.assert_allclose(targets, old)
 
 
 def test_single_discriminator_rewards_both_behaviors_with_supported_stance_blend(monkeypatch):

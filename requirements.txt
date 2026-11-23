@@ -8,6 +8,8 @@ mujoco-mjx==3.17.0
 mujoco-warp==3.17.0
 warp-lang==1.19.0
 numpy==2.4.6
+# Motion resampling and native MuJoCo evaluation
+scipy==1.17.1
 # CUDA libraries of the reference run (jax-cuda12-plugin accepts newer ones)
 nvidia-cublas-cu12==12.9.3.13
 nvidia-cuda-cupti-cu12==12.9.79

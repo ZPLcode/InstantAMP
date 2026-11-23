@@ -65,7 +65,7 @@ def describe(path, reference):
     result = json.loads(path.read_text())
     with np.load(path.with_suffix('.npz')) as z:
         q, v, feet, load = (z[key] for key in ('qpos', 'qvel', 'feet_xy', 'support_load_bw'))
-    if len(q) != len(load) + 1 or len(load) < 500 or load.shape[1] != 6:
+    if len(q) != len(load) + 1 or len(load) < 500 or load.shape[1] not in (6, 8):
         raise ValueError(f'Expected aligned 50 Hz robot states and at least ten seconds of contact loads in {path}')
     start = round(result['offset'] / DT)
     with np.load(reference / result['clip']) as z:

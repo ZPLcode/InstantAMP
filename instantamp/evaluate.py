@@ -61,7 +61,6 @@ def evaluate_recovery(cfg, paths, args):
         raise ValueError("Source PLAY starts apply to the named G1 get-up task")
     names, poses, velocities = fallen_starts(cfg["floor_dir"], robot.RESET_LIFT, protocol)
     sim = Sim(len(names), cfg.get("nconmax", NCONMAX), cfg.get("njmax", NJMAX), floor_dir=cfg["floor_dir"], robot=cfg["robot"],
-              clip_pd_targets=bool(cfg.get("clip_pd_targets", False)),
               random_start=False, assist_newtons=0., obs_noise=randomized, randomize_world=randomized)
     velocities = sim.reference_velocity(poses, velocities)
     reference = zenbot.RecoveryReference(cfg["floor_dir"], sim.key_positions, sim.J)

@@ -4,8 +4,9 @@ It keeps the latest steps of all envs in a ring. Collection adds one step at a t
 of consecutive steps of one env (`sample_windows`) and policy learning samples starting states for imagination
 (`sample_starts`).
 
-Leaves are the flattened transition record (see train.InstantAMP.record). The dynamics context xi and the observation history are stored in float16; states,
-actions and the task context in float32 / int32. A transition j ends a world-model window when its env was done, or when the
+Leaves are the flattened transition record (see train.InstantAMP.record). The dynamics context xi and the default actor history use
+float16. The Motion Train world-model profile keeps its 234 sensor values in float32 to recover the exact delayed actions.
+States, actions and the task context use float32 / int32. A transition j ends a world-model window when its env was done, or when the
 next transition does not start where it ended (a push overwrote the root velocity in between).
 """
 
@@ -14,7 +15,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-HALF = ("xi", "obs")  # stored in float16 (obs: the 384-wide actor observation history)
+HALF = ("xi", "obs")
 
 
 def flatten(rec):
@@ -40,9 +41,14 @@ def nest(flat):
     return out
 
 
-def init(T: int, rec_flat):
+def init(T: int, rec_flat, *, full_precision_obs: bool = False):
     """An empty buffer of T steps for records shaped like `rec_flat`, with the write head `ptr` and the fill level `size`."""
-    buf = {k: jnp.zeros((T,) + v.shape, jnp.float16 if (v.dtype == jnp.float32 and k.startswith(HALF)) else v.dtype) for k, v in rec_flat.items()}
+    def stored_dtype(k, v):
+        if k == "obs" and full_precision_obs:
+            return v.dtype
+        return jnp.float16 if v.dtype == jnp.float32 and k.startswith(HALF) else v.dtype
+
+    buf = {k: jnp.zeros((T,) + v.shape, stored_dtype(k, v)) for k, v in rec_flat.items()}
     buf["ptr"], buf["size"] = jnp.zeros((), jnp.int32), jnp.zeros((), jnp.int32)
     return buf
 
@@ -93,9 +99,8 @@ def sample_windows(buf, key, B: int, k: int, recent: int = 0, envs=None, recover
         age = (jnp.arange(_T(buf)) - (buf["ptr"] - buf["size"])) % _T(buf)
         end = buf["t"][:, available_envs]
         if pad_opening:
-            remaining = buf["recovery_left"][:, available_envs]
-            # A floor reset and an actual fall during gait each begin a fresh pose history.
-            history = jnp.clip(jnp.minimum(end, recovery_steps - remaining), 0, k - 1)
+            elapsed = end if "stand_blend" in buf else jnp.minimum(end, recovery_steps - buf["recovery_left"][:, available_envs])
+            history = jnp.clip(elapsed, 0, k - 1)
             oldest = jnp.maximum(buf["size"] - recent, 0) if recent else 0
             eligible = ((age >= oldest) & (age < buf["size"]))[:, None] & (age[:, None] >= history)
             eligible &= buf["size"] >= k
@@ -104,7 +109,11 @@ def sample_windows(buf, key, B: int, k: int, recent: int = 0, envs=None, recover
             eligible = ((age >= oldest) & (age < buf["size"] - 1))[:, None]
             eligible &= end >= k-1
         if recovery_only:
-            eligible &= buf["recovery_left"][:, available_envs] > 0
+            if "stand_blend" in buf:
+                # The floor-only learner practices transitions through the first second of foot support.
+                eligible &= buf["stand_blend"][:, available_envs] < 1.
+            else:
+                eligible &= buf["recovery_left"][:, available_envs] > 0
         else:
             clip = buf["reference_clip"][:, available_envs]
             source = buf["reference_start"][:, available_envs] + end
@@ -135,24 +144,28 @@ def sample_windows(buf, key, B: int, k: int, recent: int = 0, envs=None, recover
     return w
 
 
-def sample_starts(buf, key, B: int, hist: int = 0, down_frac: float = 0.0):
+def sample_starts(buf, key, B: int, hist: int = 0, down_frac: float = 0.0, *, reset_frac=0., reset_window=8):
     """B starting states for imagination, uniform over the finite transitions: 2B random transitions are drawn and the first B
     finite ones kept (a way to skip non-finite ones with fixed array shapes). hist > 0: also the `hist` states before each start, oldest
     first, in the same env ("h_qpos", "h_qvel"), for a motion prior that looks at windows of consecutive frames. A state before a reset
     (the start is the first of its episode, or the buffer's oldest step is reached) is replaced by the earliest state that follows the
     reset, so the window never mixes two episodes.
     down_frac > 0: that share of the starts are drawn uniformly among the stored states of robots that have not been up yet
-    (was_up == 0; by the inverse CDF of their mask over the whole buffer, so even a rare state is found); with none stored, uniform."""
+    (was_up == 0; by the inverse CDF of their mask over the whole buffer, so even a rare state is found); with none stored, uniform.
+    reset_frac instead prefers the first reset_window real steps after a reset, including intermediate reference starts."""
     ka, ke, kd = jax.random.split(key, 3)
     N = buf["s_qpos"].shape[1]
     age = _uniform_int(ka, buf["size"], 2 * B)
     env = jax.random.randint(ke, (2 * B,), 0, N)
-    n_d = int(round(down_frac * B))
+    if reset_frac and down_frac:
+        raise ValueError("Choose one priority for imagination starts")
+    n_d = int(round((reset_frac or down_frac) * B))
     if n_d > 0:
         T = _T(buf)
         row_age = (jnp.arange(T) - (buf["ptr"] - buf["size"])) % T  # the age of each row; rows of age >= size hold no data yet
-        down = ((buf["was_up"] <= 0) & (row_age < buf["size"])[:, None]).reshape(-1).astype(jnp.float32)
-        cum = jnp.cumsum(down)
+        preferred = (buf["t"] < reset_window) if reset_frac else (buf["was_up"] <= 0)
+        eligible = preferred & (buf["ok"] > 0) & (row_age < buf["size"])[:, None]
+        cum = jnp.cumsum(eligible.reshape(-1).astype(jnp.float32))
         u = jax.random.uniform(kd, (n_d,)) * cum[-1]
         flat = jnp.minimum(jnp.searchsorted(cum, u, side="right"), T * N - 1)
         has = cum[-1] > 0

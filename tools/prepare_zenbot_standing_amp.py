@@ -66,7 +66,6 @@ def record(model, feet, pose, feedforward, seed, frames):
     torso = model.body('robot_' + zenbot.TORSO).id
     ankle_pitch = [zenbot.DOF.index(side + '_ankle_pitch') for side in ('left', 'right')]
     ankle_roll = [zenbot.DOF.index(side + '_ankle_roll') for side in ('left', 'right')]
-    limits = model.jnt_range[model.actuator_trnid[:, 0]].T
     floor = model.geom('floor').id
     weight = model.body_mass.sum() * -model.opt.gravity[2]
     error = np.zeros(model.nv)
@@ -78,7 +77,7 @@ def record(model, feet, pose, feedforward, seed, frames):
         # Positive ankle torque opposes the corresponding floating-base rotation.
         for joints, axis in ((ankle_pitch, 4), (ankle_roll, 3)):
             effort[joints] += 100. * error[axis] + 20. * data.qvel[axis]
-        target = np.clip(zenbot.DEFAULT_Q + effort / zenbot.KP, *limits)
+        target = zenbot.DEFAULT_Q + effort / zenbot.KP
         foot_loads = np.zeros(2)
         for _ in range(env.DECIMATION):
             qdot = data.qvel[6:]

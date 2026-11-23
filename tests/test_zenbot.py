@@ -77,7 +77,7 @@ def test_substep_targets_and_model_input(sim):
     assert sim.amp_frame(state).shape == (2, 73)
 
 
-def test_getup_pd_limits_apply_to_every_delayed_physics_target(sim):
+def test_getup_preserves_out_of_range_pd_requests_at_every_delayed_substep(sim):
     n = len(zenbot.DOF)
     # Mix both extremes and feasible requests in each historical action.
     action = np.resize([80., -80., .1], (2, n)).astype(np.float32)
@@ -91,9 +91,47 @@ def test_getup_pd_limits_apply_to_every_delayed_physics_target(sim):
     raw = np.asarray(sim.control_targets(*args)).reshape(2, 4, n)
     lo, hi = sim.m.jnt_range[sim.m.actuator_trnid[:, 0]].T
     assert (raw < lo).any() and (raw > hi).any() and ((raw > lo) & (raw < hi)).any()
-    sim.clip_pd_targets = True
-    bounded = jax.jit(sim.control_targets)(*args).reshape(raw.shape)
-    np.testing.assert_allclose(bounded, np.clip(raw, lo, hi), atol=2e-7)
+    commands = np.stack((np.roll(action, 2, axis=-1), np.roll(action, 1, axis=-1), action), axis=1)
+    for world in range(len(context)):
+        for substep in range(env.DECIMATION):
+            delays = context[world, 2:7][zenbot.GROUP].astype(int)
+            index = 2 + (substep - delays) // env.DECIMATION
+            expected = zenbot.DEFAULT_Q + zenbot.ACTION_SCALE * commands[world, index, np.arange(n)] - bias[world]
+            np.testing.assert_allclose(raw[world, substep], expected, atol=2e-7)
+
+    # The physical actuator still enforces the torque and motoring speed limits.
+    q = jnp.asarray(zenbot.DEFAULT_Q)
+    far = q + 100.
+    np.testing.assert_allclose(zenbot.actuator_ctrl(q, jnp.zeros_like(q), far), zenbot.EFFORT)
+    np.testing.assert_allclose(zenbot.actuator_ctrl(q, zenbot.SPEED + 1., far), 0.)
+
+
+def test_native_cold_start_uses_the_checkpoint_motor_queue_convention(tmp_path, sim):
+    from instantamp.native_zenbot import ZenbotNative
+    from instantamp.train import save_policy
+
+    folder = tmp_path / "policies"
+    folder.mkdir()
+    layer = {"w": np.zeros((480, 23), np.float32), "b": np.full(23, 2., np.float32)}
+    policy = {"avg": [layer], "pi": [layer],
+              "obs_norm": {"mean": np.zeros(480), "var": np.ones(480), "raw": True}}
+    for name, fill in (("old", False), ("new", True)):
+        save_policy(str(folder / name), {**policy, "delay_uses_first_command": fill}, {})
+    native = ZenbotNative(tmp_path, folder / "new.npz")
+    key = jax.random.key(7)
+    pose, velocity, _ = sim._fresh(key, sim.world(key))
+
+    def first_state(lag):
+        native.reset(pose[0], velocity[0], np.full(5, lag))
+        native.step()
+        return native.data.qvel.copy()
+
+    fresh = first_state(7)
+    np.testing.assert_allclose(fresh, first_state(0), atol=1e-8)
+    native.replace_policy(folder / "old.npz")
+    assert np.linalg.norm(first_state(7) - fresh) > 1.
+    native.replace_policy(folder / "new.npz")
+    np.testing.assert_allclose(first_state(7), fresh, atol=1e-8)
 
 
 def test_native_checkpoint_swap_preserves_live_state_and_rolls_back_invalid_model(tmp_path, sim):
@@ -132,7 +170,7 @@ def test_native_checkpoint_swap_preserves_live_state_and_rolls_back_invalid_mode
     player.step()
     np.testing.assert_array_equal(player.previous, -.75)
 
-    # Copied checkpoints carry their target contract through native startup and live reload.
+    # Historical archives can still carry the obsolete target-clamp flag.
     bounded = ZenbotNative(tmp_path, checkpoints / "bounded.npz")
     bounded.reset(q[0], v[0], np.zeros(5, dtype=int))
     for name in (None, "legacy", "bounded"):
@@ -143,8 +181,6 @@ def test_native_checkpoint_swap_preserves_live_state_and_rolls_back_invalid_mode
                                                 bounded.zeros, bounded.command)
         np.testing.assert_array_equal(action, large_bias)
         expected = zenbot.DEFAULT_Q + zenbot.ACTION_SCALE * large_bias
-        if name != "legacy":
-            expected = np.clip(expected, *sim.m.jnt_range[sim.m.actuator_trnid[:, 0]].T)
         np.testing.assert_allclose(targets, np.tile(expected, (env.DECIMATION, 1)), atol=2e-7)
 
 
@@ -198,7 +234,7 @@ def test_getup_summary_compares_at_reset_offset_and_conditions_on_observed_outco
     pose[:, 7] += np.linspace(.4, 0., frames)
     np.savez(tmp_path / "rise.npz", root_pos=pose[:, :3], root_quat=pose[:, [4, 5, 6, 3]],
              dof_pos=pose[:, 7:], fps=50.)
-    row = {"seed": 17, "trial": 1, "clip": "rise.npz", "offset": .5, "rise": 1.5, "held": True}
+    row = {"seed": 17, "trial": 1, "clip": "rise.npz", "offset": .5, "rise": 1.5, "held": True, "refall": True}
     case = style_case(row, pose[25:], build_scene(robot_name="zenbot23_getup"), tmp_path)
     assert case["seed"] == 17 and case["offset_s"] == .5
     assert case["style"]["source_time_joint_mae_deg"] == pytest.approx(0.)
@@ -206,6 +242,8 @@ def test_getup_summary_compares_at_reset_offset_and_conditions_on_observed_outco
     failed = {**case, "rose": False, "held": False, "rise_s": None, "default_pose_mae_deg": 99.}
     stats = summarize_cases([case, failed])
     assert (stats["trials"], stats["rise"], stats["quiet_final_2s"]) == (2, 1, 1)
+    assert stats["refalls_after_first_stand"] == 1
+    assert stats["median_torso_tilt_deg_on_quiet_holds"] == pytest.approx(0.)
     assert stats["median_default_pose_mae_deg_on_quiet_holds"] == case["default_pose_mae_deg"]
     assert summarize_cases([failed])["median_rise_s_on_success"] is None
 

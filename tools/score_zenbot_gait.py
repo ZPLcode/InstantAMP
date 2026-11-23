@@ -8,6 +8,15 @@ import numpy as np
 from instantamp import zenbot
 
 
+def straight_walk_clips(walk_dir):
+    """Use the source's four straight walk transitions or the earlier sustained-walk bank."""
+    active = [walk_dir / f"Male{subject}_{clip}.npz" for subject in (1, 2)
+              for clip in ("B1_StandToWalk", "B2_WalkToStand")]
+    if all(path.is_file() for path in active):
+        return active
+    return [walk_dir / (name + ".npz") for name in ("143_02_stageii", "143_03_stageii")]
+
+
 def heading_speed(quat_xyzw, velocity):
     x, y, z, w = quat_xyzw.T
     yaw = np.arctan2(2 * (w*z + x*y), 1 - 2 * (y*y + z*z))
@@ -34,8 +43,7 @@ def gait_metrics(angles):
 
 
 def reference_frames(walk_dir, task, speed, reference_clips=None):
-    names = {"walk": ("143_02_stageii", "143_03_stageii"), "run": ("run__C3_-_run_stageii",)}[task]
-    paths = reference_clips or [walk_dir / (name + ".npz") for name in names]
+    paths = reference_clips or {"walk": straight_walk_clips(walk_dir), "run": [walk_dir / "run__C3_-_run_stageii.npz"]}[task]
     angles, speeds = [], []
     for path in paths:
         with np.load(path) as clip:
