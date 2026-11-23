@@ -1,0 +1,19 @@
+{
+  "num_envs": 4096,
+  "floor": 1638,
+  "gait_or_stand": 2458,
+  "ppo_floor": 164,
+  "ppo_worlds": 410,
+  "weights": {
+    "track_lin_vel_xy_exp": 4.0,
+    "track_ang_vel_z_exp": 3.0,
+    "action_rate": -0.03,
+    "lift": 0.5,
+    "stand": 6.0
+  },
+  "floor_at_reset": [
+    1638,
+    1638,
+    1638
+  ]
+}

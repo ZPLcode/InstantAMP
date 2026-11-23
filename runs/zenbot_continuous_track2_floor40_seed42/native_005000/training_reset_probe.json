@@ -1,0 +1,1559 @@
+{
+  "seed": 148507,
+  "seconds": 12.0,
+  "iteration": 5000,
+  "checkpoint_sha256": "49866b363890b41b1c69d97ad75de286a8972ba0bf261a1dc9d7af8d0aa2dc5a",
+  "method": "Production training floor reset sampler. Native MuJoCo with averaged actor, nominal robot, zero command, and no action noise.",
+  "summary": {
+    "openings": {
+      "trials": 123,
+      "rose": 0,
+      "quiet_final": 0,
+      "final_upright_training_rule": 0
+    },
+    "intermediate": {
+      "trials": 69,
+      "rose": 9,
+      "quiet_final": 9,
+      "final_upright_training_rule": 9
+    }
+  },
+  "trials": [
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 71,
+      "start_height_m": 0.2042737603187561,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 128,
+      "start_height_m": 0.4740557372570038,
+      "rise_s": 0.14,
+      "quiet_final": true,
+      "final_upright_training_rule": true
+    },
+    {
+      "clip": 7,
+      "source_frame": 49,
+      "start_height_m": 0.20325958728790283,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 139,
+      "start_height_m": 0.4258328378200531,
+      "rise_s": 0.18,
+      "quiet_final": true,
+      "final_upright_training_rule": true
+    },
+    {
+      "clip": 5,
+      "source_frame": 22,
+      "start_height_m": 0.14582833647727966,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 2,
+      "source_frame": 0,
+      "start_height_m": 0.27266353368759155,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 0,
+      "source_frame": 0,
+      "start_height_m": 0.17750246822834015,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 0,
+      "source_frame": 0,
+      "start_height_m": 0.17750246822834015,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 2,
+      "source_frame": 0,
+      "start_height_m": 0.27266353368759155,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 78,
+      "start_height_m": 0.21650639176368713,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 0,
+      "source_frame": 0,
+      "start_height_m": 0.17750246822834015,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 0,
+      "start_height_m": 0.29239627718925476,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 51,
+      "start_height_m": 0.2236892431974411,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 64,
+      "start_height_m": 0.2532722055912018,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 0,
+      "start_height_m": 0.29239627718925476,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 0,
+      "source_frame": 0,
+      "start_height_m": 0.17750246822834015,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 24,
+      "start_height_m": 0.24674434959888458,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 0,
+      "start_height_m": 0.29239627718925476,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 146,
+      "start_height_m": 0.46778741478919983,
+      "rise_s": 0.12,
+      "quiet_final": true,
+      "final_upright_training_rule": true
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 6,
+      "start_height_m": 0.2997843027114868,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 119,
+      "start_height_m": 0.4071305990219116,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 4,
+      "source_frame": 0,
+      "start_height_m": 0.22396622598171234,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 83,
+      "start_height_m": 0.43435603380203247,
+      "rise_s": 0.24,
+      "quiet_final": true,
+      "final_upright_training_rule": true
+    },
+    {
+      "clip": 4,
+      "source_frame": 150,
+      "start_height_m": 0.5058972835540771,
+      "rise_s": 0.16,
+      "quiet_final": true,
+      "final_upright_training_rule": true
+    },
+    {
+      "clip": 5,
+      "source_frame": 59,
+      "start_height_m": 0.23658286035060883,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 4,
+      "source_frame": 0,
+      "start_height_m": 0.22396622598171234,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 52,
+      "start_height_m": 0.20085757970809937,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 7,
+      "start_height_m": 0.14191588759422302,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 2,
+      "source_frame": 0,
+      "start_height_m": 0.27266353368759155,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 119,
+      "start_height_m": 0.3984137177467346,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 37,
+      "start_height_m": 0.16016912460327148,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 0,
+      "start_height_m": 0.14149707555770874,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 107,
+      "start_height_m": 0.4233008325099945,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 2,
+      "source_frame": 0,
+      "start_height_m": 0.27266353368759155,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 68,
+      "start_height_m": 0.22811153531074524,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 23,
+      "start_height_m": 0.2671920955181122,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 0,
+      "source_frame": 0,
+      "start_height_m": 0.17750246822834015,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 9,
+      "start_height_m": 0.2554531395435333,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 103,
+      "start_height_m": 0.3407023847103119,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 2,
+      "source_frame": 34,
+      "start_height_m": 0.3676122725009918,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 0,
+      "start_height_m": 0.25724419951438904,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 4,
+      "source_frame": 0,
+      "start_height_m": 0.22396622598171234,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 97,
+      "start_height_m": 0.31434398889541626,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 0,
+      "start_height_m": 0.14149707555770874,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 2,
+      "source_frame": 0,
+      "start_height_m": 0.27266353368759155,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 80,
+      "start_height_m": 0.261208713054657,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 0,
+      "start_height_m": 0.29239627718925476,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 61,
+      "start_height_m": 0.393992155790329,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 76,
+      "start_height_m": 0.308321475982666,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 0,
+      "start_height_m": 0.25724419951438904,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 4,
+      "source_frame": 0,
+      "start_height_m": 0.22396622598171234,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 38,
+      "start_height_m": 0.22969961166381836,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 70,
+      "start_height_m": 0.291035920381546,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 92,
+      "start_height_m": 0.3917721211910248,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 4,
+      "source_frame": 0,
+      "start_height_m": 0.22396622598171234,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 2,
+      "source_frame": 0,
+      "start_height_m": 0.27266353368759155,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 71,
+      "start_height_m": 0.2192118763923645,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 0,
+      "start_height_m": 0.25724419951438904,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 0,
+      "start_height_m": 0.20543164014816284,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 93,
+      "start_height_m": 0.3413873612880707,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 88,
+      "start_height_m": 0.3740721642971039,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 84,
+      "start_height_m": 0.3057173192501068,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 41,
+      "start_height_m": 0.20072363317012787,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 2,
+      "source_frame": 0,
+      "start_height_m": 0.27266353368759155,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 2,
+      "source_frame": 0,
+      "start_height_m": 0.27266353368759155,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 0,
+      "start_height_m": 0.14149707555770874,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 0,
+      "start_height_m": 0.20543164014816284,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 69,
+      "start_height_m": 0.28381404280662537,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 4,
+      "source_frame": 7,
+      "start_height_m": 0.2264799326658249,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 128,
+      "start_height_m": 0.4740557372570038,
+      "rise_s": 0.14,
+      "quiet_final": true,
+      "final_upright_training_rule": true
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 0,
+      "start_height_m": 0.29239627718925476,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 0,
+      "start_height_m": 0.29239627718925476,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 2,
+      "source_frame": 5,
+      "start_height_m": 0.2644316852092743,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 2,
+      "source_frame": 0,
+      "start_height_m": 0.27266353368759155,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 0,
+      "start_height_m": 0.29239627718925476,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 132,
+      "start_height_m": 0.4064686894416809,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 0,
+      "source_frame": 0,
+      "start_height_m": 0.17750246822834015,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 0,
+      "start_height_m": 0.20543164014816284,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 20,
+      "start_height_m": 0.44307923316955566,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 68,
+      "start_height_m": 0.22811153531074524,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 0,
+      "start_height_m": 0.14149707555770874,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 52,
+      "start_height_m": 0.21406953036785126,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 66,
+      "start_height_m": 0.24257835745811462,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 4,
+      "source_frame": 0,
+      "start_height_m": 0.22396622598171234,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 35,
+      "start_height_m": 0.16601188480854034,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 0,
+      "source_frame": 6,
+      "start_height_m": 0.1910850554704666,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 0,
+      "source_frame": 0,
+      "start_height_m": 0.17750246822834015,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 0,
+      "start_height_m": 0.14149707555770874,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 4,
+      "source_frame": 0,
+      "start_height_m": 0.22396622598171234,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 0,
+      "source_frame": 0,
+      "start_height_m": 0.17750246822834015,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 38,
+      "start_height_m": 0.1626540869474411,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 4,
+      "source_frame": 121,
+      "start_height_m": 0.4462818503379822,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 83,
+      "start_height_m": 0.29596206545829773,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 33,
+      "start_height_m": 0.5383892059326172,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 0,
+      "start_height_m": 0.29239627718925476,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 115,
+      "start_height_m": 0.42197081446647644,
+      "rise_s": 0.34,
+      "quiet_final": true,
+      "final_upright_training_rule": true
+    },
+    {
+      "clip": 5,
+      "source_frame": 0,
+      "start_height_m": 0.14149707555770874,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 0,
+      "start_height_m": 0.25724419951438904,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 9,
+      "start_height_m": 0.19988232851028442,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 16,
+      "start_height_m": 0.28504592180252075,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 71,
+      "start_height_m": 0.2042737603187561,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 4,
+      "source_frame": 0,
+      "start_height_m": 0.22396622598171234,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 0,
+      "start_height_m": 0.14149707555770874,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 81,
+      "start_height_m": 0.4374505877494812,
+      "rise_s": 0.48,
+      "quiet_final": true,
+      "final_upright_training_rule": true
+    },
+    {
+      "clip": 9,
+      "source_frame": 0,
+      "start_height_m": 0.25724419951438904,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 0,
+      "start_height_m": 0.25724419951438904,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 0,
+      "start_height_m": 0.20543164014816284,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 0,
+      "source_frame": 0,
+      "start_height_m": 0.17750246822834015,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 0,
+      "start_height_m": 0.14149707555770874,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 0,
+      "start_height_m": 0.20543164014816284,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 0,
+      "start_height_m": 0.14149707555770874,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 2,
+      "source_frame": 4,
+      "start_height_m": 0.26552537083625793,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 4,
+      "source_frame": 17,
+      "start_height_m": 0.22043989598751068,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 0,
+      "start_height_m": 0.29239627718925476,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 104,
+      "start_height_m": 0.3423953652381897,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 53,
+      "start_height_m": 0.19900424778461456,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 0,
+      "source_frame": 0,
+      "start_height_m": 0.17750246822834015,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 131,
+      "start_height_m": 0.42195451259613037,
+      "rise_s": 0.46,
+      "quiet_final": true,
+      "final_upright_training_rule": true
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 0,
+      "start_height_m": 0.29239627718925476,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 59,
+      "start_height_m": 0.1936017870903015,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 8,
+      "source_frame": 0,
+      "start_height_m": 0.29239627718925476,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 92,
+      "start_height_m": 0.3917721211910248,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 0,
+      "source_frame": 0,
+      "start_height_m": 0.17750246822834015,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 10,
+      "source_frame": 0,
+      "start_height_m": 0.1826106607913971,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 111,
+      "start_height_m": 0.37040334939956665,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 0,
+      "start_height_m": 0.25724419951438904,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 5,
+      "source_frame": 0,
+      "start_height_m": 0.14149707555770874,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 0,
+      "start_height_m": 0.18947574496269226,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 0,
+      "start_height_m": 0.14679981768131256,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 7,
+      "source_frame": 59,
+      "start_height_m": 0.22842882573604584,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 43,
+      "start_height_m": 0.5492450594902039,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 9,
+      "source_frame": 0,
+      "start_height_m": 0.25724419951438904,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 3,
+      "source_frame": 71,
+      "start_height_m": 0.2192118763923645,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 1,
+      "source_frame": 0,
+      "start_height_m": 0.35823389887809753,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 6,
+      "source_frame": 82,
+      "start_height_m": 0.3561094403266907,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    },
+    {
+      "clip": 4,
+      "source_frame": 0,
+      "start_height_m": 0.22396622598171234,
+      "rise_s": null,
+      "quiet_final": false,
+      "final_upright_training_rule": false
+    }
+  ]
+}

@@ -1,0 +1,690 @@
+{
+  "checkpoint": "/media/zhepeng/ca2e3b3b-a38a-49ad-a339-0028159f04b0/robot-storage/instantamp-training/verified_runs/zenbot_continuous_track2_floor40_seed42/ckpt/0013.npz",
+  "checkpoint_sha256": "43630c8d3c25e14399984884c49f7b854d9cd5c0868ff8d2592556d1678507c9",
+  "reference": "/home/zhepeng/InstantAMP/data/zenbot23_walk_run_recovery/recovery",
+  "seeds": [
+    932277
+  ],
+  "trial_indices": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10,
+    12,
+    14,
+    16,
+    18,
+    20
+  ],
+  "motor_reset": "first-command",
+  "seconds": 12.0,
+  "cold_start": true,
+  "push_step": -1,
+  "plan_cache": true,
+  "summary": {
+    "trials": 11,
+    "rise": 9,
+    "quiet_final_2s": 9,
+    "refalls_after_first_stand": 0,
+    "first_attempt_held": 9,
+    "median_rise_s_on_success": 4.5600000000000005,
+    "median_rise_to_reference_ratio": 1.6725663716814159,
+    "median_hip_velocity_p90_rad_s": 2.2851363319146007,
+    "median_reference_hip_velocity_p90_rad_s": 2.492722988128662,
+    "median_vertical_velocity_p90_m_s": 0.4524308126745069,
+    "median_reference_vertical_velocity_p90_m_s": 0.44409558176994324,
+    "median_peak_post_rise_pelvis_drift_cm": 10.073727152221974,
+    "median_source_time_joint_mae_deg": 19.89377727234707,
+    "median_source_time_hand_knee_iou": 0.3614457831325301,
+    "median_phase_aligned_joint_mae_deg_on_rises": 22.005032854460854,
+    "median_default_pose_mae_deg_on_quiet_holds": 2.5521806542885095,
+    "median_abs_torso_pitch_deg_on_quiet_holds": 0.6418007954422035,
+    "median_torso_tilt_deg_on_quiet_holds": 1.1953249570771733,
+    "median_hand_knee_near_policy_s": 2.82,
+    "median_hand_knee_near_reference_s": 0.46,
+    "median_knee_mae_deg_during_reference_hand_support": 24.450605468967176
+  },
+  "opening_only": {
+    "trials": 11,
+    "rise": 9,
+    "quiet_final_2s": 9,
+    "refalls_after_first_stand": 0,
+    "first_attempt_held": 9,
+    "median_rise_s_on_success": 4.5600000000000005,
+    "median_rise_to_reference_ratio": 1.6725663716814159,
+    "median_hip_velocity_p90_rad_s": 2.2851363319146007,
+    "median_reference_hip_velocity_p90_rad_s": 2.492722988128662,
+    "median_vertical_velocity_p90_m_s": 0.4524308126745069,
+    "median_reference_vertical_velocity_p90_m_s": 0.44409558176994324,
+    "median_peak_post_rise_pelvis_drift_cm": 10.073727152221974,
+    "median_source_time_joint_mae_deg": 19.89377727234707,
+    "median_source_time_hand_knee_iou": 0.3614457831325301,
+    "median_phase_aligned_joint_mae_deg_on_rises": 22.005032854460854,
+    "median_default_pose_mae_deg_on_quiet_holds": 2.5521806542885095,
+    "median_abs_torso_pitch_deg_on_quiet_holds": 0.6418007954422035,
+    "median_torso_tilt_deg_on_quiet_holds": 1.1953249570771733,
+    "median_hand_knee_near_policy_s": 2.82,
+    "median_hand_knee_near_reference_s": 0.46,
+    "median_knee_mae_deg_during_reference_hand_support": 24.450605468967176
+  },
+  "cases": [
+    {
+      "seed": 932277,
+      "trial": 0,
+      "clip": "fallAndGetUp1_subject1_1058_1140.npz",
+      "offset_s": 0.0,
+      "rose": true,
+      "rise_s": 4.88,
+      "held": true,
+      "refall": false,
+      "first_attempt_held": true,
+      "post_rise_drift_cm": 4.4929113003907295,
+      "reference_rise_s": 2.36,
+      "hip_velocity_p90_rad_s": 2.447025280370608,
+      "reference_hip_velocity_p90_rad_s": 2.492722988128662,
+      "vertical_velocity_p90_m_s": 0.4524308126745069,
+      "reference_vertical_velocity_p90_m_s": 0.4190140962600708,
+      "default_pose_mae_deg": 2.360468417616439,
+      "final_torso_pitch_deg": -0.6418007954422035,
+      "final_torso_abs_pitch_deg": 0.6418007954422035,
+      "final_torso_tilt_deg": 1.0308709970859762,
+      "style": {
+        "policy_upright_s": 4.88,
+        "reference_upright_s": 2.16,
+        "phase_aligned_joint_mae_deg": 24.854352118615292,
+        "source_time_joint_mae_deg": 26.593861572321725,
+        "source_time_pelvis_rmse_m": 0.3111578954900645
+      },
+      "support": {
+        "near_floor_m": 0.025,
+        "reference_duration_s": {
+          "either_hand": 1.22,
+          "both_hands": 0.46,
+          "both_hands_facing_floor": 0.46,
+          "hand_with_foot": 1.22,
+          "hand_with_knee": 0.32,
+          "two_feet_without_hands": 0.78
+        },
+        "policy_duration_s": {
+          "either_hand": 3.7800000000000002,
+          "both_hands": 2.5,
+          "both_hands_facing_floor": 2.08,
+          "hand_with_foot": 3.5,
+          "hand_with_knee": 3.74,
+          "two_feet_without_hands": 0.66
+        },
+        "source_time_iou": {
+          "either_hand": 0.43820224719101125,
+          "both_hands": 0.2564102564102564,
+          "both_hands_facing_floor": 0.10344827586206896,
+          "hand_with_foot": 0.4069767441860465,
+          "hand_with_knee": 0.0,
+          "two_feet_without_hands": 0.21153846153846154
+        },
+        "knee_flexion_mae_deg_during_source_hand_support": 25.311061833758753
+      }
+    },
+    {
+      "seed": 932277,
+      "trial": 2,
+      "clip": "fallAndGetUp1_subject1_1262_1320.npz",
+      "offset_s": 0.0,
+      "rose": true,
+      "rise_s": 3.0,
+      "held": true,
+      "refall": false,
+      "first_attempt_held": true,
+      "post_rise_drift_cm": 10.8742650083794,
+      "reference_rise_s": 1.44,
+      "hip_velocity_p90_rad_s": 3.925982990089389,
+      "reference_hip_velocity_p90_rad_s": 1.8233109712600708,
+      "vertical_velocity_p90_m_s": 0.5788301800673934,
+      "reference_vertical_velocity_p90_m_s": 0.3862205147743225,
+      "default_pose_mae_deg": 2.2035385464235064,
+      "final_torso_pitch_deg": -0.5185072985301014,
+      "final_torso_abs_pitch_deg": 0.5185072985301014,
+      "final_torso_tilt_deg": 0.608935358077265,
+      "style": {
+        "policy_upright_s": 3.0,
+        "reference_upright_s": 1.24,
+        "phase_aligned_joint_mae_deg": 23.769022176023213,
+        "source_time_joint_mae_deg": 17.15847386945895,
+        "source_time_pelvis_rmse_m": 0.29546860336178027
+      },
+      "support": {
+        "near_floor_m": 0.025,
+        "reference_duration_s": {
+          "either_hand": 0.88,
+          "both_hands": 0.5,
+          "both_hands_facing_floor": 0.5,
+          "hand_with_foot": 0.88,
+          "hand_with_knee": 0.0,
+          "two_feet_without_hands": 0.4
+        },
+        "policy_duration_s": {
+          "either_hand": 2.82,
+          "both_hands": 2.5,
+          "both_hands_facing_floor": 2.5,
+          "hand_with_foot": 2.52,
+          "hand_with_knee": 1.3,
+          "two_feet_without_hands": 0.16
+        },
+        "source_time_iou": {
+          "either_hand": 0.6417910447761194,
+          "both_hands": 0.423728813559322,
+          "both_hands_facing_floor": 0.423728813559322,
+          "hand_with_foot": 0.6417910447761194,
+          "hand_with_knee": 0.0,
+          "two_feet_without_hands": 0.0
+        },
+        "knee_flexion_mae_deg_during_source_hand_support": 6.967682995625514
+      }
+    },
+    {
+      "seed": 932277,
+      "trial": 4,
+      "clip": "fallAndGetUp1_subject1_1395_1461.npz",
+      "offset_s": 0.0,
+      "rose": true,
+      "rise_s": 1.12,
+      "held": true,
+      "refall": false,
+      "first_attempt_held": true,
+      "post_rise_drift_cm": 8.921685267261486,
+      "reference_rise_s": 1.92,
+      "hip_velocity_p90_rad_s": 2.4786074141845993,
+      "reference_hip_velocity_p90_rad_s": 2.777951240539551,
+      "vertical_velocity_p90_m_s": 0.9873138254862922,
+      "reference_vertical_velocity_p90_m_s": 0.44409558176994324,
+      "default_pose_mae_deg": 2.881415093988524,
+      "final_torso_pitch_deg": -1.1682375422751343,
+      "final_torso_abs_pitch_deg": 1.1682375422751343,
+      "final_torso_tilt_deg": 1.3149657887367718,
+      "style": {
+        "policy_upright_s": 1.12,
+        "reference_upright_s": 1.78,
+        "phase_aligned_joint_mae_deg": 10.742221829982546,
+        "source_time_joint_mae_deg": 18.747429594395175,
+        "source_time_pelvis_rmse_m": 0.06689397095369318
+      },
+      "support": {
+        "near_floor_m": 0.025,
+        "reference_duration_s": {
+          "either_hand": 1.36,
+          "both_hands": 1.36,
+          "both_hands_facing_floor": 1.36,
+          "hand_with_foot": 1.36,
+          "hand_with_knee": 0.0,
+          "two_feet_without_hands": 0.5
+        },
+        "policy_duration_s": {
+          "either_hand": 0.96,
+          "both_hands": 0.78,
+          "both_hands_facing_floor": 0.78,
+          "hand_with_foot": 0.96,
+          "hand_with_knee": 0.86,
+          "two_feet_without_hands": 0.14
+        },
+        "source_time_iou": {
+          "either_hand": 0.7058823529411765,
+          "both_hands": 0.5735294117647058,
+          "both_hands_facing_floor": 0.5735294117647058,
+          "hand_with_foot": 0.7058823529411765,
+          "hand_with_knee": 0.0,
+          "two_feet_without_hands": 0.5681818181818182
+        },
+        "knee_flexion_mae_deg_during_source_hand_support": 20.443923790534747
+      }
+    },
+    {
+      "seed": 932277,
+      "trial": 6,
+      "clip": "fallAndGetUp1_subject1_1584_1684.npz",
+      "offset_s": 0.0,
+      "rose": true,
+      "rise_s": 4.94,
+      "held": true,
+      "refall": false,
+      "first_attempt_held": true,
+      "post_rise_drift_cm": 4.756054144873317,
+      "reference_rise_s": 2.8000000000000003,
+      "hip_velocity_p90_rad_s": 1.2466267853963604,
+      "reference_hip_velocity_p90_rad_s": 2.4859235286712646,
+      "vertical_velocity_p90_m_s": 0.225876808574975,
+      "reference_vertical_velocity_p90_m_s": 0.49004659056663513,
+      "default_pose_mae_deg": 2.476845160482155,
+      "final_torso_pitch_deg": -0.36650254465330895,
+      "final_torso_abs_pitch_deg": 0.36650254465330895,
+      "final_torso_tilt_deg": 0.5719779105802979,
+      "style": {
+        "policy_upright_s": 4.94,
+        "reference_upright_s": 2.78,
+        "phase_aligned_joint_mae_deg": 13.34731801418543,
+        "source_time_joint_mae_deg": 19.89377727234707,
+        "source_time_pelvis_rmse_m": 0.22688934950759343
+      },
+      "support": {
+        "near_floor_m": 0.025,
+        "reference_duration_s": {
+          "either_hand": 1.84,
+          "both_hands": 0.22,
+          "both_hands_facing_floor": 0.22,
+          "hand_with_foot": 1.6400000000000001,
+          "hand_with_knee": 1.36,
+          "two_feet_without_hands": 0.66
+        },
+        "policy_duration_s": {
+          "either_hand": 4.72,
+          "both_hands": 3.38,
+          "both_hands_facing_floor": 2.54,
+          "hand_with_foot": 4.18,
+          "hand_with_knee": 4.5,
+          "two_feet_without_hands": 0.14
+        },
+        "source_time_iou": {
+          "either_hand": 0.6474820143884892,
+          "both_hands": 0.14102564102564102,
+          "both_hands_facing_floor": 0.0,
+          "hand_with_foot": 0.5755395683453237,
+          "hand_with_knee": 0.4748201438848921,
+          "two_feet_without_hands": 0.0
+        },
+        "knee_flexion_mae_deg_during_source_hand_support": 24.04871580756049
+      }
+    },
+    {
+      "seed": 932277,
+      "trial": 8,
+      "clip": "fallAndGetUp1_subject1_1808_1916.npz",
+      "offset_s": 0.0,
+      "rose": true,
+      "rise_s": 4.98,
+      "held": true,
+      "refall": false,
+      "first_attempt_held": true,
+      "post_rise_drift_cm": 14.512233157451504,
+      "reference_rise_s": 3.2600000000000002,
+      "hip_velocity_p90_rad_s": 1.851868208194563,
+      "reference_hip_velocity_p90_rad_s": 2.0762791633605957,
+      "vertical_velocity_p90_m_s": 0.43912582199715056,
+      "reference_vertical_velocity_p90_m_s": 0.44644027948379517,
+      "default_pose_mae_deg": 2.956414480801414,
+      "final_torso_pitch_deg": -1.4231640508185017,
+      "final_torso_abs_pitch_deg": 1.4231640508185017,
+      "final_torso_tilt_deg": 1.4951047624550917,
+      "style": {
+        "policy_upright_s": 4.96,
+        "reference_upright_s": 3.16,
+        "phase_aligned_joint_mae_deg": 19.508064288545317,
+        "source_time_joint_mae_deg": 15.887186596796978,
+        "source_time_pelvis_rmse_m": 0.19606398394008537
+      },
+      "support": {
+        "near_floor_m": 0.025,
+        "reference_duration_s": {
+          "either_hand": 2.9,
+          "both_hands": 0.98,
+          "both_hands_facing_floor": 0.74,
+          "hand_with_foot": 2.9,
+          "hand_with_knee": 1.5,
+          "two_feet_without_hands": 0.28
+        },
+        "policy_duration_s": {
+          "either_hand": 4.8,
+          "both_hands": 3.44,
+          "both_hands_facing_floor": 2.56,
+          "hand_with_foot": 4.66,
+          "hand_with_knee": 3.96,
+          "two_feet_without_hands": 0.12
+        },
+        "source_time_iou": {
+          "either_hand": 0.9056603773584906,
+          "both_hands": 0.29914529914529914,
+          "both_hands_facing_floor": 0.37142857142857144,
+          "hand_with_foot": 0.8616352201257862,
+          "hand_with_knee": 0.5,
+          "two_feet_without_hands": 0.0
+        },
+        "knee_flexion_mae_deg_during_source_hand_support": 20.19216550960306
+      }
+    },
+    {
+      "seed": 932277,
+      "trial": 10,
+      "clip": "fallAndGetUp1_subject1_2088_2210.npz",
+      "offset_s": 0.0,
+      "rose": false,
+      "rise_s": null,
+      "held": false,
+      "refall": null,
+      "first_attempt_held": false,
+      "post_rise_drift_cm": null,
+      "reference_rise_s": 3.1,
+      "hip_velocity_p90_rad_s": 0.0028447429810163137,
+      "reference_hip_velocity_p90_rad_s": 3.337311267852783,
+      "vertical_velocity_p90_m_s": 0.00024273756613587844,
+      "reference_vertical_velocity_p90_m_s": 0.33299505710601807,
+      "default_pose_mae_deg": 13.159368421661037,
+      "final_torso_pitch_deg": -86.34134108314213,
+      "final_torso_abs_pitch_deg": 86.34134108314213,
+      "final_torso_tilt_deg": 86.34283873664734,
+      "style": {
+        "policy_upright_s": null,
+        "reference_upright_s": 3.1,
+        "phase_aligned_joint_mae_deg": null,
+        "source_time_joint_mae_deg": 27.37940169482007,
+        "source_time_pelvis_rmse_m": 0.3252780697991107
+      },
+      "support": {
+        "near_floor_m": 0.025,
+        "reference_duration_s": {
+          "either_hand": 1.32,
+          "both_hands": 0.66,
+          "both_hands_facing_floor": 0.64,
+          "hand_with_foot": 0.9,
+          "hand_with_knee": 0.18,
+          "two_feet_without_hands": 1.7
+        },
+        "policy_duration_s": {
+          "either_hand": 0.0,
+          "both_hands": 0.0,
+          "both_hands_facing_floor": 0.0,
+          "hand_with_foot": 0.0,
+          "hand_with_knee": 0.0,
+          "two_feet_without_hands": 12.02
+        },
+        "source_time_iou": {
+          "either_hand": 0.0,
+          "both_hands": 0.0,
+          "both_hands_facing_floor": 0.0,
+          "hand_with_foot": 0.0,
+          "hand_with_knee": 0.0,
+          "two_feet_without_hands": 0.5483870967741935
+        },
+        "knee_flexion_mae_deg_during_source_hand_support": 68.43737261119482
+      }
+    },
+    {
+      "seed": 932277,
+      "trial": 12,
+      "clip": "fallAndGetUp1_subject1_2301_2391.npz",
+      "offset_s": 0.0,
+      "rose": false,
+      "rise_s": null,
+      "held": false,
+      "refall": null,
+      "first_attempt_held": false,
+      "post_rise_drift_cm": null,
+      "reference_rise_s": 2.68,
+      "hip_velocity_p90_rad_s": 0.004517863433024977,
+      "reference_hip_velocity_p90_rad_s": 3.0253632068634033,
+      "vertical_velocity_p90_m_s": 0.0015854198574300727,
+      "reference_vertical_velocity_p90_m_s": 0.4747442901134491,
+      "default_pose_mae_deg": 16.748777561463058,
+      "final_torso_pitch_deg": -83.02256967197076,
+      "final_torso_abs_pitch_deg": 83.02256967197076,
+      "final_torso_tilt_deg": 88.95831310194862,
+      "style": {
+        "policy_upright_s": null,
+        "reference_upright_s": 2.52,
+        "phase_aligned_joint_mae_deg": null,
+        "source_time_joint_mae_deg": 28.27354461403739,
+        "source_time_pelvis_rmse_m": 0.3007045156189672
+      },
+      "support": {
+        "near_floor_m": 0.025,
+        "reference_duration_s": {
+          "either_hand": 1.1400000000000001,
+          "both_hands": 0.68,
+          "both_hands_facing_floor": 0.58,
+          "hand_with_foot": 1.1400000000000001,
+          "hand_with_knee": 0.46,
+          "two_feet_without_hands": 1.44
+        },
+        "policy_duration_s": {
+          "either_hand": 0.46,
+          "both_hands": 0.0,
+          "both_hands_facing_floor": 0.0,
+          "hand_with_foot": 0.46,
+          "hand_with_knee": 0.0,
+          "two_feet_without_hands": 11.56
+        },
+        "source_time_iou": {
+          "either_hand": 0.0,
+          "both_hands": 0.0,
+          "both_hands_facing_floor": 0.0,
+          "hand_with_foot": 0.0,
+          "hand_with_knee": 0.0,
+          "two_feet_without_hands": 0.3769230769230769
+        },
+        "knee_flexion_mae_deg_during_source_hand_support": 46.061868603636206
+      }
+    },
+    {
+      "seed": 932277,
+      "trial": 14,
+      "clip": "fallAndGetUp1_subject1_458_565.npz",
+      "offset_s": 0.0,
+      "rose": true,
+      "rise_s": 4.5600000000000005,
+      "held": true,
+      "refall": false,
+      "first_attempt_held": true,
+      "post_rise_drift_cm": 10.073727152221974,
+      "reference_rise_s": 3.34,
+      "hip_velocity_p90_rad_s": 2.2851363319146007,
+      "reference_hip_velocity_p90_rad_s": 2.5260324478149414,
+      "vertical_velocity_p90_m_s": 0.4688377588974309,
+      "reference_vertical_velocity_p90_m_s": 0.4375344514846802,
+      "default_pose_mae_deg": 2.5521806542885095,
+      "final_torso_pitch_deg": -0.6113721690935751,
+      "final_torso_abs_pitch_deg": 0.6113721690935751,
+      "final_torso_tilt_deg": 1.2002215207358173,
+      "style": {
+        "policy_upright_s": 4.5600000000000005,
+        "reference_upright_s": 3.2,
+        "phase_aligned_joint_mae_deg": 22.005032854460854,
+        "source_time_joint_mae_deg": 16.0946551550715,
+        "source_time_pelvis_rmse_m": 0.18601347006780558
+      },
+      "support": {
+        "near_floor_m": 0.025,
+        "reference_duration_s": {
+          "either_hand": 1.92,
+          "both_hands": 0.68,
+          "both_hands_facing_floor": 0.68,
+          "hand_with_foot": 1.7,
+          "hand_with_knee": 1.1,
+          "two_feet_without_hands": 0.44
+        },
+        "policy_duration_s": {
+          "either_hand": 3.4,
+          "both_hands": 2.16,
+          "both_hands_facing_floor": 1.96,
+          "hand_with_foot": 3.2,
+          "hand_with_knee": 3.2800000000000002,
+          "two_feet_without_hands": 0.8200000000000001
+        },
+        "source_time_iou": {
+          "either_hand": 0.7073170731707317,
+          "both_hands": 0.1511627906976744,
+          "both_hands_facing_floor": 0.17105263157894737,
+          "hand_with_foot": 0.7027027027027027,
+          "hand_with_knee": 0.4444444444444444,
+          "two_feet_without_hands": 0.0
+        },
+        "knee_flexion_mae_deg_during_source_hand_support": 20.94433108567626
+      }
+    },
+    {
+      "seed": 932277,
+      "trial": 16,
+      "clip": "fallAndGetUp1_subject1_4873_4962.npz",
+      "offset_s": 0.0,
+      "rose": true,
+      "rise_s": 3.7800000000000002,
+      "held": true,
+      "refall": false,
+      "first_attempt_held": true,
+      "post_rise_drift_cm": 12.186936080185918,
+      "reference_rise_s": 2.2600000000000002,
+      "hip_velocity_p90_rad_s": 2.0071867703109407,
+      "reference_hip_velocity_p90_rad_s": 3.0391759872436523,
+      "vertical_velocity_p90_m_s": 0.37305983356911665,
+      "reference_vertical_velocity_p90_m_s": 0.49844861030578613,
+      "default_pose_mae_deg": 2.635419674197483,
+      "final_torso_pitch_deg": -0.7306619170197809,
+      "final_torso_abs_pitch_deg": 0.7306619170197809,
+      "final_torso_tilt_deg": 1.1953249570771733,
+      "style": {
+        "policy_upright_s": 3.7800000000000002,
+        "reference_upright_s": 2.26,
+        "phase_aligned_joint_mae_deg": 22.341825939969297,
+        "source_time_joint_mae_deg": 22.957302553309408,
+        "source_time_pelvis_rmse_m": 0.2444959972910052
+      },
+      "support": {
+        "near_floor_m": 0.025,
+        "reference_duration_s": {
+          "either_hand": 1.3800000000000001,
+          "both_hands": 0.62,
+          "both_hands_facing_floor": 0.62,
+          "hand_with_foot": 1.3800000000000001,
+          "hand_with_knee": 0.76,
+          "two_feet_without_hands": 0.88
+        },
+        "policy_duration_s": {
+          "either_hand": 3.6,
+          "both_hands": 3.04,
+          "both_hands_facing_floor": 2.86,
+          "hand_with_foot": 3.38,
+          "hand_with_knee": 2.82,
+          "two_feet_without_hands": 0.12
+        },
+        "source_time_iou": {
+          "either_hand": 0.5929203539823009,
+          "both_hands": 0.3229166666666667,
+          "both_hands_facing_floor": 0.3563218390804598,
+          "hand_with_foot": 0.5648148148148148,
+          "hand_with_knee": 0.391304347826087,
+          "two_feet_without_hands": 0.0
+        },
+        "knee_flexion_mae_deg_during_source_hand_support": 31.114126614997673
+      }
+    },
+    {
+      "seed": 932277,
+      "trial": 18,
+      "clip": "fallAndGetUp1_subject1_670_785.npz",
+      "offset_s": 0.0,
+      "rose": true,
+      "rise_s": 2.32,
+      "held": true,
+      "refall": false,
+      "first_attempt_held": true,
+      "post_rise_drift_cm": 11.925291088312196,
+      "reference_rise_s": 3.24,
+      "hip_velocity_p90_rad_s": 1.669131757840149,
+      "reference_hip_velocity_p90_rad_s": 2.8843533992767334,
+      "vertical_velocity_p90_m_s": 0.3621573499887721,
+      "reference_vertical_velocity_p90_m_s": 0.2919358015060425,
+      "default_pose_mae_deg": 2.9849972899377444,
+      "final_torso_pitch_deg": -1.0353495605118055,
+      "final_torso_abs_pitch_deg": 1.0353495605118055,
+      "final_torso_tilt_deg": 1.4530966233873812,
+      "style": {
+        "policy_upright_s": 2.3000000000000003,
+        "reference_upright_s": 3.24,
+        "phase_aligned_joint_mae_deg": 12.816979830909544,
+        "source_time_joint_mae_deg": 20.548935516367827,
+        "source_time_pelvis_rmse_m": 0.14068191381633668
+      },
+      "support": {
+        "near_floor_m": 0.025,
+        "reference_duration_s": {
+          "either_hand": 2.52,
+          "both_hands": 1.82,
+          "both_hands_facing_floor": 1.74,
+          "hand_with_foot": 2.52,
+          "hand_with_knee": 0.68,
+          "two_feet_without_hands": 0.72
+        },
+        "policy_duration_s": {
+          "either_hand": 2.18,
+          "both_hands": 1.78,
+          "both_hands_facing_floor": 1.48,
+          "hand_with_foot": 2.14,
+          "hand_with_knee": 1.58,
+          "two_feet_without_hands": 0.08
+        },
+        "source_time_iou": {
+          "either_hand": 0.8650793650793651,
+          "both_hands": 0.5517241379310345,
+          "both_hands_facing_floor": 0.594059405940594,
+          "hand_with_foot": 0.8492063492063492,
+          "hand_with_knee": 0.3614457831325301,
+          "two_feet_without_hands": 0.7346938775510204
+        },
+        "knee_flexion_mae_deg_during_source_hand_support": 24.450605468967176
+      }
+    },
+    {
+      "seed": 932277,
+      "trial": 20,
+      "clip": "fallAndGetUp1_subject1_845_936.npz",
+      "offset_s": 0.0,
+      "rose": true,
+      "rise_s": 4.68,
+      "held": true,
+      "refall": false,
+      "first_attempt_held": true,
+      "post_rise_drift_cm": 6.365930475315322,
+      "reference_rise_s": 2.46,
+      "hip_velocity_p90_rad_s": 2.4489226602761294,
+      "reference_hip_velocity_p90_rad_s": 2.030275344848633,
+      "vertical_velocity_p90_m_s": 0.4665636740146925,
+      "reference_vertical_velocity_p90_m_s": 0.6176465749740601,
+      "default_pose_mae_deg": 2.4144096125949925,
+      "final_torso_pitch_deg": -0.5808365371701092,
+      "final_torso_abs_pitch_deg": 0.5808365371701092,
+      "final_torso_tilt_deg": 1.1552095481840334,
+      "style": {
+        "policy_upright_s": 4.68,
+        "reference_upright_s": 2.46,
+        "phase_aligned_joint_mae_deg": 24.48722664207569,
+        "source_time_joint_mae_deg": 18.483391176313532,
+        "source_time_pelvis_rmse_m": 0.16257993742739563
+      },
+      "support": {
+        "near_floor_m": 0.025,
+        "reference_duration_s": {
+          "either_hand": 0.92,
+          "both_hands": 0.18,
+          "both_hands_facing_floor": 0.18,
+          "hand_with_foot": 0.84,
+          "hand_with_knee": 0.46,
+          "two_feet_without_hands": 0.36
+        },
+        "policy_duration_s": {
+          "either_hand": 3.8200000000000003,
+          "both_hands": 2.56,
+          "both_hands_facing_floor": 2.36,
+          "hand_with_foot": 3.5,
+          "hand_with_knee": 3.64,
+          "two_feet_without_hands": 0.52
+        },
+        "source_time_iou": {
+          "either_hand": 0.5227272727272727,
+          "both_hands": 0.0,
+          "both_hands_facing_floor": 0.0,
+          "hand_with_foot": 0.3953488372093023,
+          "hand_with_knee": 0.26136363636363635,
+          "two_feet_without_hands": 0.0
+        },
+        "knee_flexion_mae_deg_during_source_hand_support": 25.06216654669813
+      }
+    }
+  ]
+}

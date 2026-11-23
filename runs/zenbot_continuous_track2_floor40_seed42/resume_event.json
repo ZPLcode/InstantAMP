@@ -1,0 +1,13 @@
+{
+  "reason": "Linux out-of-memory kill",
+  "interrupted_last_logged_iteration": 6650,
+  "resumed_from_iteration": 6500,
+  "resumed_full_sha256": "cd59b619f678e2e551753d66df5d0c9e083406ecc9a9642275d931ebac75373d",
+  "resumed_policy_sha256": "f224cc7bf3600ca533d3aeeff4d99a9d1bd92d5f5323513dc4c314c7c94dcbe6",
+  "started_at": "2026-11-23T23:05:48.683316+08:00",
+  "source_commit": "db242b507b40eef966dd038ada8384fb0043d654",
+  "resume_method": "Stock tools.resume_zenbot_wm. Actor, averaged actor, world model, both AMP heads, critic, optimizer states and global iteration restore from the full checkpoint. Physics environments, replay buffer and sampling keys are initialized again. No reward, split or model configuration changes.",
+  "original_log": "segments/initial/log.jsonl",
+  "resumed_log": "segments/from_006500/log.jsonl",
+  "canonical_times": "train_s and wall_s sum the retained first segment through 6500 and the continuation. The gap while the process was stopped is excluded."
+}

@@ -1,0 +1,44 @@
+{
+  "seed": 932277,
+  "seconds": 1.0,
+  "common_below_gate_policy_steps": 515,
+  "clips": 11,
+  "threshold_m": 0.44,
+  "discriminator_iteration": 5000,
+  "discriminator_checkpoint_sha256": "5b6d75c22a4e44e731bda86132e441135dd29b4d701c79417e4f8d41ccb28484",
+  "discriminator_mu": [
+    0.8592396974563599,
+    -0.8646969199180603
+  ],
+  "actor_sha256": {
+    "current_5000": "49866b363890b41b1c69d97ad75de286a8972ba0bf261a1dc9d7af8d0aa2dc5a",
+    "previous_2500": "c20d3e5449415336eb255e47f5c9e34e0082f1a130b1e5750bfeae71d8a7f31e"
+  },
+  "mean_reward_per_matched_20ms": {
+    "current_5000": {
+      "foot_slip": -0.0002719097938448868,
+      "sound_suppression": -9.103750080728541e-05,
+      "joint_vel_l2": -5.978928715265043e-05,
+      "joint_acc_l2": -0.0003581338510694963,
+      "joint_torques_l2": -0.00023679397443605215,
+      "joint_energy": -0.00010213931399979235,
+      "joint_pos_limits": -0.0005628854753676555,
+      "action_rate": -0.0013198395192142622,
+      "ground_amp": 0.02925996482372284,
+      "total": 0.02625743403272058
+    },
+    "previous_2500": {
+      "foot_slip": -0.0007945231058312085,
+      "sound_suppression": -0.0001293711622692278,
+      "joint_vel_l2": -0.00012986443071777516,
+      "joint_acc_l2": -0.0010021449332369289,
+      "joint_torques_l2": -0.0005111021505580713,
+      "joint_energy": -0.0002517501025091704,
+      "joint_pos_limits": -0.0006781795167178201,
+      "action_rate": -0.0016528673722842218,
+      "ground_amp": 0.04040965065360069,
+      "total": 0.03525984757566618
+    }
+  },
+  "method": "Paired below-gate samples within the first second of identical native MuJoCo cold starts. The current training discriminator scores both. Measured current ground costs use native MuJoCo contacts and motor data. This compares fixed policies and excludes training gradients and longer-horizon returns."
+}

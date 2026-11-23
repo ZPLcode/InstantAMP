@@ -1,0 +1,29 @@
+{
+  "native_policy_sha256": "a04d8e9687a5af70b508dc1e72432ecb64bf583f0a82de51638aae8184bc1ecc",
+  "seed": 8217539,
+  "cold_start": true,
+  "video_sha256": "bcf1d3af9f757ab888c93883c86041645a247672e16718458cc430e16b6207a5",
+  "seconds_per_opening": 12.0,
+  "cases": [
+    {
+      "trial": 16,
+      "source": "fallAndGetUp1_subject1_4873_4962.npz",
+      "first_rise_s": 1.26,
+      "reference_rise_s": 2.2600000000000002,
+      "hand_load_s": 0.02,
+      "transfer_s": 1.0,
+      "refall": false,
+      "quiet_final_2s": true
+    },
+    {
+      "trial": 6,
+      "source": "fallAndGetUp1_subject1_1584_1684.npz",
+      "first_rise_s": 2.38,
+      "reference_rise_s": 2.8000000000000003,
+      "hand_load_s": 0.04,
+      "transfer_s": 2.14,
+      "refall": false,
+      "quiet_final_2s": true
+    }
+  ]
+}
