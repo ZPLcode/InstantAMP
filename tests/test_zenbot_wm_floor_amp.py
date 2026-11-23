@@ -105,6 +105,27 @@ def test_joint_floor_amp_exposes_eight_commands_and_uses_measured_support_to_rel
     np.testing.assert_allclose(scores[ang], (.5/.7)*np.exp(-4.), rtol=1e-6)
 
 
+def test_fixed_joint_collectors_keep_their_tasks_across_resets_and_double_tracking():
+    sim = Sim(256, physics=False, robot=zenbot.MIXED_TASK, zenbot_motion_train_wm=True,
+              wm_floor_amp=True, wm_range_commands=True, wm_posture_and_tracking=True,
+              wm_gait_rewards=True, wm_lift_gate=.44, support_rsi=.35, reset_floor=.4,
+              wm_fixed_floor_envs=True, wm_tracking_scale=2., randomize_world=False,
+              obs_noise=False, push=False, prob_shove=0.)
+    floor = ~np.asarray(sim.wm_gait_worlds)
+    assert floor.sum() == round(.4 * sim.N)
+    np.testing.assert_array_equal(floor[::2], floor[1::2])
+    assert abs(floor[1:51:2].sum() - .4 * 25) <= 1
+    assert sim.weights['track_lin_vel_xy_exp'] == 4. and sim.weights['track_ang_vel_z_exp'] == 3.
+    assert sim.weights['stand'] == 6. and sim.weights['lift'] == .5
+    sim.dx = CpuState(jnp.zeros(30), jnp.zeros(29), jnp.zeros(29))
+    state = sim.init(jax.random.key(42))
+    np.testing.assert_array_equal(state.down, floor)
+    for seed in (7, 23):
+        state = sim._reset(state, jnp.ones(sim.N, bool), jax.random.key(seed))
+        np.testing.assert_array_equal(state.down, floor)
+        np.testing.assert_array_equal(state.recovery_left > 0, floor)
+
+
 def test_joint_task_samples_ground_to_stance_requests():
     sim = Sim(256, physics=False, robot=zenbot.MIXED_TASK, zenbot_motion_train_wm=True,
               wm_floor_amp=True, wm_lift_gate=.44, support_rsi=.35, reset_floor=2/3,

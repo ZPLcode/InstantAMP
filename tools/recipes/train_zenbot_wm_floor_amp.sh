@@ -29,7 +29,8 @@ if [[ -n "$mode" ]]; then
     fi
     task_args=(
         --wm_getup_only 0 --wm_range_commands 1 --wm_gait_rewards 1 --wm_posture_and_tracking 1
-        --reset_floor .6666667 --prob_shove 0 --push 0 --gait_ls_scale "$ground_scale" --gait_amp_stride 3
+        --wm_fixed_floor_envs 1 --reset_floor .4 --wm_tracking_scale 2
+        --prob_shove 0 --push 0 --gait_ls_scale "$ground_scale" --gait_amp_stride 3
         --floor_stop_command_share .5 --gait_source_commands 1 --gait_mirror_weight "$mirror_weight" --cmd_fresh 0
     )
     practice=.35

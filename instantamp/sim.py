@@ -336,6 +336,7 @@ class Sim:
     wm_min_rise_score = 0.
     wm_floor_amp = False
     wm_floor_locomotion = False
+    wm_fixed_floor_envs = False
     wm_gait_rewards = False
     wm_posture_and_tracking = False
     wm_range_commands = False
@@ -349,7 +350,8 @@ class Sim:
                  prob_shove: float = 0.0, push: bool = True, physics: bool = True, robot: str = "g1", amp_wrists: bool = True, assist_newtons=None, obs_noise=True, randomize_world=True, reference_weight=0., g1_style=False, getup_rise_weight=-0.25, g1_support_friction=False, getup_reset_frames=20, g1_phase_amp=False, reference_hold_scale=1., action_rate_l2_weight=None, zenbot_phase_resets=0., zenbot_episode_steps=500, recovery_amp_seconds=None, fall_push_speed=0., legged_support=False, support_rsi=0., zenbot_getup_stand=False, zenbot_support_weight=0., zenbot_default_stand=False, zenbot_standing_amp=False, zenbot_command_gait=False, zenbot_directional_gait=False, zenbot_motion_train_obs=False, zenbot_scratch_resets=False, zenbot_scratch_curriculum=False, zenbot_source_gait=False,
                  zero_motor_delay_probability=None, zenbot_motion_train_wm=False, zenbot_wm_reference_training=False, zenbot_wm_getup_only=False,
                  wm_stance_start_share=0., wm_min_rise_score=0., wm_floor_amp=False, wm_stand_reference=None, wm_lift_gate=0.,
-                 floor_stop_command_share=0., gait_source_commands=False, wm_gait_rewards=False, wm_posture_and_tracking=False, wm_range_commands=False):  # fmt: skip
+                 floor_stop_command_share=0., gait_source_commands=False, wm_gait_rewards=False, wm_posture_and_tracking=False, wm_range_commands=False,
+                 wm_fixed_floor_envs=False, wm_tracking_scale=1.):  # fmt: skip
         """physics=False: everything but MuJoCo Warp's model and data (no GPU): the scene, kinematics, reset banks and `_fresh`, for
         checks on the CPU."""
         self.N, self.random_start, self.seed = num_envs, random_start, seed
@@ -361,11 +363,14 @@ class Sim:
         self.wm_min_rise_score = wm_min_rise_score
         self.wm_floor_amp = bool(wm_floor_amp)
         self.wm_floor_locomotion = self.wm_floor_amp and not self.zenbot_wm_getup_only
+        self.wm_fixed_floor_envs = wm_fixed_floor_envs
         self.wm_range_commands = wm_range_commands
         self.wm_posture_and_tracking = wm_posture_and_tracking
         self.wm_gait_rewards = wm_gait_rewards
         if (wm_range_commands or wm_posture_and_tracking or wm_gait_rewards) and not self.wm_floor_locomotion:
             raise ValueError("Motion Train command ranges, posture and gait rewards require joint floor/locomotion training")
+        if not self.wm_floor_locomotion and (wm_fixed_floor_envs or wm_tracking_scale != 1.):
+            raise ValueError("Fixed floor environments and tracking scale require joint floor/locomotion training")
         self.gait_source_commands = bool(gait_source_commands)
         if self.gait_source_commands and not self.wm_floor_locomotion:
             raise ValueError("Recorded command speeds require the joint floor and locomotion task")
@@ -492,7 +497,7 @@ class Sim:
                 if self.wm_lift_gate:
                     self.weights["lift"] = .5
                 if self.wm_floor_locomotion:
-                    self.weights.update(track_lin_vel_xy_exp=2., track_ang_vel_z_exp=1.5)
+                    self.weights.update(track_lin_vel_xy_exp=2. * wm_tracking_scale, track_ang_vel_z_exp=1.5 * wm_tracking_scale)
                 if self.wm_posture_and_tracking:
                     self.weights.update(gait_rewards.POSTURE_WEIGHTS)
                 if self.wm_gait_rewards:
@@ -642,7 +647,18 @@ class Sim:
                          load_bank(bank_dir, self.J, first_only=robot == "zenbot23_getup" and not self.track_getup, sample_clip_times=self.track_getup))
         if self.wm_floor_locomotion or (self.zenbot_wm_reference_training and not self.zenbot_wm_getup_only):
             from .zenbot_gait_demos import command_reset_bank
-            self.wm_gait_worlds = (jnp.arange(self.N) // 2) % 4 == 0
+            if self.wm_fixed_floor_envs:
+                # Spread the same task mix through the even/odd collectors, including the noisy PPO subset.
+                floor_count = round(self.N * reset_floor)
+                gait_worlds = np.ones(self.N, dtype=bool)
+                for offset in (0, 1):
+                    worlds = np.arange(offset, self.N, 2)
+                    count = (floor_count + 1 - offset) // 2
+                    slots = np.linspace(0, len(worlds), count, endpoint=False, dtype=int)
+                    gait_worlds[worlds[slots]] = False
+                self.wm_gait_worlds = jnp.asarray(gait_worlds)
+            else:
+                self.wm_gait_worlds = (jnp.arange(self.N) // 2) % 4 == 0
             upright = self.is_up(self.walk["z"], quat_to_mat(self.walk["quat"]))
             self.walk["command_rows"] = command_reset_bank(
                 bank_dir, {"row": jnp.arange(len(upright))}, upright, directional=True,
@@ -1302,9 +1318,12 @@ class Sim:
             if not self.zenbot_motion_train_wm:
                 fpos = jnp.concatenate((jnp.zeros((N, 2)), z[:, None], quat, fq), -1)
                 fvel = jnp.concatenate((v, mv3(tr3(quat_to_mat(quat)), w), fqd), -1)
-            floor = jax.random.uniform(ku, (N,)) < self.reset_floor
-            if self.zenbot_wm_reference_training or self.wm_floor_locomotion:
-                floor &= ~self.wm_gait_worlds
+            if self.wm_fixed_floor_envs:
+                floor = ~self.wm_gait_worlds
+            else:
+                floor = jax.random.uniform(ku, (N,)) < self.reset_floor
+                if self.zenbot_wm_reference_training or self.wm_floor_locomotion:
+                    floor &= ~self.wm_gait_worlds
             qpos, qvel = jnp.where(floor[:, None], fpos, qpos), jnp.where(floor[:, None], fvel, qvel)
         was_up = self.is_up(qpos[:, 2], quat_to_mat(qpos[:, 3:7]))
         if self.prob_shove > 0:

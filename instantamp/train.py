@@ -340,6 +340,8 @@ class ZenbotMotionTrainWMConfig(ZenbotWalkRunRecoveryConfig):
     motion_train_wm: int = 1
     wm_reference_training: int = 0  # matched physical recovery poses are a training-only signal
     wm_floor_amp: int = 0  # cold floor openings, get-up AMP until sustained foot support
+    wm_fixed_floor_envs: int = 0  # reserve reset_floor of the collectors for fallen starts at every reset
+    wm_tracking_scale: float = 1.  # multiply the planar and yaw tracking weights in the joint task
     wm_range_commands: int = 0  # continuous Motion Train velocity ranges for the joint task
     wm_posture_and_tracking: int = 0  # pelvis posture rewards and separate planar/yaw tracking diagnostics
     wm_gait_rewards: int = 0  # Motion Train foot and joint terms for the joint floor/gait task
@@ -367,10 +369,12 @@ class ZenbotMotionTrainWMConfig(ZenbotWalkRunRecoveryConfig):
         if self.ode or self.legged_real_ppo or self.recovery_base_actor:
             raise ValueError("The Motion Train WM profile needs direct actions and a learned world model")
         joint_task = self.wm_floor_amp and not self.wm_getup_only
-        for name in ("wm_range_commands", "wm_posture_and_tracking", "wm_gait_rewards"):
+        for name in ("wm_range_commands", "wm_posture_and_tracking", "wm_gait_rewards", "wm_fixed_floor_envs"):
             enabled = getattr(self, name)
             if enabled not in (0, 1) or (enabled and not joint_task):
                 raise ValueError(f"{name} must be 0 or 1 and requires joint floor/locomotion training when enabled")
+        if not np.isfinite(self.wm_tracking_scale) or self.wm_tracking_scale < 0 or (self.wm_tracking_scale != 1. and not joint_task):
+            raise ValueError("A custom wm_tracking_scale must be finite, nonnegative and used with joint floor/locomotion training")
         if self.gait_source_commands and not self.command_gait_amp:
             raise ValueError("Source-speed commands need command-conditioned locomotion AMP")
         if not 0 <= self.ppo_frac < 1:
@@ -512,6 +516,8 @@ class InstantAMP:
                        wm_stance_start_share=getattr(c, "wm_stance_start_share", 0.),
                        wm_min_rise_score=getattr(c, "wm_min_rise_score", 0.), wm_floor_amp=getattr(c, "wm_floor_amp", 0),
                        wm_stand_reference=stand_clip, wm_lift_gate=getattr(c, "wm_lift_gate", 0.),
+                       wm_fixed_floor_envs=bool(getattr(c, "wm_fixed_floor_envs", 0)),
+                       wm_tracking_scale=getattr(c, "wm_tracking_scale", 1.),
                        floor_stop_command_share=getattr(c, "floor_stop_command_share", 0.),
                        gait_source_commands=getattr(c, "gait_source_commands", False),
                        wm_gait_rewards=bool(getattr(c, "wm_gait_rewards", 0)),
