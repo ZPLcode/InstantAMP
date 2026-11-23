@@ -101,7 +101,7 @@ def prepare(source, legged_lab, dest, meshes=False, locomotion=False):
                           clip["dof_pos"], order, float(clip["fps"]), clip["key_body_pos"])
     if meshes:
         shutil.copytree(robot / "meshes", dest / "meshes", dirs_exist_ok=True)
-    print(f"Prepared {len(manifest['clips'])} equally weighted get-up clips, {frames} frames at 50 Hz, in {dest}")
+    print(f"Prepared {len(manifest['clips'])} get-up clips, {frames} frames at 50 Hz, in {dest}")
 
 
 if __name__ == "__main__":

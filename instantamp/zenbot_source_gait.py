@@ -27,10 +27,10 @@ def stand_reset(key, n):
     return q, jnp.pad(velocity, ((0, 0), (0, len(zenbot.DOF))))
 
 
-def sample_command(key, n, stage):
+def sample_command(key, n, stage, *, stand_share=.05):
     mode, x, y, heading, turn = jax.random.uniform(key, (5, n))
-    stand = mode < .05
-    translate = mode >= .25
+    stand = mode < stand_share
+    translate = mode >= stand_share + .20
     cap = jnp.minimum(3, stage + 1)
     vx = jnp.where(translate, -1. + (cap + 1.) * x, 0.)
     vy = jnp.where(translate, y - .5, 0.)

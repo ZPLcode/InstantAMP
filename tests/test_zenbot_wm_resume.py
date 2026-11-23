@@ -25,10 +25,15 @@ def test_continue_archived_i_profile_with_full_directory_on_another_volume(tmp_p
     (run / "config.json").write_text(json.dumps(config))
 
     output = tmp_path / "next"
-    cfg = parse(continuation_args(full, output, 12000))
+    flags = continuation_args(full, output, 12000)
+    assert not any(flag.startswith("--gait_velocity_time_constant") for flag in flags)
+    cfg = parse(flags)
     assert cfg.init_full == str(full) and cfg.init_policy == ""
     assert cfg.log_dir == str(output) and cfg.max_iterations == 12000
-    assert cfg.gait_velocity_time_constant == .5 and cfg.gait_mirror_weight == 0
+    assert cfg.gait_mirror_weight == 0
+    ranged = parse(continuation_args(full, output, 12000, range_commands=True, num_envs=4096))
+    assert ranged.num_envs == 4096 and ranged.wm_range_commands == 1
+    assert ranged.init_full == cfg.init_full
     with pytest.raises(ValueError, match="exceed the saved iteration 10000"):
         continuation_args(full, output, 10000)
     with pytest.raises(ValueError, match="full learner"):

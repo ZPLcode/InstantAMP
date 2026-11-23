@@ -49,13 +49,18 @@ def test_floor_amp_requires_online_motion_and_physical_rollouts():
     np.testing.assert_allclose(learner.reference_rate_weight(steps), [0., 0., .5, 1., 1.])
 
 
-def test_joint_floor_amp_exposes_eight_commands_and_uses_measured_support_to_release_locomotion():
+@pytest.mark.parametrize("posture", [False, True])
+def test_joint_floor_amp_exposes_eight_commands_and_uses_measured_support_to_release_locomotion(posture):
     sim = Sim(256, physics=False, robot=zenbot.MIXED_TASK, zenbot_motion_train_wm=True,
-              wm_floor_amp=True, wm_lift_gate=.44, support_rsi=.35, reset_floor=.5,
+              wm_floor_amp=True, wm_lift_gate=.44, support_rsi=.35, reset_floor=.5, wm_posture_and_tracking=posture,
               randomize_world=False, obs_noise=False, push=False, prob_shove=0.)
     sim.dx = CpuState(jnp.zeros(30), jnp.zeros(29), jnp.zeros(29))
     s = sim.init(jax.random.key(44))
-    assert set(sim.weights) == {"stand", "velocity", "action_rate", "lift"}
+    lin, ang = "track_lin_vel_xy_exp", "track_ang_vel_z_exp"
+    expected = {"stand", lin, ang, "action_rate", "lift"}
+    if posture:
+        expected.update(("flat_orientation_l2", "slow_speed_base_height_l2"))
+    assert set(sim.weights) == expected and (sim.weights[lin], sim.weights[ang]) == (2., 1.5)
     assert sim.assist_newtons == 0. and sim.reference is None and not sim.reference_reward
     assert .25 < np.mean(s.down) < .5 and np.all(s.was_up[sim.wm_gait_worlds])
     assert set(map(tuple, np.asarray(s.cmd.vel))) == set(map(tuple, zenbot.DIRECTIONAL_COMMANDS))
@@ -75,27 +80,35 @@ def test_joint_floor_amp_exposes_eight_commands_and_uses_measured_support_to_rel
     q = sim.floor_stand_joints[None]
     a = jnp.zeros_like(q)
     pose = (jnp.array([[0.,0.,.68]]), jnp.eye(3)[None], v, v, q, a)
-    def reward(command, speed, recovering):
-        state = (*pose[:2], speed, *pose[3:])
+    def reward(command, speed, recovering, rotation=pose[1], spin=v):
+        state = (pose[0], rotation, speed, spin, q, a)
         return sim.reward_terms(pose, state, sim.view_state(state).kin, a, a, command,
                                 jnp.array([False]), jnp.zeros(1), jnp.ones((1, 2)), jnp.zeros(1),
                                 sim.q_soft, recovery_active=jnp.array([recovering]), stand_blend=1.)
     run = jnp.array([[2.5, 0., 0.]])
-    assert reward(run, run, False)["velocity"].item() == 1.
-    for cmd in (run, jnp.array([[0., -.4, 0.]]), jnp.array([[-.5, 0., 0.]])):
-        assert reward(cmd, v, False)["velocity"].item() == 0.
-        assert reward(cmd, cmd, False)["velocity"].item() == 1.
-        assert reward(cmd, -.5 * cmd, False)["velocity"].item() < 0.
+    np.testing.assert_allclose(reward(run, v, False)[lin], np.exp(-2.5**2 / .5**2), rtol=1e-6)
+    assert reward(v, v, False)[lin].item() == reward(v, v, False)[ang].item() == 1.
     assert reward(run, run, False)["stand"].item() == 0.
-    assert reward(run, v, True)["velocity"].item() == 0.
+    assert reward(run, v, True)[lin].item() == reward(run, v, True)[ang].item() == 0.
     assert reward(v, v, False)["stand"].item() > .99
-    assert jax.grad(lambda vx: reward(run, v.at[0,0].set(vx), False)["velocity"].sum())(0.) > 0.
+    assert jax.grad(lambda vx: reward(run, v.at[0,0].set(vx), False)[lin].sum())(0.) > 0.
+
+    # Nonzero yaw, tilt and angular velocity distinguish pelvis axes, COM and upright scaling.
+    rotation = np.array([[0., -.5, np.sqrt(.75)], [1., 0., 0.], [0., np.sqrt(.75), .5]])
+    omega = np.array([1., -.6, .9])
+    com_speed = np.array([.6, -.3, 2.])
+    origin_speed = com_speed - np.cross(omega, sim.root_com)
+    cmd = jnp.array([[.1, -.3, -.1]])
+    scores = reward(cmd, jnp.asarray(rotation @ origin_speed)[None], False,
+                    jnp.asarray(rotation)[None], jnp.asarray(rotation @ omega)[None])
+    np.testing.assert_allclose(scores[lin], (.5/.7)*np.exp(-1.), rtol=1e-6)
+    np.testing.assert_allclose(scores[ang], (.5/.7)*np.exp(-4.), rtol=1e-6)
 
 
-def test_joint_reward_averages_stride_velocity_and_samples_ground_to_stance_requests():
+def test_joint_task_samples_ground_to_stance_requests():
     sim = Sim(256, physics=False, robot=zenbot.MIXED_TASK, zenbot_motion_train_wm=True,
               wm_floor_amp=True, wm_lift_gate=.44, support_rsi=.35, reset_floor=2/3,
-              gait_velocity_time_constant=.24, floor_stop_command_share=.5,
+              floor_stop_command_share=.5,
               randomize_world=False, obs_noise=False, push=False, prob_shove=0.)
     sim.dx = CpuState(jnp.zeros(30), jnp.zeros(29), jnp.zeros(29))
     state = sim.init(jax.random.key(156))
@@ -106,18 +119,47 @@ def test_joint_reward_averages_stride_velocity_and_samples_ground_to_stance_requ
     np.testing.assert_array_equal(np.asarray(state.motion_train_sensors.observation())[parked,24:27], 0.)
     assert np.any((~parked & np.asarray(state.down)) & np.any(np.asarray(state.cmd.vel) != 0., axis=1))
     assert state.motion_train_sensors.observation().shape == (sim.N, 234)
-    prev = jnp.ones_like(state.gait_velocity) * 3.
-    reset_mask = jnp.arange(sim.N)%2 == 0
-    s = sim._reset(state._replace(gait_velocity=prev), reset_mask, jax.random.key(118))
-    instant = sim.body_command_velocity(unflatten(s.data.qpos, s.data.qvel))
-    np.testing.assert_allclose(s.gait_velocity[reset_mask], instant[reset_mask], atol=2e-6)
-    np.testing.assert_array_equal(s.gait_velocity[~reset_mask], 3.)
-    pose = unflatten(jnp.array([[0.,0.,.68,1.,0.,0.,0.]+[0.]*23]), jnp.zeros((1,29)))
-    moving = (*pose[:2], jnp.array([[1.,0.,0.]]), *pose[3:])
-    result = jnp.zeros((1,3))
-    for _ in range(12):
-        result = sim.body_command_velocity(moving, result)
-    np.testing.assert_allclose(result, [[1.-np.exp(-1.),0.,0.]], atol=1e-6)
+
+
+def test_range_forward_starts_include_standing_with_live_commands(monkeypatch):
+    # This reset only needs standing and forward walking clips.
+    monkeypatch.setattr("instantamp.zenbot_gait_demos.source_command_speeds", lambda _: zenbot.DIRECTIONAL_COMMANDS[:2])
+    sim = Sim(1024, physics=False, robot=zenbot.MIXED_TASK, zenbot_motion_train_wm=True,
+              wm_floor_amp=True, wm_range_commands=True, gait_source_commands=True, reset_floor=.5, obs_noise=False,
+              randomize_world=False, push=False, prob_shove=0.)
+    sim.dx = CpuState(jnp.zeros(30), jnp.zeros(29), jnp.zeros(29))
+    s = sim.init(jax.random.key(236))
+    forward = np.asarray(s.was_up & (s.cmd.vel[:, 0] > jnp.abs(s.cmd.vel[:, 1])))
+    cold = np.all(np.asarray(s.data.qvel) == 0., axis=1)
+    assert .18 < cold[forward].mean() < .32
+    assert np.any(forward & ~cold)
+    stand_rows = sim.walk["command_rows"]
+    rows = stand_rows["row"][:int(stand_rows["counts"][0])]
+    standing = set(map(tuple, np.asarray(sim.walk["q"][rows])))
+    assert all(tuple(pose) in standing for pose in np.asarray(s.data.qpos)[forward & cold, 7:])
+    np.testing.assert_array_equal(s.motion_train_sensors.frames[forward & cold, -1, 6:9], s.c_obs[forward & cold])
+    np.testing.assert_array_equal(s.c_obs[forward & cold, 0], s.cmd.vel[forward & cold, 0])
+
+
+def test_walk_to_stop_only_changes_expired_commands_while_moving():
+    n = 8192
+    sim = Sim.__new__(Sim)
+    sim.wm_range_commands = sim.wm_floor_locomotion = True
+    sim.root_com = jnp.zeros(3)
+    row = jnp.arange(n) % 4
+    # A 90-degree yaw makes positive world Y the robot's forward axis.
+    q = jnp.tile(jnp.r_[jnp.array([0., 0., .69, 2**-.5, 0., 0., 2**-.5]), zenbot.DEFAULT_Q], (n, 1))
+    state = unflatten(q, jnp.zeros((n, 29)).at[:, 1].set(row != 1))
+    forward = jnp.tile(jnp.array([1., 0., 0.]), (n, 1))
+    cmd = env.Cmd(forward, jnp.zeros(n), jnp.zeros(n, bool), jnp.zeros(n, bool),
+                  jnp.where(row == 3, 1., env.DT))
+    sample = jax.jit(sim.tick_wm_command)(cmd, jax.random.key(117), state, jnp.ones(n, bool), row == 2)
+    stopped = np.asarray(sample.is_standing)
+    np.testing.assert_allclose([stopped[row == i].mean() for i in range(4)], [.25, .05, .05, 0.], atol=.025)
+    observed = sim.wm_velocity_command(sample, state[1], jnp.ones(n, bool))
+    np.testing.assert_array_equal(observed[stopped], 0.)
+    np.testing.assert_array_equal(observed[row == 3], forward[row == 3])
+    assert np.all((sample.time_left[stopped] >= 2.) & (sample.time_left[stopped] < 4.))
 
 
 def test_amp_led_ground_practice_draws_unassisted_down_poses_on_both_sides_of_the_gate():

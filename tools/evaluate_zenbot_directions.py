@@ -56,6 +56,7 @@ def direction_metrics(poses, loads, command, *, relative_active_speed=False):
     fell = bool(np.any((poses[:, 2] < 0.42) | (up < 0.55)))
     end_upright = bool(np.all((poses[-3 * WINDOW :, 2] > zenbot.UP_HEIGHT) & (up[-3 * WINDOW :] > 0.8)))
     departure = float(np.linalg.norm(poses[:, :2] - poses[0, :2], axis=1).max())
+    pure_turn = target[2] != 0 and not np.any(target[:2])
     left, right = (loads[-3 * WINDOW :] > 0.08).T
     leading = left[left ^ right]
     return {
@@ -68,11 +69,11 @@ def direction_metrics(poses, loads, command, *, relative_active_speed=False):
         "upright_last_3s": end_upright,
         "max_departure_m": departure,
         "total_yaw_rad": float(yaw[-1] - yaw[0]),
-        "passed": bool(tracks and not fell and end_upright and (not command[2] or departure <= TURN_RADIUS_M)),
+        "passed": bool(tracks and not fell and end_upright and (not pure_turn or departure <= TURN_RADIUS_M)),
     }
 
 
-def evaluate_checkpoint(checkpoint, cases, names, steps, *, cold_start=False):
+def evaluate_checkpoint(checkpoint, cases, names, steps, *, cold_start=False, targets=COMMANDS):
     player = ZenbotPlayer(checkpoint, visuals=False)
     native = player.native
     if not native.command_gait or native.native_tracking is not None:
@@ -85,7 +86,7 @@ def evaluate_checkpoint(checkpoint, cases, names, steps, *, cold_start=False):
             # MjData includes contact/solver state; history and previous motor commands are JAX arrays.
             native.data = copy(snapshot[0])
             native.history, native.memory, native.previous = snapshot[1:]
-            native.command = jnp.asarray(COMMANDS[name], dtype=jnp.float32)[None]
+            native.command = jnp.asarray(targets[name], dtype=jnp.float32)[None]
             poses = np.empty((steps + 1, 7))
             loads = np.empty((steps, 2))
             poses[0] = native.data.qpos[:7]
@@ -93,7 +94,7 @@ def evaluate_checkpoint(checkpoint, cases, names, steps, *, cold_start=False):
                 native.step()
                 poses[i + 1] = native.data.qpos[:7]
                 loads[i] = native.support_load[:2]
-            row = direction_metrics(poses, loads, COMMANDS[name])
+            row = direction_metrics(poses, loads, targets[name])
             rows.append(
                 dict(seed=seed, trial=trial, clip=floor["clip"], name=name, from_held=floor["held"], **row)
             )
@@ -138,7 +139,9 @@ def main():
     )
     parser.add_argument("--all-pairs", action="store_true")
     parser.add_argument("--cold-start", action="store_true", help="Start each floor trial at rest before adding the test perturbation")
-    parser.add_argument("--commands", nargs="+", choices=COMMANDS, default=list(COMMANDS))
+    parser.add_argument("--commands", nargs="+", choices=COMMANDS)
+    parser.add_argument("--setpoint", type=float, nargs=3, action="append", metavar=("VX", "VY", "WZ"),
+                        help="Test an additional body-frame velocity setpoint; may be repeated")
     parser.add_argument("--stage-seconds", type=float, default=8.0)
     args = parser.parse_args()
     if not np.isfinite(args.stage_seconds) or args.stage_seconds < 3:
@@ -150,10 +153,17 @@ def main():
     else:
         cases = [(s, args.trials[i % len(args.trials)]) for i, s in enumerate(args.seeds)]
     steps = round(args.stage_seconds / DT)
-    reports = [evaluate_checkpoint(c, cases, args.commands, steps, cold_start=args.cold_start) for c in args.checkpoints]
+    names = args.commands if args.commands is not None else ([] if args.setpoint else list(COMMANDS))
+    targets = {name: COMMANDS[name] for name in names}
+    for i, triple in enumerate(args.setpoint or [], 1):
+        if not np.isfinite(triple).all():
+            parser.error("--setpoint needs three finite velocities")
+        targets[f"setpoint_{i}"] = triple
+    reports = [evaluate_checkpoint(c, cases, targets.keys(), steps, cold_start=args.cold_start, targets=targets)
+               for c in args.checkpoints]
     result = {
         "cases": cases,
-        "commands": {name: COMMANDS[name] for name in args.commands},
+        "commands": targets,
         "coordinate_order": ["forward_mps", "left_mps", "yaw_ccw_radps"],
         "floor_seconds": 12.0,
         "stage_seconds": steps * DT,

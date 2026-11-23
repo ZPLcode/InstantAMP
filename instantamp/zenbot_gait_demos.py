@@ -121,6 +121,17 @@ def command_motion_windows(clip, name, frames, *, match_speed=False, targets=Non
             yield index, straight_window_starts(clip, frames, gait)
 
 
+def reference_command_index(commands, labels):
+    """Match the dominant translation to a demo, using a turn demo for pure yaw."""
+    labels = jnp.asarray(labels)
+    xy = commands[..., :2]
+    axis = jnp.where(jnp.any(xy != 0., axis=-1), jnp.argmax(jnp.abs(xy), axis=-1), 2)
+    target = jnp.take_along_axis(commands, axis[..., None], axis=-1)
+    candidates = labels.T[axis]
+    distance = jnp.where(target * candidates > 0., jnp.abs(candidates - target), jnp.inf)
+    return jnp.where(target[..., 0] == 0., 0, jnp.argmin(distance, axis=-1))
+
+
 class CommandGaitDemos(amp.Demos):
     """Sample independent AMP windows from the gait requested of each physical robot."""
 
@@ -153,7 +164,7 @@ class CommandGaitDemos(amp.Demos):
         self.command_starts = jnp.asarray(np.concatenate(groups), jnp.int32)
 
     def sample_commands(self, key, commands, *, mismatch=False, reduced=False):
-        group = jnp.square(commands[:, None, :] - self.labels).sum(-1).argmin(-1)
+        group = reference_command_index(commands, self.labels)
         if mismatch:
             key, other = jax.random.split(key)
             kinds = len(zenbot.DIRECTIONAL_COMMANDS)

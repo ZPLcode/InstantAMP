@@ -11,7 +11,7 @@ import pytest
 from instantamp import zenbot
 from instantamp.zenbot_gait_demos import (
     CommandGaitDemos, DIRECTION_CLIPS, StraightGaitDemos, command_reset_bank,
-    directional_window_starts, source_command_speeds, straight_window_starts,
+    directional_window_starts, reference_command_index, source_command_speeds, straight_window_starts,
 )
 from tools.prepare_zenbot import prepare_locomotion
 
@@ -166,6 +166,39 @@ def test_recorded_command_speeds_keep_slow_steps_and_fast_pivots_with_their_own_
         assert .10 < np.mean(belongs) < .15
 
 
+def test_continuous_commands_match_motion_train_and_reach_the_actor():
+    from instantamp import zenbot_source_gait
+    from instantamp.sim import Sim
+
+    sim = Sim.__new__(Sim)
+    sim.wm_range_commands = sim.wm_floor_locomotion = True
+    key, n = jax.random.key(861), 4096
+    draw = jax.jit(lambda k: sim.sample_wm_command(k, n))(key)
+    source = zenbot_source_gait.sample_command(key, n, stage=2)
+    for name in ('vel', 'heading', 'is_heading', 'is_standing'):
+        np.testing.assert_allclose(getattr(draw, name), getattr(source, name), atol=1e-6)
+    assert np.all((draw.time_left >= 2.) & (draw.time_left < 4.))
+    moving, stand = np.asarray(draw.is_heading), np.asarray(draw.is_standing)
+    turn = ~moving & ~stand
+    np.testing.assert_allclose([stand.mean(), turn.mean(), moving.mean()], [.05, .20, .75], atol=.02)
+    rot = jnp.broadcast_to(jnp.eye(3), (n, 3, 3))
+    actual = np.asarray(sim.wm_velocity_command(draw, rot, jnp.zeros(n, bool), jnp.ones(n)))
+    assert np.unique(actual[moving, 0]).size > 2500
+    assert actual[moving, 0].min() < -.99 and actual[moving, 0].max() > 2.99
+    assert np.all(np.abs(actual[moving, 1]) <= .5)
+    np.testing.assert_allclose(actual[moving, 2], np.clip(.5 * np.asarray(draw.heading)[moving], -1.5, 1.5), atol=1e-6)
+    np.testing.assert_array_equal(actual[stand], 0.)
+    np.testing.assert_array_equal(actual[turn, :2], 0.)
+    assert np.max(np.abs(actual[turn, 2])) > 2.15
+
+
+def test_continuous_reference_matches_translation_during_heading_corrections():
+    commands = jnp.array([[[.82, .12, 1.4], [-.37, .1, -1.3], [.04, -.22, 1.3]],
+                          [[0., 0., .04], [0., 0., 0.], [2.45, -.2, .9]]])
+    np.testing.assert_array_equal(reference_command_index(commands, zenbot.DIRECTIONAL_COMMANDS),
+                                  [[1, 3, 5], [6, 0, 2]])
+
+
 def test_recorded_low_speed_comparison_requires_measured_lateral_progress():
     from tools.evaluate_zenbot_directions import direction_metrics
 
@@ -179,6 +212,21 @@ def test_recorded_low_speed_comparison_requires_measured_lateral_progress():
     assert not direction_metrics(poses, loads, command, relative_active_speed=True)["passed"]
     poses[:, 1] = .17 * t
     assert direction_metrics(poses, loads, command, relative_active_speed=True)["passed"]
+
+
+def test_moving_turn_setpoint_can_depart_from_its_start():
+    from tools.evaluate_zenbot_directions import DT, direction_metrics
+
+    speed, yaw_rate = .7, .6
+    yaw = np.arange(201) * DT * yaw_rate
+    mid = (yaw[1:] + yaw[:-1]) / 2
+    poses = np.zeros((len(yaw), 30))
+    poses[:, 2] = .69
+    poses[:, 3] = np.cos(yaw / 2)
+    poses[:, 6] = np.sin(yaw / 2)
+    poses[1:, :2] = np.cumsum(DT * speed * np.column_stack((np.cos(mid), np.sin(mid))), axis=0)
+    result = direction_metrics(poses, np.ones((200, 2)), (speed, 0., yaw_rate))
+    assert result["passed"] and result["max_departure_m"] > .35
 
 
 def test_command_amp_can_reward_improvements_below_the_least_squares_cutoff():

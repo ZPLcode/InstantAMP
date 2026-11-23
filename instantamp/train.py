@@ -40,6 +40,8 @@ import numpy as np
 
 from . import amp, critic, env, g1_getup, nets, optim, support_discriminator, zenbot
 from . import buffer as rb
+from . import zenbot_gait_rewards as gait_rewards
+from .zenbot_gait_demos import reference_command_index
 from .sim import Sim, motion_dirs, unflatten
 from .zenbot_motion_train_obs import MOTION_TRAIN_WIDTH, mirror_action, mirror_observation, motion_train_actor_mean
 
@@ -338,7 +340,9 @@ class ZenbotMotionTrainWMConfig(ZenbotWalkRunRecoveryConfig):
     motion_train_wm: int = 1
     wm_reference_training: int = 0  # matched physical recovery poses are a training-only signal
     wm_floor_amp: int = 0  # cold floor openings, get-up AMP until sustained foot support
-    gait_velocity_time_constant: float = 0.  # seconds of smoothing for the locomotion task reward
+    wm_range_commands: int = 0  # continuous Motion Train velocity ranges for the joint task
+    wm_posture_and_tracking: int = 0  # pelvis posture rewards and separate planar/yaw tracking diagnostics
+    wm_gait_rewards: int = 0  # Motion Train foot and joint terms for the joint floor/gait task
     floor_stop_command_share: float = 0.  # fraction of fallen starts requesting a quiet stance for the episode
     gait_source_commands: int = 0  # practice the recorded and nominal directional speeds
     gait_mirror_weight: float = 0.  # mirror consistency on physical observations after supported standing
@@ -362,6 +366,11 @@ class ZenbotMotionTrainWMConfig(ZenbotWalkRunRecoveryConfig):
         super().__post_init__()
         if self.ode or self.legged_real_ppo or self.recovery_base_actor:
             raise ValueError("The Motion Train WM profile needs direct actions and a learned world model")
+        joint_task = self.wm_floor_amp and not self.wm_getup_only
+        for name in ("wm_range_commands", "wm_posture_and_tracking", "wm_gait_rewards"):
+            enabled = getattr(self, name)
+            if enabled not in (0, 1) or (enabled and not joint_task):
+                raise ValueError(f"{name} must be 0 or 1 and requires joint floor/locomotion training when enabled")
         if self.gait_source_commands and not self.command_gait_amp:
             raise ValueError("Source-speed commands need command-conditioned locomotion AMP")
         if not 0 <= self.ppo_frac < 1:
@@ -503,9 +512,11 @@ class InstantAMP:
                        wm_stance_start_share=getattr(c, "wm_stance_start_share", 0.),
                        wm_min_rise_score=getattr(c, "wm_min_rise_score", 0.), wm_floor_amp=getattr(c, "wm_floor_amp", 0),
                        wm_stand_reference=stand_clip, wm_lift_gate=getattr(c, "wm_lift_gate", 0.),
-                       gait_velocity_time_constant=getattr(c, "gait_velocity_time_constant", 0.),
                        floor_stop_command_share=getattr(c, "floor_stop_command_share", 0.),
-                       gait_source_commands=getattr(c, "gait_source_commands", False))
+                       gait_source_commands=getattr(c, "gait_source_commands", False),
+                       wm_gait_rewards=bool(getattr(c, "wm_gait_rewards", 0)),
+                       wm_posture_and_tracking=bool(getattr(c, "wm_posture_and_tracking", 0)),
+                       wm_range_commands=bool(getattr(c, "wm_range_commands", 0)))
         self.wm_motion_replay = None
         if getattr(c, "wm_motion_replay", False):
             from .zenbot_wm_motion_replay import PhysicalMotionReplay
@@ -657,6 +668,8 @@ class InstantAMP:
             sensors = s.motion_train_sensors
             rec.update(obs=sensors.observation(), imu_delay=sensors.delay_s,
                        current_imu=sensors.current_imu, previous_imu=sensors.previous_imu)
+        if getattr(s, "step_history", None) is not None:
+            rec["step_history"] = s.step_history._asdict()
         if self.sim.reference is not None or getattr(self.cfg, "wm_reference_training", False):
             rec["reference_clip"] = s.reference_clip
             if s.reference_start is not None:
@@ -677,8 +690,6 @@ class InstantAMP:
                 rec["rise_anchor_weight"] = g1_getup.rise_anchor_weight(self.sim.reference, s.reference_clip, frame, pose_score)
         if getattr(self.cfg, "wm_floor_amp", False):
             rec["stand_blend"] = tr.stats["stand_blend"]
-            if s.gait_velocity is not None:
-                rec["gait_velocity"] = s.gait_velocity
             if self.sim.wm_floor_locomotion:
                 rec["gait_world"] = self.sim.wm_gait_worlds
             rec["upright_steps"] = s.supported_hold.upright_steps
@@ -951,7 +962,7 @@ class InstantAMP:
         zeros = jnp.zeros((B,))
 
         def step(carry, k):
-            S, a_last, a_ode, hist, cmd, c_obs, t, up, critic_hist, remaining, paired_clip, hold, gait_velocity = carry
+            S, a_last, a_ode, hist, cmd, c_obs, t, up, critic_hist, remaining, paired_clip, hold, step_history = carry
             k_o, k_c = jax.random.split(k)
             obs = hist.observation() if motion_train else hist
             a = self.act(pi, obs_norm, obs, a_ode, out_bf16=bf16)
@@ -973,6 +984,7 @@ class InstantAMP:
             if sim.wm_floor_locomotion:
                 d = jnp.maximum(d, (start["gait_world"] & up & ~up1).astype(d.dtype))
             recovering = ~up1
+            gait_was_ready = remaining == 0 if step_history is not None else None
             active, deadline = None, False
             if self.mixed_amp and not sim.wm_floor_locomotion:
                 deadline = remaining == 1
@@ -990,14 +1002,21 @@ class InstantAMP:
                 if sim.wm_floor_locomotion:
                     remaining = sim.floor_gait_interval(remaining, up1, blend)
                     active = remaining > 0
-            if gait_velocity is not None:
-                gait_velocity = sim.body_command_velocity(S1, gait_velocity)
             terms = sim.reward_terms(S, S1, v1.kin, a, a_last, c_obs, recovering, fall, foot_contact, zeros, sim.q_soft,
-                                     gait_velocity=gait_velocity,
                                      torque=sim.estimated_torque(S, target) if sim.recovery or self.legged_support else None,
                                      clip=paired_clip if paired_floor else start.get("reference_clip"), step=t1, reference_start=start.get("reference_start"), reference_yaw=start.get("reference_yaw"),
                                      recovery_active=active, recovery_deadline=deadline, stand_blend=blend,
                                      reference_rate_weight=start.get("reference_rate_weight", 1.))
+            if step_history is not None:
+                bottom = v1.feet.bottom
+                # Predicted collision heights substitute for force sensors in the world model.
+                feet_down = bottom[..., :2] <= env.FOOT_CONTACT_H
+                undesired = jax.nn.sigmoid((env.FOOT_CONTACT_H - bottom[..., 2:]) / .003).sum(-1)
+                foot_acc_z = (v1.feet.com_velocity_z - v.feet.com_velocity_z) / env.DT
+                step_history, added = gait_rewards.reward_terms(
+                    S1, v1.feet, c_obs, sim.estimated_torque(S, target), (S1[5] - S[5]) / env.DT,
+                    sim.q_soft, feet_down, undesired, v1.feet.predicted_slip, foot_acc_z, step_history, gait_was_ready | ~active)
+                terms.update(added)
             r = sum(sim.weighted(terms).values())
             reference_score = None
             if paired_floor:
@@ -1027,7 +1046,7 @@ class InstantAMP:
             else:
                 frame1, gate = jnp.zeros((B, 1)), jnp.zeros((B, 2))
             if motion_train:
-                cmd1 = env.tick(cmd, k_c, sample=lambda k: sim.sample_wm_command(k, B))
+                cmd1 = sim.tick_wm_command(cmd, k_c, S1, up1, remaining)
                 c1 = sim.wm_velocity_command(cmd1, S1[1], up1, remaining)
                 hist1 = predicted_sensors(hist, S1, c1, a, k_o, sim.noisy_obs)
             else:
@@ -1042,7 +1061,7 @@ class InstantAMP:
             else:
                 cin1 = self.critic_in(S1, v1.height, a, c1, xi, up1, t1, start.get("down_start"), remaining) if use_critic else zeros[:, None]
             gait_cmd = jnp.where(remaining[..., None] > 0, 0., c_obs) if getattr(c, "command_gait_amp", False) else None
-            return (S1, a, a, hist1, cmd1, c1, t1, up1, critic_hist, remaining, paired_clip, hold, gait_velocity), (r, d, frame1, gate, cin1, recovering.astype(jnp.float32), remaining if self.legged_support else None, reference_score, gait_cmd)
+            return (S1, a, a, hist1, cmd1, c1, t1, up1, critic_hist, remaining, paired_clip, hold, step_history), (r, d, frame1, gate, cin1, recovering.astype(jnp.float32), remaining if self.legged_support else None, reference_score, gait_cmd)
 
         if c.imag_remat == "dots":
             step = jax.checkpoint(step, policy=jax.checkpoint_policies.dots_with_no_batch_dims_saveable)
@@ -1052,7 +1071,7 @@ class InstantAMP:
         hold = zenbot.SupportedStand(start["upright_steps"], start["loaded_feet"]) if "upright_steps" in start else None
         init = (S0, start["a_last"], start["a_ode"], history, start["cmd"], start["c_obs"], start["t"], start["was_up"] > 0,
                 start.get("obs_critic") if use_critic else None, start.get("recovery_left"), start.get("reference_clip") if paired_floor else None, hold,
-                start.get("gait_velocity"))
+                gait_rewards.StepHistory(**start["step_history"]) if "step_history" in start else None)
         _, (r, d, frames, gate, cins, rec, support_left, reference_score, gait_cmd) = jax.lax.scan(step, init, keys, unroll=c.imag_unroll)
         if use_amp:
             F = self.amp_span
@@ -1107,6 +1126,10 @@ class InstantAMP:
     def gait_features(self, windows, command):
         features = amp.gait_window(windows, self.J, self.cfg.gait_amp_stride, env.DT)
         if getattr(self.cfg, "command_gait_amp", False):
+            if getattr(self.cfg, "wm_range_commands", False):
+                # Condition the style critic on the reference motion it can actually observe.
+                speeds = jnp.asarray(self.sim.wm_command_speeds)
+                command = speeds[reference_command_index(command, speeds)]
             labels = jnp.broadcast_to(command[..., None, :], (*features.shape[:-1], 3))
             features = jnp.concatenate((features, labels), axis=-1)
         return features
@@ -1351,7 +1374,7 @@ class InstantAMP:
         return out, {**aux, "gn": gn, "gn_gated": (finite & ~ok).astype(jnp.float32)}
 
     # ------------------------------------------------------------------ iteration programs
-    SUMMED = ("done", "terminated", "len_sum", "rew_sums", "diverged", "down_done", "down_up", "pushes",
+    SUMMED = ("velocity_errors", "done", "terminated", "len_sum", "rew_sums", "diverged", "down_done", "down_up", "pushes",
               "reference_score_sum", "reference_frames", "reference_moving_score_sum", "reference_moving_frames")
 
     def collect_iter(self, carry):
@@ -1929,6 +1952,11 @@ def main(argv=None):
               **{k: float(np.mean([x[k] for x in cs])) for k in ("reward", "nacon", "nonfinite_env", "up_frac", "term_geom", "self_hits", "foot_contact")},
               **{k: sum(float(x[k]) for x in cs) for k in ("diverged", "down_done", "down_up", "pushes")},
               **{k: float(np.mean([x[k] for x in ls])) for k in ls[0]}, **{k: float(v) for k, v in ev.items()}}  # fmt: skip
+        if xs.sim.wm_posture_and_tracking:
+            planar, yaw, samples = np.sum([x["velocity_errors"] for x in cs], axis=0)
+            if samples > 0:
+                st["planar_velocity_error_m_s"] = float(planar / samples)
+                st["yaw_rate_error_rad_s"] = float(yaw / samples)
         if xs.sim.recovery:
             st["assist_n"] = float(np.mean([x["assist_n"] for x in cs]))
         if xs.sim.mixed:

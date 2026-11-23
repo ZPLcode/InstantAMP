@@ -4,6 +4,12 @@ __pycache__/
 .pytest_cache/
 runs/
 data/
+# Track the joint Zenbot task's expert sampling weights alongside the released clips.
+!/data/
+/data/**
+!/data/zenbot23_walk_run_recovery/
+!/data/zenbot23_walk_run_recovery/recovery/
+!/data/zenbot23_walk_run_recovery/recovery/sampling.json
 assets/meshes/
 MUJOCO_LOG.TXT
 .DS_Store

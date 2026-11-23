@@ -622,13 +622,23 @@ python tools/track_g1_reference.py export /path/to/ckpt_latest.pt g1_reference_a
 
 ## Zenbot 23-DoF walk, run and recover
 
-`zenbot23_walk_run_recovery` trains one velocity-conditioned actor on the 43.0678 kg robot. The locomotion discriminator samples the positive-weight clips in motion_train's Zenbot AMP configuration with its published weights. The default recovery discriminator samples the eleven native Zenbot `get_up_frax` clips in LeggedLab with equal clip probability. Both banks use 50 Hz motion data with named joints reordered into the Zenbot MJCF.
+`zenbot23_walk_run_recovery` trains one velocity-conditioned actor on the 43.0678 kg robot. The locomotion discriminator samples the positive-weight clips in motion_train's Zenbot AMP configuration. The recovery expert bank contains eleven native LeggedLab `get_up_frax` clips. In joint world-model training, clips ending in `458_565`, `1058_1140`, and `2301_2391` have one quarter of the sampling weight of each other clip. All eleven remain available for floor resets. Both banks use 50 Hz motion data with named joints reordered into the Zenbot MJCF. [Recovery sampling weights](data/zenbot23_walk_run_recovery/recovery/sampling.json)
 
 ```bash
 .venv/bin/python -m tools.prepare_zenbot /path/to/motion_train --legged-lab /path/to/legged_lab --locomotion
 .venv/bin/python -m instantamp.train --robot zenbot23_walk_run_recovery --log_dir runs/zenbot_mixed
 JAX_PLATFORMS=cpu .venv/bin/python -m tools.evaluate_zenbot_walk_recovery runs/zenbot_mixed
 ```
+
+For the 4,096-environment start/stop world-model run, prepare Motion Train's directional gait bank in a fresh checkout and reuse the bundled recovery clips. The following recipe starts from random weights, saves a checkpoint every 500 iterations and evaluates the final policy.
+
+```bash
+.venv/bin/python -m tools.prepare_zenbot /path/to/motion_train --locomotion-only
+FLOOR_MAX_ITERATIONS=100000 \
+    bash tools/recipes/train_zenbot_wm_floor_amp.sh runs/zenbot_start_stop --locomotion
+```
+
+In this recipe, 25% of upright starts with a forward-dominant command use a standing pose with zero velocity. When a robot in the gait phase has a positive forward command and a measured forward speed above 0.45 m/s, its next command has a 25% chance of being zero. Commands last 2–4 seconds. The task weights instantaneous pelvis-frame planar speed tracking at 2.0 and yaw-rate tracking at 1.5, with a tracking width of 0.5 for each.
 
 The default reset mix is 35% floor starts and 65% gait starts. Floor resets sample non-upright AMP motion states. After a fall, the recovery discriminator scores the robot through the ground phase and its transition to balance. Its ten poses span 0.54 s and include hand, knee and foot heights. The least-squares discriminator compares independently sampled expert and policy windows. During the first four seconds the low-height and tilt penalty is zero. At the end of this interval a balance check penalizes an unfinished recovery. A robot that remains down then receives one quarter of the original low-height and tilt cost. The single penalty for falling during gait still applies. Velocity rewards resume once the scoring interval ends and the robot is upright. Set `--recovery_amp_seconds 0` to select the legacy gait-style discriminator and height-gated rewards. The exported actor uses only its IMU, joint, previous-action and velocity-command history. Training and evaluation use zero lifting force.
 
