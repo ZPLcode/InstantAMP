@@ -1,0 +1,318 @@
+{
+  "checkpoint_sha256": "4af530346f3efeb866aeba9f8e680694f470793006e36effa1b6acc9644ac31d",
+  "method": "Paired starting from the same neutral stance and motor delays. After 1 s stand, 4 s walk and 6 s run, request either an immediate stop for 5 s or 1 s walk followed by a 5 s stop. The original policy weights and deployment inputs are identical. Score the switch only if it was actually running.",
+  "summary": {
+    "direct_stop": {
+      "running": 5,
+      "successful": 3,
+      "fell_after_switch": 2
+    },
+    "one_second_walk_then_stop": {
+      "running": 5,
+      "successful": 5,
+      "fell_after_switch": 0
+    }
+  },
+  "trials": [
+    {
+      "seed": 305711,
+      "switch": "direct_stop",
+      "eligible_from_running": true,
+      "pre_run": {
+        "fell": false,
+        "minimum_height": 0.6187151891812894,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          2.8379667870834053,
+          0.024929290624320574,
+          -0.03418482481357412
+        ],
+        "ending_xy_residual_speed": 2.84706527444618,
+        "ending_upright": true
+      },
+      "switch_motion": {
+        "fell": false,
+        "minimum_height": 0.4417436152626819,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          -2.3017038649332453e-05,
+          0.0010809846767360356,
+          -0.0020047160690883636
+        ],
+        "ending_xy_residual_speed": 0.0011423967851933495,
+        "ending_upright": true
+      },
+      "stopped_without_falling": true
+    },
+    {
+      "seed": 305711,
+      "switch": "one_second_walk_then_stop",
+      "eligible_from_running": true,
+      "pre_run": {
+        "fell": false,
+        "minimum_height": 0.6187151891812894,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          2.8379667870834053,
+          0.024929290624320574,
+          -0.03418482481357412
+        ],
+        "ending_xy_residual_speed": 2.84706527444618,
+        "ending_upright": true
+      },
+      "switch_motion": {
+        "fell": false,
+        "minimum_height": 0.6123617736496643,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          -8.959501374719298e-05,
+          0.0004050967841940549,
+          0.0002996060192988481
+        ],
+        "ending_xy_residual_speed": 0.00045062751012608514,
+        "ending_upright": true
+      },
+      "stopped_without_falling": true
+    },
+    {
+      "seed": 934837,
+      "switch": "direct_stop",
+      "eligible_from_running": true,
+      "pre_run": {
+        "fell": false,
+        "minimum_height": 0.5959783172862655,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          2.7921870513254765,
+          -0.04138451643623276,
+          -0.10616616718161813
+        ],
+        "ending_xy_residual_speed": 2.8046010638705514,
+        "ending_upright": true
+      },
+      "switch_motion": {
+        "fell": true,
+        "minimum_height": 0.231065834907813,
+        "first_fall_s": 0.76,
+        "last_second_velocity": [
+          0.001473781420367707,
+          0.0005896205478909669,
+          -0.0035971810593040665
+        ],
+        "ending_xy_residual_speed": 0.004390276075322366,
+        "ending_upright": true
+      },
+      "stopped_without_falling": false
+    },
+    {
+      "seed": 934837,
+      "switch": "one_second_walk_then_stop",
+      "eligible_from_running": true,
+      "pre_run": {
+        "fell": false,
+        "minimum_height": 0.5959783172862655,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          2.7921870513254765,
+          -0.04138451643623276,
+          -0.10616616718161813
+        ],
+        "ending_xy_residual_speed": 2.8046010638705514,
+        "ending_upright": true
+      },
+      "switch_motion": {
+        "fell": false,
+        "minimum_height": 0.6033634380699916,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          -0.00032550715466131365,
+          0.00035210719361006157,
+          0.0005709241542270482
+        ],
+        "ending_xy_residual_speed": 0.00048105311369667616,
+        "ending_upright": true
+      },
+      "stopped_without_falling": true
+    },
+    {
+      "seed": 8217539,
+      "switch": "direct_stop",
+      "eligible_from_running": true,
+      "pre_run": {
+        "fell": false,
+        "minimum_height": 0.6033573710545473,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          3.0170017024447575,
+          -0.24301406745492138,
+          -0.15798390573543358
+        ],
+        "ending_xy_residual_speed": 3.041904318600624,
+        "ending_upright": true
+      },
+      "switch_motion": {
+        "fell": true,
+        "minimum_height": 0.2327844407100815,
+        "first_fall_s": 0.44,
+        "last_second_velocity": [
+          0.00014373565958866123,
+          0.00028291995670999955,
+          -0.0019759687584854357
+        ],
+        "ending_xy_residual_speed": 0.0006203610709993606,
+        "ending_upright": true
+      },
+      "stopped_without_falling": false
+    },
+    {
+      "seed": 8217539,
+      "switch": "one_second_walk_then_stop",
+      "eligible_from_running": true,
+      "pre_run": {
+        "fell": false,
+        "minimum_height": 0.6033573710545473,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          3.0170017024447575,
+          -0.24301406745492138,
+          -0.15798390573543358
+        ],
+        "ending_xy_residual_speed": 3.041904318600624,
+        "ending_upright": true
+      },
+      "switch_motion": {
+        "fell": false,
+        "minimum_height": 0.5464825932193764,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          -0.00012364547048425363,
+          0.001566176813640706,
+          -0.0002683518118298811
+        ],
+        "ending_xy_residual_speed": 0.0015740982046635304,
+        "ending_upright": true
+      },
+      "stopped_without_falling": true
+    },
+    {
+      "seed": 1654679,
+      "switch": "direct_stop",
+      "eligible_from_running": true,
+      "pre_run": {
+        "fell": false,
+        "minimum_height": 0.6168896453196262,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          2.909251700177795,
+          0.03809356031477014,
+          0.044964427518755616
+        ],
+        "ending_xy_residual_speed": 2.9198205553133363,
+        "ending_upright": true
+      },
+      "switch_motion": {
+        "fell": false,
+        "minimum_height": 0.5639904597123466,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          3.565193152855304e-05,
+          0.0002815385746790911,
+          -0.0010404541923594302
+        ],
+        "ending_xy_residual_speed": 0.00033489551051437306,
+        "ending_upright": true
+      },
+      "stopped_without_falling": true
+    },
+    {
+      "seed": 1654679,
+      "switch": "one_second_walk_then_stop",
+      "eligible_from_running": true,
+      "pre_run": {
+        "fell": false,
+        "minimum_height": 0.6168896453196262,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          2.909251700177795,
+          0.03809356031477014,
+          0.044964427518755616
+        ],
+        "ending_xy_residual_speed": 2.9198205553133363,
+        "ending_upright": true
+      },
+      "switch_motion": {
+        "fell": false,
+        "minimum_height": 0.6208550792315287,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          9.46859328064199e-06,
+          0.00035875786682055107,
+          -0.000712772418459684
+        ],
+        "ending_xy_residual_speed": 0.00038051563704496533,
+        "ending_upright": true
+      },
+      "stopped_without_falling": true
+    },
+    {
+      "seed": 5969183,
+      "switch": "direct_stop",
+      "eligible_from_running": true,
+      "pre_run": {
+        "fell": false,
+        "minimum_height": 0.5891411998250495,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          3.015454343940993,
+          -0.24084542295424316,
+          -0.05261095482946088
+        ],
+        "ending_xy_residual_speed": 3.0401359972615927,
+        "ending_upright": true
+      },
+      "switch_motion": {
+        "fell": false,
+        "minimum_height": 0.5054996829657672,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          -0.0001580658236759071,
+          0.00034639926291640805,
+          -0.0009325463658637068
+        ],
+        "ending_xy_residual_speed": 0.0003813799547361947,
+        "ending_upright": true
+      },
+      "stopped_without_falling": true
+    },
+    {
+      "seed": 5969183,
+      "switch": "one_second_walk_then_stop",
+      "eligible_from_running": true,
+      "pre_run": {
+        "fell": false,
+        "minimum_height": 0.5891411998250495,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          3.015454343940993,
+          -0.24084542295424316,
+          -0.05261095482946088
+        ],
+        "ending_xy_residual_speed": 3.0401359972615927,
+        "ending_upright": true
+      },
+      "switch_motion": {
+        "fell": false,
+        "minimum_height": 0.5850745784898123,
+        "first_fall_s": null,
+        "last_second_velocity": [
+          -0.00029805009157353815,
+          0.0005248922691490392,
+          0.00040593754734358223
+        ],
+        "ending_xy_residual_speed": 0.0006043332306043356,
+        "ending_upright": true
+      },
+      "stopped_without_falling": true
+    }
+  ]
+}

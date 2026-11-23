@@ -149,6 +149,8 @@ The eleven Zenbot recovery motions originate from the LAFAN1 recording `fallAndG
 
 The six Zenbot standing motions were generated separately in MuJoCo using the Zenbot model. [Generator and recording method](tools/prepare_zenbot_standing_amp.py) · [Standing dataset manifest](data/zenbot23_walk_run_recovery/standing/manifest.json)
 
+The Zenbot joint WM run uses 17 locomotion and standing clips from the Motion Train `zenbot_amp_frax` bank. The preparation script reads these clips and their weights at the recorded source revision and verifies the converted files against the training hashes. Access to the original motion data and its terms follows the source repository. [Source revision](https://github.com/ZPLcode/h1_train/tree/aafe0101ade37656f5390a7320bbd026f1f3c171) · [Preparation](tools/recipes/prepare_zenbot_wm_data.sh) · [Reference checksums](assets/zenbot_wm_reference.sha256)
+
 ## Dependencies
 
 JAX, MuJoCo, MJX, MuJoCo Warp and NVIDIA Warp (Apache-2.0), NumPy and Pillow are installed from their own distributions under their

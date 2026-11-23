@@ -1,0 +1,1389 @@
+[
+  {
+    "version": "A",
+    "run": "zenbot_joint_floor_gaits_seed42",
+    "training_seed": 42,
+    "iteration": 10000,
+    "policy_sha256": "82ea9d59a0a6715182d3acd02109d0b99fe8fbf0db6029eb76cea7b887348e11",
+    "original_reports_sha256": {
+      "cold/summary.json": "52cbd914e9df04edc9d5e9b0f4e56b45839ce11fddafaab11ecc16cd01b66560",
+      "walk_run_stop/summary.json": "ef708fe46e772f3f6c6e9a700510904606b417f3e4de828b4e7060d5d7e6317c",
+      "command_style/summary.json": "afcf1e3583ab581a414bd4a88f48fe748a7006a69f3725e720d59f718c4798d6"
+    },
+    "floor_seeds": [
+      932277,
+      1654679,
+      2718869,
+      3950477,
+      5969183
+    ],
+    "cold": {
+      "trials": 55,
+      "rise": 55,
+      "quiet_final_2s": 55,
+      "refalls_after_first_stand": 0,
+      "first_attempt_held": 50,
+      "median_rise_s_on_success": 1.82,
+      "median_rise_to_reference_ratio": 0.7203389830508474,
+      "median_hip_velocity_p90_rad_s": 4.379412737893052,
+      "median_reference_hip_velocity_p90_rad_s": 2.5260324478149414,
+      "median_vertical_velocity_p90_m_s": 0.7605543771087334,
+      "median_reference_vertical_velocity_p90_m_s": 0.44409558176994324,
+      "median_peak_post_rise_pelvis_drift_cm": 14.852450126259425,
+      "median_source_time_joint_mae_deg": 23.263868862317047,
+      "median_source_time_hand_knee_iou": 0.39473684210526316,
+      "median_phase_aligned_joint_mae_deg_on_rises": 18.97055152053172,
+      "median_default_pose_mae_deg_on_quiet_holds": 8.068828915008616,
+      "median_abs_torso_pitch_deg_on_quiet_holds": 2.7764518623988765,
+      "median_torso_tilt_deg_on_quiet_holds": 3.2726545123928417,
+      "median_hand_knee_near_policy_s": 0.76,
+      "median_hand_knee_near_reference_s": 0.46,
+      "median_knee_mae_deg_during_reference_hand_support": 37.52055744128968
+    },
+    "sequence": {
+      "floor": 33,
+      "rose": 33,
+      "held": 33,
+      "strict_first_rise": 30,
+      "refalls": 0,
+      "median_standing_joint_deg": 8.085543023442183,
+      "median_standing_tilt_deg": 3.272654512392389,
+      "median_standing_abs_roll_deg": 1.6326245251194322,
+      "median_standing_sway_radius_cm": 0.0948116586699635,
+      "median_standing_load_imbalance_bw": 0.21858123469180576,
+      "hands_loaded_then_transferred": 33,
+      "sustained_knee_support": 24,
+      "median_knee_support_s": 0.26,
+      "median_rise_s": 1.82,
+      "median_reference_rise_s": 2.68,
+      "median_rise_style_deg": 18.97055152053172,
+      "median_postrise_pelvis_cm": 14.22862040769694,
+      "median_postrise_foot_cm": 19.78431766694487,
+      "sequences": 6,
+      "whole_sequence": 3,
+      "walk": {
+        "passed": 6,
+        "median_speed": 0.933915574919016,
+        "median_flights": 0.0,
+        "median_switches": 6.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 0.39,
+        "median_lateral_departure_m": 0.236958426501935,
+        "median_style_deg": 5.013820490844841
+      },
+      "run": {
+        "passed": 6,
+        "median_speed": 2.5132347784606424,
+        "median_flights": 5.0,
+        "median_switches": 9.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 0.9,
+        "median_lateral_departure_m": 3.648742407505476,
+        "median_style_deg": 7.5120325306394795
+      },
+      "stop": {
+        "passed": 6,
+        "median_speed": 0.00046278822126167386,
+        "median_flights": 0.0,
+        "median_switches": 0.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 1.2400000000000002,
+        "median_lateral_departure_m": 0.09439030181476464
+      }
+    },
+    "nominal": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.07589660822968014
+      },
+      "walk": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 17.06387889734424
+      },
+      "run": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 37.39042318279961
+      },
+      "back": {
+        "passed": 2,
+        "trials": 5,
+        "knee_excursion_deg": 15.086235158954802
+      },
+      "left": {
+        "passed": 3,
+        "trials": 5,
+        "knee_excursion_deg": 8.423758626883275
+      },
+      "right": {
+        "passed": 1,
+        "trials": 5,
+        "knee_excursion_deg": 8.270948908539495
+      },
+      "turn_left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 10.061467266078663
+      },
+      "turn_right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 21.888549652861663
+      }
+    }
+  },
+  {
+    "version": "B",
+    "run": "zenbot_joint_progress_amp12_seed42",
+    "training_seed": 42,
+    "iteration": 10000,
+    "policy_sha256": "11b92c774ec13e97e4c8b18a53486725bbf33ba8c948cc39ec4e1b33edb1c64e",
+    "original_reports_sha256": {
+      "cold/summary.json": "ea23d84da17305a69aa84aef5407103a0d767f78f287ace6099d6a3f712cf119",
+      "walk_run_stop/summary.json": "583a02ddbebb807d815f57d7ae83b77ef60d50e661f673bac3a1ee6e12150d0b",
+      "command_style/summary.json": "421c9e84e1a0fe600685b6648d7c9a53655a05ebab9c143cb8b156e6f6810e1b"
+    },
+    "floor_seeds": [
+      932277,
+      1654679,
+      2718869,
+      3950477,
+      5969183
+    ],
+    "cold": {
+      "trials": 55,
+      "rise": 35,
+      "quiet_final_2s": 35,
+      "refalls_after_first_stand": 0,
+      "first_attempt_held": 35,
+      "median_rise_s_on_success": 4.38,
+      "median_rise_to_reference_ratio": 1.4550898203592817,
+      "median_hip_velocity_p90_rad_s": 3.0894384727220343,
+      "median_reference_hip_velocity_p90_rad_s": 2.5260324478149414,
+      "median_vertical_velocity_p90_m_s": 0.44614628811429724,
+      "median_reference_vertical_velocity_p90_m_s": 0.44409558176994324,
+      "median_peak_post_rise_pelvis_drift_cm": 12.28917181157337,
+      "median_source_time_joint_mae_deg": 22.28860934704013,
+      "median_source_time_hand_knee_iou": 0.3185840707964602,
+      "median_phase_aligned_joint_mae_deg_on_rises": 20.308912241110065,
+      "median_default_pose_mae_deg_on_quiet_holds": 9.53020195457137,
+      "median_abs_torso_pitch_deg_on_quiet_holds": 1.4748882897897204,
+      "median_torso_tilt_deg_on_quiet_holds": 1.5335912276444668,
+      "median_hand_knee_near_policy_s": 2.7800000000000002,
+      "median_hand_knee_near_reference_s": 0.46,
+      "median_knee_mae_deg_during_reference_hand_support": 30.89494788930497
+    },
+    "sequence": {
+      "floor": 33,
+      "rose": 21,
+      "held": 21,
+      "strict_first_rise": 21,
+      "refalls": 0,
+      "median_standing_joint_deg": 9.505654029122914,
+      "median_standing_tilt_deg": 1.5411241765406078,
+      "median_standing_abs_roll_deg": 0.7304501378328853,
+      "median_standing_sway_radius_cm": 0.12537162208515423,
+      "median_standing_load_imbalance_bw": 0.01735317590529339,
+      "hands_loaded_then_transferred": 21,
+      "sustained_knee_support": 22,
+      "median_knee_support_s": 0.42,
+      "median_rise_s": 4.38,
+      "median_reference_rise_s": 2.68,
+      "median_rise_style_deg": 20.16486851985744,
+      "median_postrise_pelvis_cm": 12.255640332693218,
+      "median_postrise_foot_cm": 13.55010220654049,
+      "sequences": 6,
+      "whole_sequence": 3,
+      "walk": {
+        "passed": 6,
+        "median_speed": 0.8771195886389709,
+        "median_flights": 0.0,
+        "median_switches": 9.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 0.62,
+        "median_lateral_departure_m": 0.6530687999343466,
+        "median_style_deg": 9.880840567660975
+      },
+      "run": {
+        "passed": 3,
+        "median_speed": 2.382638571406888,
+        "median_flights": 9.5,
+        "median_switches": 9.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 2.4000000000000004,
+        "median_lateral_departure_m": 3.071636610460531,
+        "median_style_deg": 16.50470366684471
+      },
+      "stop": {
+        "passed": 5,
+        "median_speed": -0.0004232152220260177,
+        "median_flights": 0.0,
+        "median_switches": 0.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 1.17,
+        "median_lateral_departure_m": 0.1353001655698548
+      }
+    },
+    "nominal": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.01363156509460417
+      },
+      "walk": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 12.654905441587648
+      },
+      "run": {
+        "passed": 3,
+        "trials": 5,
+        "knee_excursion_deg": 22.93182362308876
+      },
+      "back": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 4.035565150586405
+      },
+      "left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 4.77579385497984
+      },
+      "right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 4.205478330939997
+      },
+      "turn_left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 1.2832266126302216
+      },
+      "turn_right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 2.0279213616007765
+      }
+    }
+  },
+  {
+    "version": "C",
+    "run": "zenbot_joint_command_amp_seed42",
+    "training_seed": 42,
+    "iteration": 10000,
+    "policy_sha256": "7b3198b1e300e39655a87b634e3f3389b53f71708c80f83146a62f72e8e86485",
+    "original_reports_sha256": {
+      "cold/summary.json": "c99b1cfecb37023004d84aea3d845ec3af6ea31ab9b00279c33e22cb66c49e0a",
+      "walk_run_stop/summary.json": "840acedc2569652c491c48dc6ca21dd32a90a21d4c41879474137866955557be",
+      "command_style/summary.json": "f77bf5300984c6f610d8b56b30270aaf912ad0947226278b850f8c7e2f702b63"
+    },
+    "floor_seeds": [
+      932277,
+      1654679,
+      2718869,
+      3950477,
+      5969183
+    ],
+    "cold": {
+      "trials": 55,
+      "rise": 40,
+      "quiet_final_2s": 35,
+      "refalls_after_first_stand": 2,
+      "first_attempt_held": 34,
+      "median_rise_s_on_success": 4.5600000000000005,
+      "median_rise_to_reference_ratio": 1.6467065868263475,
+      "median_hip_velocity_p90_rad_s": 2.1465327529556966,
+      "median_reference_hip_velocity_p90_rad_s": 2.492722988128662,
+      "median_vertical_velocity_p90_m_s": 0.4088882006439342,
+      "median_reference_vertical_velocity_p90_m_s": 0.4452679306268692,
+      "median_peak_post_rise_pelvis_drift_cm": 21.81651692949366,
+      "median_source_time_joint_mae_deg": 21.155101297790107,
+      "median_source_time_hand_knee_iou": 0.18181818181818182,
+      "median_phase_aligned_joint_mae_deg_on_rises": 18.369100276468856,
+      "median_default_pose_mae_deg_on_quiet_holds": 5.484800291498727,
+      "median_abs_torso_pitch_deg_on_quiet_holds": 2.2222875539323312,
+      "median_torso_tilt_deg_on_quiet_holds": 2.2778414976372177,
+      "median_hand_knee_near_policy_s": 2.86,
+      "median_hand_knee_near_reference_s": 0.46,
+      "median_knee_mae_deg_during_reference_hand_support": 23.409672828300163
+    },
+    "sequence": {
+      "floor": 33,
+      "rose": 24,
+      "held": 22,
+      "strict_first_rise": 21,
+      "refalls": 1,
+      "median_standing_joint_deg": 5.471108007766641,
+      "median_standing_tilt_deg": 2.3461086482577986,
+      "median_standing_abs_roll_deg": 0.5365869346666505,
+      "median_standing_sway_radius_cm": 0.1942137551293388,
+      "median_standing_load_imbalance_bw": 0.26293252998518135,
+      "hands_loaded_then_transferred": 24,
+      "sustained_knee_support": 24,
+      "median_knee_support_s": 1.4000000000000001,
+      "median_rise_s": 4.5600000000000005,
+      "median_reference_rise_s": 2.68,
+      "median_rise_style_deg": 18.30978780752676,
+      "median_postrise_pelvis_cm": 24.289188709190952,
+      "median_postrise_foot_cm": 30.369768440364176,
+      "sequences": 6,
+      "whole_sequence": 2,
+      "walk": {
+        "passed": 5,
+        "median_speed": 0.913851586895677,
+        "median_flights": 0.0,
+        "median_switches": 5.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 0.37,
+        "median_lateral_departure_m": 0.35458181667024935,
+        "median_style_deg": 4.192272111482682
+      },
+      "run": {
+        "passed": 3,
+        "median_speed": 2.9634313514296693,
+        "median_flights": 7.5,
+        "median_switches": 7.0,
+        "settled_count": 5,
+        "median_settled_speed_s": 0.88,
+        "median_lateral_departure_m": 2.309666947378768,
+        "median_style_deg": 6.184185609935728
+      },
+      "stop": {
+        "passed": 6,
+        "median_speed": 0.00015298445847702522,
+        "median_flights": 0.0,
+        "median_switches": 0.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 1.29,
+        "median_lateral_departure_m": 0.1820483040144477
+      }
+    },
+    "nominal": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.06572393765309492
+      },
+      "walk": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 16.99395112477344
+      },
+      "run": {
+        "passed": 1,
+        "trials": 5,
+        "knee_excursion_deg": 46.56188231646735
+      },
+      "back": {
+        "passed": 4,
+        "trials": 5,
+        "knee_excursion_deg": 18.452991198605396
+      },
+      "left": {
+        "passed": 2,
+        "trials": 5,
+        "knee_excursion_deg": 16.719177572141433
+      },
+      "right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 6.5274642166004
+      },
+      "turn_left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 27.988255596194733
+      },
+      "turn_right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 31.364009151960808
+      }
+    }
+  },
+  {
+    "version": "D",
+    "run": "zenbot_joint_matched_negatives_seed42",
+    "training_seed": 42,
+    "iteration": 10000,
+    "policy_sha256": "bae48f6d5216c22845a115061d4b106c8ef2b52794d22c4ec256b14d9ecce7b5",
+    "original_reports_sha256": {
+      "cold/summary.json": "215d965dd07cddffd450a57e92c896915563609b6472f828b63a6cf681391217",
+      "walk_run_stop/summary.json": "594fbaf69ab58bfeae6f31c58d2639b3a4402ba5a595af66dc1700d03ce1308a",
+      "command_style/summary.json": "0d064a6f31208930460f0b241d5b35a613da09e8bb2c60c72a1961f75cf89ee5"
+    },
+    "floor_seeds": [
+      932277,
+      1654679,
+      2718869,
+      3950477,
+      5969183
+    ],
+    "cold": {
+      "trials": 55,
+      "rise": 30,
+      "quiet_final_2s": 30,
+      "refalls_after_first_stand": 0,
+      "first_attempt_held": 30,
+      "median_rise_s_on_success": 4.16,
+      "median_rise_to_reference_ratio": 1.2883435582822085,
+      "median_hip_velocity_p90_rad_s": 2.3702036249550895,
+      "median_reference_hip_velocity_p90_rad_s": 2.6353371143341064,
+      "median_vertical_velocity_p90_m_s": 0.40281820160968507,
+      "median_reference_vertical_velocity_p90_m_s": 0.4452679306268692,
+      "median_peak_post_rise_pelvis_drift_cm": 17.294401382782624,
+      "median_source_time_joint_mae_deg": 21.87996326579441,
+      "median_source_time_hand_knee_iou": 0.3108108108108108,
+      "median_phase_aligned_joint_mae_deg_on_rises": 17.432865154236566,
+      "median_default_pose_mae_deg_on_quiet_holds": 3.973935896990527,
+      "median_abs_torso_pitch_deg_on_quiet_holds": 0.8165750025810135,
+      "median_torso_tilt_deg_on_quiet_holds": 1.1022241857451798,
+      "median_hand_knee_near_policy_s": 1.56,
+      "median_hand_knee_near_reference_s": 0.46,
+      "median_knee_mae_deg_during_reference_hand_support": 24.919236207678523
+    },
+    "sequence": {
+      "floor": 33,
+      "rose": 18,
+      "held": 18,
+      "strict_first_rise": 18,
+      "refalls": 0,
+      "median_standing_joint_deg": 3.9637485156407943,
+      "median_standing_tilt_deg": 1.1022241857461617,
+      "median_standing_abs_roll_deg": 0.7932704189467266,
+      "median_standing_sway_radius_cm": 0.3115575481347227,
+      "median_standing_load_imbalance_bw": 0.1658246797550485,
+      "hands_loaded_then_transferred": 18,
+      "sustained_knee_support": 19,
+      "median_knee_support_s": 0.2,
+      "median_rise_s": 4.12,
+      "median_reference_rise_s": 2.68,
+      "median_rise_style_deg": 17.354896786775882,
+      "median_postrise_pelvis_cm": 17.611111464207653,
+      "median_postrise_foot_cm": 22.53538220307152,
+      "sequences": 6,
+      "whole_sequence": 4,
+      "walk": {
+        "passed": 6,
+        "median_speed": 0.8510939662074533,
+        "median_flights": 0.0,
+        "median_switches": 5.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 0.38,
+        "median_lateral_departure_m": 1.3773032356732564,
+        "median_style_deg": 4.430229924466144
+      },
+      "run": {
+        "passed": 4,
+        "median_speed": 2.9526190595457926,
+        "median_flights": 7.0,
+        "median_switches": 7.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 0.64,
+        "median_lateral_departure_m": 8.317812646401807,
+        "median_style_deg": 7.608237167471913
+      },
+      "stop": {
+        "passed": 6,
+        "median_speed": 0.0017653787523956364,
+        "median_flights": 0.0,
+        "median_switches": 0.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 1.3,
+        "median_lateral_departure_m": 0.09200064389213597
+      }
+    },
+    "nominal": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.07190800870160619
+      },
+      "walk": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 22.365989460657943
+      },
+      "run": {
+        "passed": 3,
+        "trials": 5,
+        "knee_excursion_deg": 43.612886141032874
+      },
+      "back": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 11.283947645426652
+      },
+      "left": {
+        "passed": 3,
+        "trials": 5,
+        "knee_excursion_deg": 19.05345817125255
+      },
+      "right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 3.489789680454262
+      },
+      "turn_left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 9.002221565241612
+      },
+      "turn_right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 14.536784872137776
+      }
+    }
+  },
+  {
+    "version": "E",
+    "run": "zenbot_joint_amp_excursion_seed42",
+    "training_seed": 42,
+    "iteration": 10000,
+    "policy_sha256": "18061c021eb8905c3d291a68a2c82f29d58085afb1771a95961960395453fec2",
+    "original_reports_sha256": {
+      "cold/summary.json": "5ee6623d63f09e55025a044ae891b1c19cb8ddc70dbdbaf371eb623093b9d2db",
+      "walk_run_stop/summary.json": "13b7e87bec31514dba8582f919f7fd74ae493a4147fa8c2426a2691a964ca634",
+      "command_style/summary.json": "68ad3e582266775c6b9fafb6dfeab7abcf900fcc0cb035efe10fc20852118eb0"
+    },
+    "floor_seeds": [
+      932277,
+      1654679,
+      2718869,
+      3950477,
+      5969183
+    ],
+    "cold": {
+      "trials": 55,
+      "rise": 40,
+      "quiet_final_2s": 40,
+      "refalls_after_first_stand": 0,
+      "first_attempt_held": 40,
+      "median_rise_s_on_success": 2.5700000000000003,
+      "median_rise_to_reference_ratio": 0.8974966733200267,
+      "median_hip_velocity_p90_rad_s": 4.322004828479136,
+      "median_reference_hip_velocity_p90_rad_s": 2.5093777179718018,
+      "median_vertical_velocity_p90_m_s": 0.618796846670916,
+      "median_reference_vertical_velocity_p90_m_s": 0.4408150166273117,
+      "median_peak_post_rise_pelvis_drift_cm": 10.72511754128583,
+      "median_source_time_joint_mae_deg": 22.389482876998287,
+      "median_source_time_hand_knee_iou": 0.37755102040816324,
+      "median_phase_aligned_joint_mae_deg_on_rises": 18.98493213578196,
+      "median_default_pose_mae_deg_on_quiet_holds": 3.717797453845291,
+      "median_abs_torso_pitch_deg_on_quiet_holds": 0.13348219058985142,
+      "median_torso_tilt_deg_on_quiet_holds": 0.2765900924114556,
+      "median_hand_knee_near_policy_s": 1.56,
+      "median_hand_knee_near_reference_s": 0.46,
+      "median_knee_mae_deg_during_reference_hand_support": 23.1366174284769
+    },
+    "sequence": {
+      "floor": 33,
+      "rose": 24,
+      "held": 24,
+      "strict_first_rise": 24,
+      "refalls": 0,
+      "median_standing_joint_deg": 3.701742552097002,
+      "median_standing_tilt_deg": 0.23656182683152524,
+      "median_standing_abs_roll_deg": 0.20210473493288378,
+      "median_standing_sway_radius_cm": 0.04664493562984885,
+      "median_standing_load_imbalance_bw": 0.2549942637235516,
+      "hands_loaded_then_transferred": 24,
+      "sustained_knee_support": 24,
+      "median_knee_support_s": 0.6,
+      "median_rise_s": 2.68,
+      "median_reference_rise_s": 2.68,
+      "median_rise_style_deg": 19.31382772964833,
+      "median_postrise_pelvis_cm": 10.72511754128583,
+      "median_postrise_foot_cm": 25.475314309851836,
+      "sequences": 6,
+      "whole_sequence": 4,
+      "walk": {
+        "passed": 6,
+        "median_speed": 0.9922710020236027,
+        "median_flights": 0.0,
+        "median_switches": 5.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 0.34,
+        "median_lateral_departure_m": 0.5124876588673057,
+        "median_style_deg": 3.3709602653162234
+      },
+      "run": {
+        "passed": 4,
+        "median_speed": 2.869620920834339,
+        "median_flights": 7.0,
+        "median_switches": 6.5,
+        "settled_count": 3,
+        "median_settled_speed_s": 0.56,
+        "median_lateral_departure_m": 3.29243044618934,
+        "median_style_deg": 6.855625486653428
+      },
+      "stop": {
+        "passed": 6,
+        "median_speed": 0.00034670684220391914,
+        "median_flights": 0.0,
+        "median_switches": 0.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 1.04,
+        "median_lateral_departure_m": 0.13364654565368006
+      }
+    },
+    "nominal": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.013654883800761297
+      },
+      "walk": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 37.79673261937412
+      },
+      "run": {
+        "passed": 3,
+        "trials": 5,
+        "knee_excursion_deg": 53.55240024530785
+      },
+      "back": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 20.95884401352139
+      },
+      "left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 15.340952414585951
+      },
+      "right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 10.710753557306454
+      },
+      "turn_left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 24.10392643579744
+      },
+      "turn_right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 17.667658483279858
+      }
+    }
+  },
+  {
+    "version": "F",
+    "run": "zenbot_joint_stride_velocity_seed42",
+    "training_seed": 42,
+    "iteration": 10000,
+    "policy_sha256": "1c108bc71887246874dd019e3cba644080fa32f6295813d112b2264fb04cd167",
+    "original_reports_sha256": {
+      "cold/summary.json": "1af2d3262375bc32d6c7386e0806f5c471dab892f5e89d75f00369c8aef670f4",
+      "walk_run_stop/summary.json": "f01bd753468743115af422989380cc749eb03e944259258d060c5e56794b1688",
+      "command_style/summary.json": "a6cf43622a544198fd83af5acd0cfd87268f0cc0aa057a1cf5e2705bc13fd879",
+      "command_style_recorded/summary.json": "b7ddc81a860af7d2c0ad30a4fdb74dfb33af73a99a10840e83dccc6d4dda927b"
+    },
+    "floor_seeds": [
+      932277,
+      1654679,
+      2718869,
+      3950477,
+      5969183
+    ],
+    "cold": {
+      "trials": 55,
+      "rise": 40,
+      "quiet_final_2s": 40,
+      "refalls_after_first_stand": 0,
+      "first_attempt_held": 40,
+      "median_rise_s_on_success": 3.21,
+      "median_rise_to_reference_ratio": 1.2035928143712578,
+      "median_hip_velocity_p90_rad_s": 2.7212835327113987,
+      "median_reference_hip_velocity_p90_rad_s": 2.5093777179718018,
+      "median_vertical_velocity_p90_m_s": 0.43308724798922693,
+      "median_reference_vertical_velocity_p90_m_s": 0.4452679306268692,
+      "median_peak_post_rise_pelvis_drift_cm": 8.516847675284698,
+      "median_source_time_joint_mae_deg": 20.91087451257123,
+      "median_source_time_hand_knee_iou": 0.32432432432432434,
+      "median_phase_aligned_joint_mae_deg_on_rises": 17.515199187768744,
+      "median_default_pose_mae_deg_on_quiet_holds": 5.03194176141484,
+      "median_abs_torso_pitch_deg_on_quiet_holds": 2.029195348853691,
+      "median_torso_tilt_deg_on_quiet_holds": 2.2693930164058123,
+      "median_hand_knee_near_policy_s": 1.84,
+      "median_hand_knee_near_reference_s": 0.46,
+      "median_knee_mae_deg_during_reference_hand_support": 25.875626189736447
+    },
+    "sequence": {
+      "floor": 33,
+      "rose": 24,
+      "held": 24,
+      "strict_first_rise": 24,
+      "refalls": 0,
+      "median_standing_joint_deg": 5.064157570081987,
+      "median_standing_tilt_deg": 2.3286145651341945,
+      "median_standing_abs_roll_deg": 1.0301649936057464,
+      "median_standing_sway_radius_cm": 0.09859277719934709,
+      "median_standing_load_imbalance_bw": 0.019182115129166462,
+      "hands_loaded_then_transferred": 24,
+      "sustained_knee_support": 22,
+      "median_knee_support_s": 0.68,
+      "median_rise_s": 3.25,
+      "median_reference_rise_s": 2.68,
+      "median_rise_style_deg": 17.515199187768744,
+      "median_postrise_pelvis_cm": 8.516847675284698,
+      "median_postrise_foot_cm": 19.740836048468008,
+      "sequences": 6,
+      "whole_sequence": 0,
+      "walk": {
+        "passed": 5,
+        "median_speed": 0.9765598073668136,
+        "median_flights": 1.5,
+        "median_switches": 5.0,
+        "settled_count": 5,
+        "median_settled_speed_s": 1.56,
+        "median_lateral_departure_m": 2.2216028635618255,
+        "median_style_deg": 3.499228863784633
+      },
+      "run": {
+        "passed": 6,
+        "median_speed": 2.8226910175409134,
+        "median_flights": 6.5,
+        "median_switches": 6.5,
+        "settled_count": 5,
+        "median_settled_speed_s": 0.7000000000000001,
+        "median_lateral_departure_m": 2.312231753591128,
+        "median_style_deg": 7.114547146980236
+      },
+      "stop": {
+        "passed": 0,
+        "median_speed": 0.0007198990938558117,
+        "median_flights": 0.0,
+        "median_switches": 0.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 2.14,
+        "median_lateral_departure_m": 0.20375459582276478
+      }
+    },
+    "nominal": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.03900742686592018
+      },
+      "walk": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 45.938680296038235
+      },
+      "run": {
+        "passed": 4,
+        "trials": 5,
+        "knee_excursion_deg": 51.932067469167535
+      },
+      "back": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 31.174908734426957
+      },
+      "left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 11.835865317942815
+      },
+      "right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 6.659381191828981
+      },
+      "turn_left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 26.480962481645726
+      },
+      "turn_right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 4.802618728956018
+      }
+    },
+    "recorded": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.03900742686592018
+      },
+      "walk": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 45.938680296038235
+      },
+      "run": {
+        "passed": 4,
+        "trials": 5,
+        "knee_excursion_deg": 51.932067469167535
+      },
+      "back": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 36.69493516181838
+      },
+      "left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 2.2470457225142457
+      },
+      "right": {
+        "passed": 4,
+        "trials": 5,
+        "knee_excursion_deg": 4.491967587939291
+      },
+      "turn_left": {
+        "passed": 0,
+        "trials": 5,
+        "knee_excursion_deg": 38.60359322917828
+      },
+      "turn_right": {
+        "passed": 0,
+        "trials": 5,
+        "knee_excursion_deg": null
+      }
+    }
+  },
+  {
+    "version": "G",
+    "run": "zenbot_joint_ground_stride_seed42",
+    "training_seed": 42,
+    "iteration": 10000,
+    "policy_sha256": "acb77c1d456fa53be15b3faed2a9bf2dabb95bc0562a9b6ab9c24808b323cffd",
+    "original_reports_sha256": {
+      "cold/summary.json": "94ae384d1e0ee8f753595662701eb592be29339ad49140ff8f436450a574bf01",
+      "walk_run_stop/summary.json": "d653923e3762f3eec70ed65a9b3377da92baea31450f6464c4077f6f3ccc5b78",
+      "command_style/summary.json": "2ff60a87c87b8d3645bfb7993e3542983fcc63d7dcce2042bbc6fd4502414b4f",
+      "command_style_recorded/summary.json": "d06bb34bbb88a173beac1b596b9a77202ba9679c59690cb9c94954aae89861b8"
+    },
+    "floor_seeds": [
+      932277,
+      1654679,
+      2718869,
+      3950477,
+      5969183
+    ],
+    "cold": {
+      "trials": 55,
+      "rise": 55,
+      "quiet_final_2s": 55,
+      "refalls_after_first_stand": 0,
+      "first_attempt_held": 55,
+      "median_rise_s_on_success": 2.96,
+      "median_rise_to_reference_ratio": 0.9850746268656716,
+      "median_hip_velocity_p90_rad_s": 2.842545837468577,
+      "median_reference_hip_velocity_p90_rad_s": 2.5260324478149414,
+      "median_vertical_velocity_p90_m_s": 0.5225544500783834,
+      "median_reference_vertical_velocity_p90_m_s": 0.44409558176994324,
+      "median_peak_post_rise_pelvis_drift_cm": 10.353590561073704,
+      "median_source_time_joint_mae_deg": 12.201521934730337,
+      "median_source_time_hand_knee_iou": 0.41379310344827586,
+      "median_phase_aligned_joint_mae_deg_on_rises": 10.38405379284911,
+      "median_default_pose_mae_deg_on_quiet_holds": 3.0088462881802602,
+      "median_abs_torso_pitch_deg_on_quiet_holds": 1.9569535902606061,
+      "median_torso_tilt_deg_on_quiet_holds": 1.9599157816148616,
+      "median_hand_knee_near_policy_s": 1.2,
+      "median_hand_knee_near_reference_s": 0.46,
+      "median_knee_mae_deg_during_reference_hand_support": 11.447828228222328
+    },
+    "sequence": {
+      "floor": 33,
+      "rose": 33,
+      "held": 33,
+      "strict_first_rise": 33,
+      "refalls": 0,
+      "median_standing_joint_deg": 3.022253946992393,
+      "median_standing_tilt_deg": 1.953339069782684,
+      "median_standing_abs_roll_deg": 0.06901817995366981,
+      "median_standing_sway_radius_cm": 0.014645233818219933,
+      "median_standing_load_imbalance_bw": 0.027820486682652093,
+      "hands_loaded_then_transferred": 33,
+      "sustained_knee_support": 21,
+      "median_knee_support_s": 0.42,
+      "median_rise_s": 2.92,
+      "median_reference_rise_s": 2.68,
+      "median_rise_style_deg": 10.31256961413879,
+      "median_postrise_pelvis_cm": 11.0869448226716,
+      "median_postrise_foot_cm": 15.657683536013964,
+      "sequences": 6,
+      "whole_sequence": 6,
+      "walk": {
+        "passed": 6,
+        "median_speed": 0.964533843611848,
+        "median_flights": 0.0,
+        "median_switches": 3.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 0.5,
+        "median_lateral_departure_m": 0.37859592247816554,
+        "median_style_deg": 2.432807496893826
+      },
+      "run": {
+        "passed": 6,
+        "median_speed": 2.7353837592482355,
+        "median_flights": 6.0,
+        "median_switches": 5.0,
+        "settled_count": 0,
+        "median_settled_speed_s": null,
+        "median_lateral_departure_m": 3.2233859735660495,
+        "median_style_deg": 4.235456239438577
+      },
+      "stop": {
+        "passed": 6,
+        "median_speed": -2.6857020174480234e-05,
+        "median_flights": 0.0,
+        "median_switches": 0.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 1.23,
+        "median_lateral_departure_m": 0.16458591866797434
+      }
+    },
+    "nominal": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.04750807525061518
+      },
+      "walk": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 46.67023054403302
+      },
+      "run": {
+        "passed": 4,
+        "trials": 5,
+        "knee_excursion_deg": 60.05550437953403
+      },
+      "back": {
+        "passed": 4,
+        "trials": 5,
+        "knee_excursion_deg": 37.27910896722281
+      },
+      "left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 23.094083264844972
+      },
+      "right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 20.673213538740985
+      },
+      "turn_left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 31.779520123495434
+      },
+      "turn_right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 11.406763267971336
+      }
+    },
+    "recorded": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.04750807525061518
+      },
+      "walk": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 46.67023054403302
+      },
+      "run": {
+        "passed": 4,
+        "trials": 5,
+        "knee_excursion_deg": 60.05550437953403
+      },
+      "back": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 47.13727804062629
+      },
+      "left": {
+        "passed": 0,
+        "trials": 5,
+        "knee_excursion_deg": 0.08259133156646126
+      },
+      "right": {
+        "passed": 0,
+        "trials": 5,
+        "knee_excursion_deg": 0.8112077373619346
+      },
+      "turn_left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 20.841223281125664
+      },
+      "turn_right": {
+        "passed": 0,
+        "trials": 5,
+        "knee_excursion_deg": 21.04278797359506
+      }
+    }
+  },
+  {
+    "version": "H",
+    "run": "zenbot_joint_source_speeds_seed42",
+    "training_seed": 42,
+    "iteration": 10000,
+    "policy_sha256": "f61d5ac311cb8cf56823bc20febfc6ad46cff6d9cb027588c80366dbbe7ac4b1",
+    "original_reports_sha256": {
+      "cold/summary.json": "b4ff7af033bc436181de917317c5b4ecf92d7576e2fb8422853081ebd57cd938",
+      "walk_run_stop/summary.json": "59cd5201ef918e829c699fe6572db3627c39325501f63e478bbbb89dc10dd924",
+      "command_style/summary.json": "616de9b6d11eb77c042f3d2066bb7280821d4c4f0a295ca7aab269bd5d275c19",
+      "command_style_recorded/summary.json": "622116709b83209d66b4431727ca31810cfaab3919d14cab38c861c294f5f9f5"
+    },
+    "floor_seeds": [
+      932277,
+      1654679,
+      2718869,
+      3950477,
+      5969183
+    ],
+    "cold": {
+      "trials": 55,
+      "rise": 50,
+      "quiet_final_2s": 50,
+      "refalls_after_first_stand": 0,
+      "first_attempt_held": 50,
+      "median_rise_s_on_success": 3.24,
+      "median_rise_to_reference_ratio": 0.9903567098930972,
+      "median_hip_velocity_p90_rad_s": 2.889688354933601,
+      "median_reference_hip_velocity_p90_rad_s": 2.5093777179718018,
+      "median_vertical_velocity_p90_m_s": 0.5513377217784279,
+      "median_reference_vertical_velocity_p90_m_s": 0.4408150166273117,
+      "median_peak_post_rise_pelvis_drift_cm": 12.121229889911683,
+      "median_source_time_joint_mae_deg": 16.19652523281128,
+      "median_source_time_hand_knee_iou": 0.425,
+      "median_phase_aligned_joint_mae_deg_on_rises": 12.25707537768007,
+      "median_default_pose_mae_deg_on_quiet_holds": 1.8196959548283536,
+      "median_abs_torso_pitch_deg_on_quiet_holds": 0.40293852854129036,
+      "median_torso_tilt_deg_on_quiet_holds": 0.5045561263444793,
+      "median_hand_knee_near_policy_s": 2.1,
+      "median_hand_knee_near_reference_s": 0.46,
+      "median_knee_mae_deg_during_reference_hand_support": 16.929062001729914
+    },
+    "sequence": {
+      "floor": 33,
+      "rose": 30,
+      "held": 30,
+      "strict_first_rise": 30,
+      "refalls": 0,
+      "median_standing_joint_deg": 1.820904187865139,
+      "median_standing_tilt_deg": 0.5072344698597036,
+      "median_standing_abs_roll_deg": 0.30269528702047344,
+      "median_standing_sway_radius_cm": 0.027428864520455613,
+      "median_standing_load_imbalance_bw": 0.07844240918709515,
+      "hands_loaded_then_transferred": 30,
+      "sustained_knee_support": 24,
+      "median_knee_support_s": 1.48,
+      "median_rise_s": 3.24,
+      "median_reference_rise_s": 2.68,
+      "median_rise_style_deg": 12.327502173963763,
+      "median_postrise_pelvis_cm": 11.436016442369997,
+      "median_postrise_foot_cm": 22.313927852487836,
+      "sequences": 6,
+      "whole_sequence": 5,
+      "walk": {
+        "passed": 6,
+        "median_speed": 0.9448214327706048,
+        "median_flights": 0.0,
+        "median_switches": 3.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 0.64,
+        "median_lateral_departure_m": 0.7572420922388178,
+        "median_style_deg": 2.2912268248052534
+      },
+      "run": {
+        "passed": 5,
+        "median_speed": 2.839055455828086,
+        "median_flights": 6.0,
+        "median_switches": 5.0,
+        "settled_count": 1,
+        "median_settled_speed_s": 4.5200000000000005,
+        "median_lateral_departure_m": 0.9729327778011894,
+        "median_style_deg": 4.386210149704538
+      },
+      "stop": {
+        "passed": 6,
+        "median_speed": -6.9574015088768236e-06,
+        "median_flights": 0.0,
+        "median_switches": 0.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 1.46,
+        "median_lateral_departure_m": 0.12370662096872481
+      }
+    },
+    "nominal": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.15057884788820708
+      },
+      "walk": {
+        "passed": 2,
+        "trials": 5,
+        "knee_excursion_deg": 47.14921181108342
+      },
+      "run": {
+        "passed": 4,
+        "trials": 5,
+        "knee_excursion_deg": 68.61073981710352
+      },
+      "back": {
+        "passed": 4,
+        "trials": 5,
+        "knee_excursion_deg": 37.96871915736689
+      },
+      "left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 33.317207079909
+      },
+      "right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 7.066871292630722
+      },
+      "turn_left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 44.81511553432816
+      },
+      "turn_right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 38.16094622497143
+      }
+    },
+    "recorded": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.15057884788820708
+      },
+      "walk": {
+        "passed": 2,
+        "trials": 5,
+        "knee_excursion_deg": 47.14921181108342
+      },
+      "run": {
+        "passed": 4,
+        "trials": 5,
+        "knee_excursion_deg": 68.61073981710352
+      },
+      "back": {
+        "passed": 1,
+        "trials": 5,
+        "knee_excursion_deg": 37.32705908945607
+      },
+      "left": {
+        "passed": 4,
+        "trials": 5,
+        "knee_excursion_deg": 26.345709812799576
+      },
+      "right": {
+        "passed": 0,
+        "trials": 5,
+        "knee_excursion_deg": 2.2228794373092216
+      },
+      "turn_left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 49.352185053996536
+      },
+      "turn_right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 52.32640124605298
+      }
+    }
+  },
+  {
+    "version": "I",
+    "run": "zenbot_joint_half_second_seed42",
+    "training_seed": 42,
+    "iteration": 10000,
+    "policy_sha256": "4af530346f3efeb866aeba9f8e680694f470793006e36effa1b6acc9644ac31d",
+    "original_reports_sha256": {
+      "cold/summary.json": "813f5e5b4cd5efa696421c52804bc5dd6f135cca5a1f22aceb16de5e2c642b72",
+      "walk_run_stop/summary.json": "8bb4cc2cc06ecf4e490ffc9b790ca6df73d42292d3355cdbd391da12fce3d4dd",
+      "command_style/summary.json": "49e882e4a60a55d297a58fe2e9c68f4afae5f02f3c044cf85bba2e4dc0d97815",
+      "command_style_recorded/summary.json": "0f86733947c2a0253013d5fe7052a3ea54ca3a6fe8665f12f87251f2390a2adb"
+    },
+    "floor_seeds": [
+      932277,
+      1654679,
+      2718869,
+      3950477,
+      5969183
+    ],
+    "cold": {
+      "trials": 55,
+      "rise": 55,
+      "quiet_final_2s": 55,
+      "refalls_after_first_stand": 0,
+      "first_attempt_held": 55,
+      "median_rise_s_on_success": 2.82,
+      "median_rise_to_reference_ratio": 0.9626865671641791,
+      "median_hip_velocity_p90_rad_s": 2.9507488353086124,
+      "median_reference_hip_velocity_p90_rad_s": 2.5260324478149414,
+      "median_vertical_velocity_p90_m_s": 0.5752477795269157,
+      "median_reference_vertical_velocity_p90_m_s": 0.44409558176994324,
+      "median_peak_post_rise_pelvis_drift_cm": 8.279264559880026,
+      "median_source_time_joint_mae_deg": 12.113978342317223,
+      "median_source_time_hand_knee_iou": 0.43373493975903615,
+      "median_phase_aligned_joint_mae_deg_on_rises": 10.942976628267433,
+      "median_default_pose_mae_deg_on_quiet_holds": 2.3540017385907945,
+      "median_abs_torso_pitch_deg_on_quiet_holds": 1.0231269105381133,
+      "median_torso_tilt_deg_on_quiet_holds": 1.0339523832151551,
+      "median_hand_knee_near_policy_s": 1.62,
+      "median_hand_knee_near_reference_s": 0.46,
+      "median_knee_mae_deg_during_reference_hand_support": 13.369500103929601
+    },
+    "sequence": {
+      "floor": 33,
+      "rose": 33,
+      "held": 33,
+      "strict_first_rise": 33,
+      "refalls": 0,
+      "median_standing_joint_deg": 2.3614761068305565,
+      "median_standing_tilt_deg": 1.032557594729974,
+      "median_standing_abs_roll_deg": 0.13632287740778276,
+      "median_standing_sway_radius_cm": 0.02825682082699817,
+      "median_standing_load_imbalance_bw": 0.19093024099881423,
+      "hands_loaded_then_transferred": 33,
+      "sustained_knee_support": 28,
+      "median_knee_support_s": 1.36,
+      "median_rise_s": 2.84,
+      "median_reference_rise_s": 2.68,
+      "median_rise_style_deg": 10.988426714194262,
+      "median_postrise_pelvis_cm": 8.279264559880026,
+      "median_postrise_foot_cm": 17.50962845163442,
+      "sequences": 6,
+      "whole_sequence": 2,
+      "walk": {
+        "passed": 6,
+        "median_speed": 0.9175776489840595,
+        "median_flights": 0.0,
+        "median_switches": 3.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 0.43,
+        "median_lateral_departure_m": 0.32241317807230424,
+        "median_style_deg": 2.3818559506364005
+      },
+      "run": {
+        "passed": 3,
+        "median_speed": 3.0002562188014354,
+        "median_flights": 6.0,
+        "median_switches": 5.0,
+        "settled_count": 1,
+        "median_settled_speed_s": 0.44,
+        "median_lateral_departure_m": 1.5564613118235737,
+        "median_style_deg": 4.602024993584814
+      },
+      "stop": {
+        "passed": 4,
+        "median_speed": -0.00021519211482295627,
+        "median_flights": 0.0,
+        "median_switches": 0.0,
+        "settled_count": 6,
+        "median_settled_speed_s": 1.51,
+        "median_lateral_departure_m": 0.1964944158591669
+      }
+    },
+    "nominal": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.04067397690028329
+      },
+      "walk": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 48.53247361931792
+      },
+      "run": {
+        "passed": 3,
+        "trials": 5,
+        "knee_excursion_deg": 68.01185231047847
+      },
+      "back": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 43.477341039022356
+      },
+      "left": {
+        "passed": 2,
+        "trials": 5,
+        "knee_excursion_deg": 32.91147072597015
+      },
+      "right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 5.7253880456859845
+      },
+      "turn_left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 44.17525976022401
+      },
+      "turn_right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 43.826379369926165
+      }
+    },
+    "recorded": {
+      "stand": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 0.04067397690028329
+      },
+      "walk": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 48.53247361931792
+      },
+      "run": {
+        "passed": 3,
+        "trials": 5,
+        "knee_excursion_deg": 68.01185231047847
+      },
+      "back": {
+        "passed": 4,
+        "trials": 5,
+        "knee_excursion_deg": 49.195992226729786
+      },
+      "left": {
+        "passed": 0,
+        "trials": 5,
+        "knee_excursion_deg": 5.11199400785861
+      },
+      "right": {
+        "passed": 0,
+        "trials": 5,
+        "knee_excursion_deg": 1.2986073918692966
+      },
+      "turn_left": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 47.450947738205166
+      },
+      "turn_right": {
+        "passed": 5,
+        "trials": 5,
+        "knee_excursion_deg": 51.54031147397
+      }
+    }
+  }
+]

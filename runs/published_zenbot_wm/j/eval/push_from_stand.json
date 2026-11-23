@@ -1,0 +1,459 @@
+{
+  "start": "standing_pose",
+  "checkpoint_sha256": "8bda41143a800fda8f60e1598fff4f06ced11dee5ca4e9539afec554b704e2e0",
+  "summary": {
+    "started_upright": 20,
+    "fell": 15,
+    "recovered": 15,
+    "held": 15,
+    "kept_balance": 5,
+    "trials": 20
+  },
+  "cases": [
+    {
+      "seed": 932277,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        2.5,
+        0.0
+      ],
+      "delays": [
+        6,
+        5,
+        4,
+        6,
+        4
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 932277,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        -2.5,
+        0.0
+      ],
+      "delays": [
+        7,
+        5,
+        6,
+        3,
+        5
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.5,
+      "recovered": true,
+      "rise_after_impact_s": 3.7800000000000002,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 932277,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        0.0,
+        2.5
+      ],
+      "delays": [
+        3,
+        7,
+        6,
+        6,
+        3
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.58,
+      "recovered": true,
+      "rise_after_impact_s": 1.52,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 932277,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        0.0,
+        -2.5
+      ],
+      "delays": [
+        7,
+        7,
+        5,
+        5,
+        6
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.58,
+      "recovered": true,
+      "rise_after_impact_s": 1.42,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 1654679,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        2.5,
+        0.0
+      ],
+      "delays": [
+        3,
+        3,
+        7,
+        6,
+        3
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 1654679,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        -2.5,
+        0.0
+      ],
+      "delays": [
+        6,
+        7,
+        5,
+        6,
+        5
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.44,
+      "recovered": true,
+      "rise_after_impact_s": 3.7,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 1654679,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        0.0,
+        2.5
+      ],
+      "delays": [
+        3,
+        3,
+        4,
+        5,
+        5
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 1.64,
+      "recovered": true,
+      "rise_after_impact_s": 1.56,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 1654679,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        0.0,
+        -2.5
+      ],
+      "delays": [
+        7,
+        6,
+        6,
+        5,
+        3
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.58,
+      "recovered": true,
+      "rise_after_impact_s": 1.3,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 2718869,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        2.5,
+        0.0
+      ],
+      "delays": [
+        6,
+        6,
+        5,
+        7,
+        5
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 2718869,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        -2.5,
+        0.0
+      ],
+      "delays": [
+        7,
+        6,
+        3,
+        7,
+        4
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.38,
+      "recovered": true,
+      "rise_after_impact_s": 4.04,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 2718869,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        0.0,
+        2.5
+      ],
+      "delays": [
+        5,
+        7,
+        3,
+        5,
+        6
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.6,
+      "recovered": true,
+      "rise_after_impact_s": 1.74,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 2718869,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        0.0,
+        -2.5
+      ],
+      "delays": [
+        3,
+        5,
+        5,
+        4,
+        5
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.6,
+      "recovered": true,
+      "rise_after_impact_s": 1.12,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 3950477,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        2.5,
+        0.0
+      ],
+      "delays": [
+        5,
+        4,
+        3,
+        4,
+        3
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 3950477,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        -2.5,
+        0.0
+      ],
+      "delays": [
+        4,
+        7,
+        4,
+        3,
+        6
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.44,
+      "recovered": true,
+      "rise_after_impact_s": 3.54,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 3950477,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        0.0,
+        2.5
+      ],
+      "delays": [
+        7,
+        3,
+        4,
+        4,
+        6
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.76,
+      "recovered": true,
+      "rise_after_impact_s": 2.38,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 3950477,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        0.0,
+        -2.5
+      ],
+      "delays": [
+        5,
+        3,
+        7,
+        3,
+        3
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.6,
+      "recovered": true,
+      "rise_after_impact_s": 1.16,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 5969183,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        2.5,
+        0.0
+      ],
+      "delays": [
+        6,
+        5,
+        5,
+        3,
+        5
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 5969183,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        -2.5,
+        0.0
+      ],
+      "delays": [
+        3,
+        4,
+        7,
+        7,
+        7
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.8,
+      "recovered": true,
+      "rise_after_impact_s": 3.34,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 5969183,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        0.0,
+        2.5
+      ],
+      "delays": [
+        6,
+        4,
+        4,
+        4,
+        7
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 1.0,
+      "recovered": true,
+      "rise_after_impact_s": 1.18,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 5969183,
+      "opening": "stand_4s_120f.npz",
+      "impulse_mps": [
+        0.0,
+        -2.5
+      ],
+      "delays": [
+        7,
+        4,
+        5,
+        7,
+        6
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.58,
+      "recovered": true,
+      "rise_after_impact_s": 1.22,
+      "held": true,
+      "first_attempt": true
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "source_run": "zenbot_joint_half_second_seed42",
+  "iteration": 10000,
+  "training_seconds": 3238.8985316753387,
+  "env_steps": 163905536,
+  "actor_updates": 29420,
+  "world_model_updates": 30000,
+  "max_nonfinite": 0,
+  "training_seed": 42,
+  "original_checkpoint_number": "0019",
+  "policy_sha256": "4af530346f3efeb866aeba9f8e680694f470793006e36effa1b6acc9644ac31d",
+  "full_learner_sha256": "2c573a8c16a9792b1a710e2ecb3f5f836016794b48a2c7fa0fd6b4cbe25adae4",
+  "source_snapshot_sha256": "15d5bbb5ebfa41513fd2134542e9b5e0d03f72e7469e0cca3b0c74dd7ca27377",
+  "config_sha256": "63b086468bf2337288471cf91f15b5a03bf5fc76cdfa69d496f927e18dae14f3"
+}

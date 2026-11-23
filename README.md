@@ -13,6 +13,7 @@ and runs on one GPU. The code builds on [XSoma](https://github.com/nico-bohlinge
 
 ## Contents
 
+- [Zenbot 43 kg · 234 维 WM + AMP + PPO 换机训练](docs/zenbot-wm-handoff.md) · [改动历史与实测](docs/zenbot-wm-history.md) · [后续实验方案](docs/zenbot-wm-plan.md)
 - [What is trained](#what-is-trained)
 - [Results](#results)
 - [Setup](#setup)

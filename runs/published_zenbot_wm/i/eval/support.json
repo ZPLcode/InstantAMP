@@ -1,0 +1,135 @@
+{
+  "checkpoint_sha256": "4af530346f3efeb866aeba9f8e680694f470793006e36effa1b6acc9644ac31d",
+  "test": {
+    "trials": 55,
+    "first_held": 55,
+    "hand_loaded": 55,
+    "hand_then_foot": 55,
+    "hip_ratio_p90_across_trials": 1.528261135386609,
+    "vertical_ratio_p90_across_trials": 1.6444313421513992,
+    "post_rise_drift_p90_cm": 14.14607463193099
+  },
+  "by_clip": [
+    {
+      "clip": "fallAndGetUp1_subject1_1058_1140.npz",
+      "trials": 5,
+      "first_held": 5,
+      "hand_loaded": 5,
+      "hand_then_foot": 5,
+      "rise_ratio": 1.2966101694915255,
+      "hip_ratio": 1.4591175708987076,
+      "vertical_ratio": 1.472410230557126,
+      "drift_cm": 5.916723375243656
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1262_1320.npz",
+      "trials": 5,
+      "first_held": 5,
+      "hand_loaded": 5,
+      "hand_then_foot": 5,
+      "rise_ratio": 0.638888888888889,
+      "hip_ratio": 2.558701580008046,
+      "vertical_ratio": 1.584771740310694,
+      "drift_cm": 11.975487044249181
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1395_1461.npz",
+      "trials": 5,
+      "first_held": 5,
+      "hand_loaded": 5,
+      "hand_then_foot": 5,
+      "rise_ratio": 0.8020833333333334,
+      "hip_ratio": 0.9495338754404865,
+      "vertical_ratio": 1.5066899323067209,
+      "drift_cm": 7.969847589044966
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1584_1684.npz",
+      "trials": 5,
+      "first_held": 5,
+      "hand_loaded": 5,
+      "hand_then_foot": 5,
+      "rise_ratio": 1.007142857142857,
+      "hip_ratio": 0.9612027955052115,
+      "vertical_ratio": 1.0094797079154632,
+      "drift_cm": 3.7741506930193998
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1808_1916.npz",
+      "trials": 5,
+      "first_held": 5,
+      "hand_loaded": 5,
+      "hand_then_foot": 5,
+      "rise_ratio": 0.9447852760736196,
+      "hip_ratio": 1.3582215437385368,
+      "vertical_ratio": 1.0713245858431424,
+      "drift_cm": 10.701683112659815
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_2088_2210.npz",
+      "trials": 5,
+      "first_held": 5,
+      "hand_loaded": 5,
+      "hand_then_foot": 5,
+      "rise_ratio": 1.2387096774193547,
+      "hip_ratio": 0.8804586589224135,
+      "vertical_ratio": 1.3065275182849465,
+      "drift_cm": 32.237931856868364
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_2301_2391.npz",
+      "trials": 5,
+      "first_held": 5,
+      "hand_loaded": 5,
+      "hand_then_foot": 5,
+      "rise_ratio": 0.9626865671641791,
+      "hip_ratio": 1.0176849448555645,
+      "vertical_ratio": 1.291714588753697,
+      "drift_cm": 5.718564864157371
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_458_565.npz",
+      "trials": 5,
+      "first_held": 5,
+      "hand_loaded": 5,
+      "hand_then_foot": 5,
+      "rise_ratio": 1.0598802395209581,
+      "hip_ratio": 1.1455231998569833,
+      "vertical_ratio": 1.0369507648454768,
+      "drift_cm": 8.2761013678499
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_4873_4962.npz",
+      "trials": 5,
+      "first_held": 5,
+      "hand_loaded": 5,
+      "hand_then_foot": 5,
+      "rise_ratio": 0.8849557522123893,
+      "hip_ratio": 1.278883914753237,
+      "vertical_ratio": 1.5655541343097967,
+      "drift_cm": 10.193478070192388
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_670_785.npz",
+      "trials": 5,
+      "first_held": 5,
+      "hand_loaded": 5,
+      "hand_then_foot": 5,
+      "rise_ratio": 0.9259259259259258,
+      "hip_ratio": 0.7282099618750216,
+      "vertical_ratio": 1.7745293490297316,
+      "drift_cm": 9.011748196094809
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_845_936.npz",
+      "trials": 5,
+      "first_held": 5,
+      "hand_loaded": 5,
+      "hand_then_foot": 5,
+      "rise_ratio": 1.048780487804878,
+      "hip_ratio": 1.5030767234012612,
+      "vertical_ratio": 1.0268273540574042,
+      "drift_cm": 3.149841178138816
+    }
+  ]
+}

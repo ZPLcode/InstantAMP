@@ -1,0 +1,43 @@
+{
+  "trial": 18,
+  "seed": 5969183,
+  "push_step": -1,
+  "clip": "fallAndGetUp1_subject1_670_785.npz",
+  "offset": 0.0,
+  "lags": [
+    5,
+    4,
+    4,
+    6,
+    6
+  ],
+  "rise": 3.1,
+  "refall": false,
+  "held": true,
+  "drift_cm": 9.178564363665716,
+  "feet_cm": 14.59741458307702,
+  "throughout": true,
+  "pre_rise_attempts": {
+    "failed_elevations": 0,
+    "retries": 0,
+    "events": []
+  },
+  "ground_timing": {
+    "first_joint_motion_s": 0.32,
+    "first_pelvis_lift_s": 2.04,
+    "longest_quiet_ground_s": 0.24
+  },
+  "reference_low_hand_s": 0.0,
+  "real_hand_load_s": 0.0,
+  "transfer_s": 2.64,
+  "real_hand_peak_bw": 0.8328524622212662,
+  "real_hand_impulse_bw_s": 1.4733201364634818,
+  "real_forearm_peak_bw": 0.0,
+  "hip_velocity_p90_rad_s": 2.2145008869934717,
+  "reference_hip_velocity_p90_rad_s": 2.8843533992767334,
+  "vertical_velocity_p90_m_s": 0.45078410309269673,
+  "reference_vertical_velocity_p90_m_s": 0.2919358015060425,
+  "extension_s": 0.46,
+  "reference_extension_s": 0.18,
+  "reference_rise_s": 3.24
+}

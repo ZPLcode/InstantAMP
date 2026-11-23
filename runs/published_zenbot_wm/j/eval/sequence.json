@@ -1,0 +1,291 @@
+{
+  "checkpoint": "/home/zhepeng/InstantAMP/runs/zenbot_joint_upright_mirror_seed42/ckpt/0019.npz",
+  "sha256": "8bda41143a800fda8f60e1598fff4f06ced11dee5ca4e9539afec554b704e2e0",
+  "seed": 8217539,
+  "trial": 16,
+  "fps": 50.0,
+  "duration_s": 66.0,
+  "continuous": true,
+  "cold_start": true,
+  "coordinate_order": [
+    "forward_mps",
+    "left_mps",
+    "counterclockwise_radps"
+  ],
+  "ground": {
+    "trial": 16,
+    "seed": 8217539,
+    "push_step": -1,
+    "clip": "fallAndGetUp1_subject1_4873_4962.npz",
+    "offset": 0.0,
+    "lags": [
+      4,
+      4,
+      6,
+      3,
+      4
+    ],
+    "rise": 2.2800000000000002,
+    "refall": false,
+    "held": true,
+    "drift_cm": 28.194379309226775,
+    "feet_cm": 58.5489593331582,
+    "throughout": true,
+    "pre_rise_attempts": {
+      "failed_elevations": 0,
+      "retries": 0,
+      "events": []
+    },
+    "ground_timing": {
+      "first_joint_motion_s": 0.14,
+      "first_pelvis_lift_s": 1.54,
+      "longest_quiet_ground_s": 0.02
+    },
+    "reference_low_hand_s": null,
+    "real_hand_load_s": 0.02,
+    "transfer_s": 1.52,
+    "real_hand_peak_bw": 0.7772243107764718,
+    "real_hand_impulse_bw_s": 0.7544778945316971,
+    "real_forearm_peak_bw": 0.0,
+    "hip_velocity_p90_rad_s": 3.437196682213909,
+    "reference_hip_velocity_p90_rad_s": 3.0391759872436523,
+    "vertical_velocity_p90_m_s": 0.5267675624371363,
+    "reference_vertical_velocity_p90_m_s": 0.49844861030578613,
+    "extension_s": 0.52,
+    "reference_extension_s": 0.24,
+    "reference_rise_s": 2.2600000000000002
+  },
+  "stages": [
+    {
+      "stage": "get_up",
+      "start_s": 0.0,
+      "end_s": 8.0,
+      "command": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mean_last_2s": [
+        1.7292041133432496e-05,
+        0.00018437551287107088,
+        -0.0013794722182572938
+      ],
+      "upright_fraction_last_2s": 1.0,
+      "upright_all_last_2s": true,
+      "total_yaw_rad": 1.6396589324934414,
+      "pelvis_max_departure_m": 0.6226866798789117,
+      "min_height_m": 0.24574153856911746,
+      "fell_after_initial_rise": null
+    },
+    {
+      "stage": "stand",
+      "start_s": 8.0,
+      "end_s": 12.0,
+      "command": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mean_last_2s": [
+        9.920875745715862e-05,
+        -9.82933219349997e-05,
+        -0.00043004713053385046
+      ],
+      "upright_fraction_last_2s": 1.0,
+      "upright_all_last_2s": true,
+      "total_yaw_rad": -0.0019960675416641482,
+      "pelvis_max_departure_m": 0.0009371315312841876,
+      "min_height_m": 0.6896377502500606,
+      "fell_after_initial_rise": null
+    },
+    {
+      "stage": "walk",
+      "start_s": 12.0,
+      "end_s": 18.0,
+      "command": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "mean_last_2s": [
+        0.9777720073339156,
+        -0.021746900928358202,
+        -0.008385195279196789
+      ],
+      "upright_fraction_last_2s": 1.0,
+      "upright_all_last_2s": true,
+      "total_yaw_rad": 0.24690933765866463,
+      "pelvis_max_departure_m": 5.629790636753546,
+      "min_height_m": 0.6394286009498439,
+      "fell_after_initial_rise": false
+    },
+    {
+      "stage": "run",
+      "start_s": 18.0,
+      "end_s": 24.0,
+      "command": [
+        2.5,
+        0.0,
+        0.0
+      ],
+      "mean_last_2s": [
+        2.7953834350302755,
+        0.1464757532479901,
+        0.03427985118794432
+      ],
+      "upright_fraction_last_2s": 1.0,
+      "upright_all_last_2s": true,
+      "total_yaw_rad": 0.14590494476911964,
+      "pelvis_max_departure_m": 16.120590594604717,
+      "min_height_m": 0.6077482445924249,
+      "fell_after_initial_rise": false
+    },
+    {
+      "stage": "stop",
+      "start_s": 24.0,
+      "end_s": 30.0,
+      "command": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mean_last_2s": [
+        -0.0002641477090894868,
+        2.856489738874312e-05,
+        0.0012781122479513796
+      ],
+      "upright_fraction_last_2s": 1.0,
+      "upright_all_last_2s": true,
+      "total_yaw_rad": 0.03335825859830077,
+      "pelvis_max_departure_m": 1.6808667666388142,
+      "min_height_m": 0.6090405476150159,
+      "fell_after_initial_rise": false
+    },
+    {
+      "stage": "back",
+      "start_s": 30.0,
+      "end_s": 36.0,
+      "command": [
+        -0.5,
+        0.0,
+        0.0
+      ],
+      "mean_last_2s": [
+        -0.47867704111168,
+        0.012850470021514628,
+        -0.040724909614630045
+      ],
+      "upright_fraction_last_2s": 1.0,
+      "upright_all_last_2s": true,
+      "total_yaw_rad": -0.12789614308394115,
+      "pelvis_max_departure_m": 2.9093460157381004,
+      "min_height_m": 0.667995853248257,
+      "fell_after_initial_rise": false
+    },
+    {
+      "stage": "left",
+      "start_s": 36.0,
+      "end_s": 42.0,
+      "command": [
+        0.0,
+        0.4,
+        0.0
+      ],
+      "mean_last_2s": [
+        -0.000373755628464594,
+        0.22678852211315825,
+        -0.03643926849888058
+      ],
+      "upright_fraction_last_2s": 1.0,
+      "upright_all_last_2s": true,
+      "total_yaw_rad": -0.1730343616812149,
+      "pelvis_max_departure_m": 1.5711855751202806,
+      "min_height_m": 0.6670329291125706,
+      "fell_after_initial_rise": false
+    },
+    {
+      "stage": "right",
+      "start_s": 42.0,
+      "end_s": 48.0,
+      "command": [
+        0.0,
+        -0.4,
+        0.0
+      ],
+      "mean_last_2s": [
+        -0.007112425605591338,
+        -0.265512969778885,
+        -0.009719910320068026
+      ],
+      "upright_fraction_last_2s": 1.0,
+      "upright_all_last_2s": true,
+      "total_yaw_rad": 0.008484447587800759,
+      "pelvis_max_departure_m": 1.5672014470750149,
+      "min_height_m": 0.6765462836201956,
+      "fell_after_initial_rise": false
+    },
+    {
+      "stage": "turn_left",
+      "start_s": 48.0,
+      "end_s": 54.0,
+      "command": [
+        0.0,
+        0.0,
+        0.6
+      ],
+      "mean_last_2s": [
+        -0.0020338705383465216,
+        -0.02243069684143284,
+        0.5392198700060886
+      ],
+      "upright_fraction_last_2s": 1.0,
+      "upright_all_last_2s": true,
+      "total_yaw_rad": 3.289015544148536,
+      "pelvis_max_departure_m": 0.25670314474639655,
+      "min_height_m": 0.6811738143339429,
+      "fell_after_initial_rise": false
+    },
+    {
+      "stage": "turn_right",
+      "start_s": 54.0,
+      "end_s": 60.0,
+      "command": [
+        0.0,
+        0.0,
+        -0.6
+      ],
+      "mean_last_2s": [
+        0.007961169652449869,
+        -0.0007182436273451231,
+        -0.5632060720713181
+      ],
+      "upright_fraction_last_2s": 1.0,
+      "upright_all_last_2s": true,
+      "total_yaw_rad": -3.3918754543224043,
+      "pelvis_max_departure_m": 0.10104200457192326,
+      "min_height_m": 0.6805985452685904,
+      "fell_after_initial_rise": false
+    },
+    {
+      "stage": "final_stop",
+      "start_s": 60.0,
+      "end_s": 66.0,
+      "command": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mean_last_2s": [
+        -5.3661658810993904e-05,
+        -6.3320006955887686e-06,
+        0.0015132607274971344
+      ],
+      "upright_fraction_last_2s": 1.0,
+      "upright_all_last_2s": true,
+      "total_yaw_rad": -0.015468165367971798,
+      "pelvis_max_departure_m": 0.08339871807921403,
+      "min_height_m": 0.6854412530340094,
+      "fell_after_initial_rise": false
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "independent_examples": 512,
+  "observation_width": 234,
+  "action_width": 23,
+  "upstream_source": "/home/zhepeng/h1_train/robolab/robolab/tasks/manager_based/amp/mdp/symmetry/zenbot.py",
+  "observation_max_absolute_error": 0.0,
+  "action_max_absolute_error": 0.0
+}

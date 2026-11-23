@@ -1,0 +1,155 @@
+{
+  "physical_average": [
+    32,
+    3
+  ],
+  "replay_average": [
+    64,
+    32,
+    3
+  ],
+  "imagined_start_average": [
+    22,
+    3
+  ],
+  "ppo_actor_obs": [
+    12,
+    234
+  ],
+  "policy_outputs": [
+    23
+  ],
+  "bptt_gradient_norm": [],
+  "upright_ppo_mask": [
+    12
+  ],
+  "upright_mirror_mse": [],
+  "command_speeds": [
+    [
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      1.0,
+      0.0,
+      0.0
+    ],
+    [
+      2.5,
+      0.0,
+      0.0
+    ],
+    [
+      -0.5,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.4000000059604645,
+      0.0
+    ],
+    [
+      0.0,
+      -0.4000000059604645,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.6000000238418579
+    ],
+    [
+      0.0,
+      0.0,
+      -0.6000000238418579
+    ],
+    [
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      1.0,
+      0.0,
+      0.0
+    ],
+    [
+      2.5,
+      0.0,
+      0.0
+    ],
+    [
+      -0.6636243462562561,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.16530731320381165,
+      0.0
+    ],
+    [
+      0.0,
+      -0.17170237004756927,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.1739429235458374
+    ],
+    [
+      0.0,
+      0.0,
+      -1.3260729312896729
+    ]
+  ],
+  "expert_windows": [
+    172,
+    1333,
+    167,
+    201,
+    435,
+    390,
+    63,
+    32,
+    172,
+    1333,
+    167,
+    248,
+    567,
+    482,
+    456,
+    419
+  ],
+  "initial_state_counts": [
+    199,
+    741,
+    32,
+    78,
+    393,
+    245,
+    136,
+    49,
+    199,
+    741,
+    32,
+    150,
+    286,
+    243,
+    302,
+    319
+  ],
+  "gait_mirror_weight": 0.2,
+  "gait_velocity_time_constant": 0.24,
+  "gradient_traced": true,
+  "weights_updated": false,
+  "backend": "cuda:0",
+  "recovery_amp_scale": 10.0,
+  "horizon": 28,
+  "gait_amp_scale": 10.0,
+  "note": "JAX abstract trace with the actual MuJoCo Warp collector, replay sampler, conditional AMP and both policy losses.",
+  "complete_policy_iteration_traced": true
+}
