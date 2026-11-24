@@ -4,8 +4,18 @@ import json
 from pathlib import Path
 
 import numpy as np
+from scipy.signal import butter, sosfiltfilt
 
-from instantamp import zenbot
+from instantamp import env, zenbot
+
+
+def joint_jitter(angles):
+    """RMS joint motion above 8 Hz on a contiguous 50 Hz trajectory, in degrees."""
+    sos = butter(4, 8., btype="highpass", fs=1. / env.DT, output="sos")
+    filtered = sosfiltfilt(sos, angles, axis=0)[10:-10]
+    amplitudes = np.rad2deg(np.sqrt(np.mean(filtered**2, axis=0)))
+    return {"joint_jitter_rms_deg": float(np.sqrt(np.mean(amplitudes**2))),
+            "worst_joint_jitter_rms_deg": float(amplitudes.max())}
 
 
 def straight_walk_clips(walk_dir):

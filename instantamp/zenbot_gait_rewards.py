@@ -31,6 +31,10 @@ WEIGHTS = {
 }
 ANKLE_ROLL = np.array([zenbot.DOF.index(side + "_ankle_roll") for side in ("left", "right")])
 
+SOURCE_WEIGHTS = {
+    "velocity_progress_tanh": .5, "alive": .15, "lin_vel_z_l2": -.2, "ang_vel_xy_l2": -.1,
+    "feet_slide": -.1, "feet_double_flight": -1.,
+}
 POSTURE_WEIGHTS = {
     "flat_orientation_l2": -1.2,
     "slow_speed_base_height_l2": -1.,
@@ -65,6 +69,7 @@ class FootGeometry(NamedTuple):
     bottom: jax.Array  # sole boxes first, then the non-ankle collision bodies
     predicted_slip: jax.Array
     com_velocity_z: jax.Array
+    com_velocity_xy: jax.Array | None = None
 
 
 def slip_cost(velocity_xy):
@@ -148,7 +153,7 @@ def reward_terms(state, feet, command, torque, acceleration, q_soft, foot_contac
     speed = jnp.linalg.norm(command[..., :2], axis=-1)
     walking = (speed > .10) & (jnp.abs(command[..., 0]) >= jnp.abs(command[..., 1]))
     ankle_gate = walking * jnp.clip((1.5 - speed) / .5, 0., 1.)
-    return history, {
+    terms = {
         "foot_slip": foot_slip,
         "sound_suppression": (speed < 1.5) * jnp.where(foot_contact, jnp.minimum(foot_acc_z**2, 50.), 0.).sum(-1),
         "feet_effective_landing": gait * landing,
@@ -163,6 +168,14 @@ def reward_terms(state, feet, command, torque, acceleration, q_soft, foot_contac
         "joint_energy": jnp.sum(jnp.abs(qd * torque), -1),
         "joint_pos_limits": jnp.sum(jax.nn.relu(q_soft[:, 0] - q) + jax.nn.relu(q - q_soft[:, 1]), -1),
     }
+    if feet.com_velocity_xy is not None:
+        # The source penalizes the loaded foot body's world speed. Keep the original slip cost on the floor.
+        speed_xy = jnp.sqrt(jnp.maximum(jnp.sum(feet.com_velocity_xy**2, -1), 1e-12))
+        terms["feet_slide"] = gait * jnp.sum(foot_contact * speed_xy, -1)
+        terms["foot_slip"] = jnp.where(gait, 0., foot_slip)
+        command_speed = jnp.linalg.norm(command, axis=-1)
+        terms["feet_double_flight"] = gait * ~foot_contact.any(-1) * jnp.clip((1.5 - command_speed) / .5, 0., 1.)
+    return history, terms
 
 
 def measured_foot_acc_z(data, foot_bodies, post_velocity_z):

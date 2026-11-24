@@ -340,6 +340,8 @@ class Sim:
     wm_gait_rewards = False
     wm_posture_and_tracking = False
     wm_range_commands = False
+    wm_global_gait = False
+    wm_side_share = 0.
     wm_lift_gate = 0.
     floor_stop_command_share = 0.
     gait_source_commands = False
@@ -351,6 +353,7 @@ class Sim:
                  zero_motor_delay_probability=None, zenbot_motion_train_wm=False, zenbot_wm_reference_training=False, zenbot_wm_getup_only=False,
                  wm_stance_start_share=0., wm_min_rise_score=0., wm_floor_amp=False, wm_stand_reference=None, wm_lift_gate=0.,
                  floor_stop_command_share=0., gait_source_commands=False, wm_gait_rewards=False, wm_posture_and_tracking=False, wm_range_commands=False,
+                 wm_global_gait=False, wm_side_share=0.,
                  wm_fixed_floor_envs=False, wm_tracking_scale=1.):  # fmt: skip
         """physics=False: everything but MuJoCo Warp's model and data (no GPU): the scene, kinematics, reset banks and `_fresh`, for
         checks on the CPU."""
@@ -365,6 +368,7 @@ class Sim:
         self.wm_floor_locomotion = self.wm_floor_amp and not self.zenbot_wm_getup_only
         self.wm_fixed_floor_envs = wm_fixed_floor_envs
         self.wm_range_commands = wm_range_commands
+        self.wm_global_gait, self.wm_side_share = wm_global_gait, wm_side_share
         self.wm_posture_and_tracking = wm_posture_and_tracking
         self.wm_gait_rewards = wm_gait_rewards
         if (wm_range_commands or wm_posture_and_tracking or wm_gait_rewards) and not self.wm_floor_locomotion:
@@ -502,6 +506,8 @@ class Sim:
                     self.weights.update(gait_rewards.POSTURE_WEIGHTS)
                 if self.wm_gait_rewards:
                     self.weights.update(gait_rewards.WEIGHTS)
+                if self.wm_global_gait:
+                    self.weights.update(gait_rewards.SOURCE_WEIGHTS, feet_crossing=-10.)
         elif action_rate_l2_weight is not None:
             if not self.recovery or not np.isfinite(action_rate_l2_weight) or action_rate_l2_weight > 0:
                 raise ValueError("Expected a nonpositive action-rate weight for a named get-up task")
@@ -618,7 +624,7 @@ class Sim:
         self.foot_side = np.full(m.ngeom, -1, np.int32)
         for g in self.foot_geoms:
             self.foot_side[g] = feet.index(int(m.geom_bodyid[g]))
-        self.is_term = (source_gait.illegal_contact_geoms(m) if self.zenbot_source_gait else
+        self.is_term = (source_gait.illegal_contact_geoms(m) if self.zenbot_source_gait or self.wm_global_gait else
                         np.isin(np.arange(m.ngeom), self.term_geoms))
         supports = [m.body("robot_" + b).id for b in (profile.SUPPORT_BODIES if self.recovery else keys)]
         self.support_link = np.array([supports.index(b) if b in supports else -1 for b in m.geom_bodyid])
@@ -659,10 +665,11 @@ class Sim:
                 self.wm_gait_worlds = jnp.asarray(gait_worlds)
             else:
                 self.wm_gait_worlds = (jnp.arange(self.N) // 2) % 4 == 0
-            upright = self.is_up(self.walk["z"], quat_to_mat(self.walk["quat"]))
-            self.walk["command_rows"] = command_reset_bank(
-                bank_dir, {"row": jnp.arange(len(upright))}, upright, directional=True,
-                command_speeds=self.wm_command_speeds if self.gait_source_commands else None)
+            if not self.wm_global_gait:
+                upright = self.is_up(self.walk["z"], quat_to_mat(self.walk["quat"]))
+                self.walk["command_rows"] = command_reset_bank(
+                    bank_dir, {"row": jnp.arange(len(upright))}, upright, directional=True,
+                    command_speeds=self.wm_command_speeds if self.gait_source_commands else None)
         self.reference = None
         if self.g1_reference:
             from .g1_reference_reward import G1RecoveryReference
@@ -768,7 +775,8 @@ class Sim:
             foot_pos, foot_rot = P[..., 1:3, :], Rs[..., 1:3, :, :]
             slip = gait_rewards.predicted_foot_slip(foot_pos, foot_rot, V[..., 1:3, :], W[..., 1:3, :], self.foot_corners)
             com_velocity = V[..., 1:3, :] + jnp.cross(W[..., 1:3, :], mv3(foot_rot, self.foot_com))
-            feet = gait_rewards.FootGeometry(foot_pos, foot_rot, center - extent, slip, com_velocity[..., 2])
+            feet = gait_rewards.FootGeometry(foot_pos, foot_rot, center - extent, slip, com_velocity[..., 2],
+                                             com_velocity[..., :2] if self.wm_global_gait else None)
         return View(env.Kin(Rs[..., 0, :, :], V[..., 0, :], W[..., 0, :], foot_v), p[..., 2],
                     clearance(self.sole_local, self.sole_frame, self.sole_radius), clearance(self.coll_local, self.coll_frame, self.coll_radius), feet)  # fmt: skip
 
@@ -782,8 +790,10 @@ class Sim:
         """World positions (.., 4, 3) of the motion prior's key bodies (amp.KEY_BODIES)."""
         return self.kin_amp.forward(p, R, q)[0]
 
-    def sample_wm_command(self, key, n, *, stand_share=.05):
+    def sample_wm_command(self, key, n, *, stand_share=.05, stage=0):
         """Draw a command and its holding time for a physical or imagined environment."""
+        if self.wm_global_gait:
+            return source_gait.sample_command(key, n, stage, side_share=self.wm_side_share)
         interval = (jax.random.uniform(jax.random.fold_in(key, 1), (n,), minval=2., maxval=4.)
                     if self.wm_floor_locomotion else jnp.full(n, 10.))
         if self.wm_range_commands:
@@ -793,9 +803,11 @@ class Sim:
                     jax.random.choice(key, jnp.asarray(self.wm_command_speeds), (n,)))
         return env.Cmd(velocity, jnp.zeros(n), jnp.zeros(n, bool), jnp.all(velocity == 0., -1), interval)
 
-    def tick_wm_command(self, cmd, key, state, upright, recovery_left):
+    def tick_wm_command(self, cmd, key, state, upright, recovery_left, stage=0):
         """At the regular command boundary, give an already walking robot more chances to stop."""
         stand_share = .05
+        if self.wm_global_gait:
+            return env.tick(cmd, key, sample=lambda k: self.sample_wm_command(k, cmd.vel.shape[0], stage=stage))
         if self.wm_range_commands:
             forward_speed = gait_rewards.base_velocity(state, self.root_com)[:, 0]
             walking = upright & (recovery_left == 0) & (cmd.vel[:, 0] > 0.) & (forward_speed > .45)
@@ -818,7 +830,7 @@ class Sim:
 
     def sample_command(self, key, stage=0):
         if self.zenbot_motion_train_wm:
-            return self.sample_wm_command(key, self.N)
+            return self.sample_wm_command(key, self.N, stage=stage)
         if self.zenbot_source_gait:
             return source_gait.sample_command(key, self.N, stage)
         if self.zenbot_command_gait:
@@ -989,6 +1001,14 @@ class Sim:
                 if self.wm_posture_and_tracking:
                     floor_terms.update(gait_rewards.posture_terms(args[1], cmd, ready, actual))
                 floor_terms["stand"] = jnp.where(moving, 0., floor_terms["stand"])
+                if self.wm_global_gait:
+                    _, rotation, velocity, angular = args[1][:4]
+                    gyro = mv3(tr3(rotation), angular)
+                    body_vel = mv3(tr3(rotation), velocity) + jnp.cross(gyro, self.root_com)
+                    floor_terms.update(velocity_progress_tanh=upright * source_gait.velocity_progress(cmd, actual),
+                                       alive=ready * (1. - args[7]), lin_vel_z_l2=ready * body_vel[..., 2]**2,
+                                       ang_vel_xy_l2=ready * jnp.sum(gyro[..., :2]**2, -1))
+                    floor_terms["stand"] = jnp.where(ready, 0., floor_terms["stand"])
                 if self.wm_lift_gate:
                     floor_terms["lift"] = jnp.where(recovery_active, floor_terms["lift"], 0.)
             if self.reference_reward:
@@ -1257,7 +1277,9 @@ class Sim:
         kw, kf, ku, ks, kk1, kk2 = jax.random.split(key, 6)
         wb = world.walk
         cold_forward = False
-        if self.robot is g1_getup and not self.track_getup:
+        if self.wm_global_gait:
+            qpos, qvel = source_gait.stand_reset(kw, N)
+        elif self.robot is g1_getup and not self.track_getup:
             frame = {k: v[:, 0] for k, v in g1_getup.sample_reference(wb, kw, N, window=1, fetch_steps=10).items()}
             qpos = jnp.concatenate((frame["pos"], frame["quat"], frame["q"]), -1)
             qvel = jnp.concatenate((frame["v"], mv3(tr3(quat_to_mat(frame["quat"])), frame["w"]), frame["qd"]), -1)
@@ -1335,7 +1357,7 @@ class Sim:
             kick = jnp.concatenate((jax.random.uniform(kk1, (N, 6), minval=-1.0, maxval=1.0) * jnp.asarray(env.SHOVE_ROOT),
                                     env.SHOVE_JOINT * jax.random.uniform(kk2, (N, J), minval=-1.0, maxval=1.0)), -1)  # fmt: skip
             qvel = qvel + jnp.where(shove[:, None], kick, 0.0)  # (the root's angular part is in the body frame, as MuJoCo's)
-        if self.wm_range_commands:
+        if self.wm_range_commands and not self.wm_global_gait:
             qvel = jnp.where((cold_forward & ~floor)[:, None], 0., qvel)
         if return_source:
             if self.zenbot_wm_reference_training:
@@ -1350,7 +1372,7 @@ class Sim:
     def _reset(self, s: State, done, key) -> State:
         """Reset the envs where `done`: start state (`_fresh`), command drawn anew, last action zero, push schedule restarted."""
         kf, kc, kp = jax.random.split(key, 3)
-        sampled_cmd = (self.sample_command(kc, s.gait_curriculum.stage) if self.zenbot_source_gait else
+        sampled_cmd = (self.sample_command(kc, s.gait_curriculum.stage) if s.gait_curriculum is not None else
                        self.sample_command(kc))
         clip = None
         if self.g1_reference:
@@ -1380,6 +1402,8 @@ class Sim:
             s = s._replace(gait_window=window)
         if s.episode_limit is not None:
             limit = jnp.where(clip < 0, source_gait.GAIT_STEPS, self.episode_steps) if self.zenbot_source_gait else self.episode_steps
+            if self.wm_global_gait:
+                limit = jnp.where(self.wm_gait_worlds, source_gait.GAIT_STEPS, self.episode_steps)
             s = s._replace(episode_limit=jnp.where(done, limit, s.episode_limit))
         if self.zenbot_scratch_curriculum:
             s = s._replace(first_supported_stand=jnp.where(done, -1, s.first_supported_stand))
@@ -1446,7 +1470,7 @@ class Sim:
             s = s._replace(gait_ready=zb)
         if self.zenbot_scratch_curriculum:
             s = s._replace(first_supported_stand=jnp.full_like(zi, -1))
-        if self.zenbot_source_gait:
+        if self.zenbot_source_gait or self.wm_global_gait:
             s = s._replace(gait_curriculum=source_gait.Curriculum.empty(N), episode_limit=zi)
         if self.physical_gait_starts is not None:
             s = s._replace(gait_window=jnp.full((N, 2), -1, jnp.int32))
@@ -1457,7 +1481,8 @@ class Sim:
         s = self._reset(s, jnp.ones((N,), bool), k_reset)
         if self.random_start and self.wm_floor_amp:
             # Every robot starts at t=0. Spread the first timeouts across control ticks.
-            s = s._replace(episode_limit=jax.random.randint(k_t, (N,), self.episode_steps // 2, self.episode_steps + 1))
+            limit = s.episode_limit
+            s = s._replace(episode_limit=jax.random.randint(k_t, (N,), limit // 2, limit + 1))
         elif self.random_start and (self.track_getup or self.zenbot_getup_stand or self.wm_stance_start_share):
             # Spread first resets across the collection buffer while t continues to measure
             # the actual time since the sampled motion pose. Later episodes run to full length.
@@ -1538,7 +1563,7 @@ class Sim:
             return (d, hits + hit), (found, touch, loads, acc, body_contacts)
 
         (data, hits), (found, touch, loads, acc, body_contacts) = jax.lax.scan(sub, (data, jnp.zeros((self.N,))), jnp.arange(env.DECIMATION))
-        illegal = touch.any(axis=0) if self.zenbot_source_gait else touch[-1]
+        illegal = touch.any(axis=0) if self.zenbot_source_gait or self.wm_global_gait else touch[-1]
         result = data, found[-1], hits, illegal, loads[-1] if loads is not None else None, acc[-1] if acc is not None else None
         if gait_forces:
             feet, other, foot_slip = body_contacts
@@ -1571,7 +1596,9 @@ class Sim:
         timeout = (t >= limit) | self.recovery_timeout(s.reference_clip, s.reference_start, t)
         if self.zenbot_wm_reference_training:
             timeout |= self.wm_gait_worlds & s.was_up & ~was_up1
-        if self.wm_floor_locomotion:
+        if self.wm_global_gait:
+            terminated |= self.wm_gait_worlds & source_gait.failed(v.height, S1[1][:, 2, 2], touch, diverged)
+        elif self.wm_floor_locomotion:
             terminated |= self.wm_gait_worlds & s.was_up & ~was_up1
         fall = (s.was_up & ~was_up1) | terminated if self.mixed else terminated
         remaining, active, deadline = None, None, False
@@ -1587,6 +1614,8 @@ class Sim:
                 hold, posture & ~diverged, loads[:, :2].sum(-1) >= .5 * weight, s.reference_clip, t)
             if self.wm_floor_locomotion:
                 remaining = self.floor_gait_interval(s.recovery_left, was_up1, hold_score)
+                if self.wm_global_gait:
+                    remaining = jnp.where(self.wm_gait_worlds, 0, remaining)
                 active = remaining > 0
         terms = self.reward_terms(S0, S1, v.kin, a, s.a_last, s.c_obs, ~was_up1, fall.astype(jnp.float32), contact, hits, self.q_soft,
                                   torque=data.actuator_force if self.robot is g1_getup or self.legged_support else data.ctrl,
@@ -1667,6 +1696,13 @@ class Sim:
                                                  jnp.where(moving, jnp.abs(error[:, 2]), 0.).sum(), moving.sum()))
         if self.wm_floor_amp:
             stats["stand_blend"] = jnp.where(active, hold_score, 1.) if self.wm_floor_locomotion else hold_score
+        if self.wm_global_gait:
+            error = gait_rewards.base_velocity(S1, self.root_com)[..., :2] - s.c_obs[..., :2]
+            worlds = self.wm_gait_worlds
+            curriculum = s.gait_curriculum.advance(s.c_obs[:, 0], jnp.linalg.norm(error, axis=-1), worlds,
+                                                   worlds & terminated, worlds & timeout)
+            s1 = s1._replace(gait_curriculum=curriculum)
+            stats["gait_speed_stage"] = curriculum.stage.astype(jnp.float32)
         if self.zenbot_scratch_curriculum:
             stats["failed_floor_recovery"] = failed
             stats["applied_lift_n"] = data.xfrc_applied[:, self.torso, 2].mean()
@@ -1737,7 +1773,8 @@ class Sim:
         if auto_reset:
             s1 = self._reset(s1, done, k_reset)
         if self.zenbot_motion_train_wm:
-            cmd = self.tick_wm_command(s1.cmd, k_cmd, S1, was_up1, remaining)
+            stage = s1.gait_curriculum.stage if self.wm_global_gait else 0
+            cmd = self.tick_wm_command(s1.cmd, k_cmd, S1, was_up1, remaining, stage)
         else:
             sample = (lambda key: self.sample_command(key, s1.gait_curriculum.stage)) if self.zenbot_source_gait else self.sample_command
             cmd = self.recovery_command(env.tick(s1.cmd, k_cmd, self.cmd_ranges, sample=sample), s1.down)

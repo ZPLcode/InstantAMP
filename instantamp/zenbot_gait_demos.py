@@ -8,8 +8,8 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
-from . import amp, zenbot
-from .rot import quat_to_mat
+from . import amp, zenbot, zenbot_source_gait as source_gait
+from .rot import mat_to_quat, quat_to_mat
 
 
 # The four transitions contain steady forward walking between the start and stop.
@@ -130,6 +130,45 @@ def reference_command_index(commands, labels):
     candidates = labels.T[axis]
     distance = jnp.where(target * candidates > 0., jnp.abs(candidates - target), jnp.inf)
     return jnp.where(target[..., 0] == 0., 0, jnp.argmin(distance, axis=-1))
+
+
+class GlobalGaitDemos(amp.Demos):
+    """Draw consecutive 50 Hz frames at fractional start times using Motion Train's clip weights."""
+
+    def __init__(self, directory, sim, frames=source_gait.AMP_STEPS):
+        def world_frame(state):
+            pos, rotation, _, angular, joints, rates = state
+            offsets = sim.key_positions(pos, rotation, joints) - pos[..., None, :]
+            return jnp.concatenate((mat_to_quat(rotation), angular, joints, rates, offsets.reshape(len(pos), -1)), -1)
+
+        super().__init__(directory, sim, frames, per_clip=True, frame_fn=world_frame)
+        if self.clip_probabilities is None:
+            raise ValueError(f"Missing Motion Train gait weights in {directory}/sampling.json")
+
+    def sample(self, key, count):
+        choose, time = jax.random.split(key)
+        clip = jax.random.choice(choose, len(self.clip_lengths), (count,), p=self.clip_probabilities)
+        # Reserve one control tick beyond the last sampled frame, as in Motion Train.
+        start = jax.random.uniform(time, (count,)) * jnp.maximum(self.clip_lengths[clip] - 2, 0)
+        return self.at_time(clip, start)
+
+    def at_time(self, clip, start):
+        first = self.clip_offsets[clip]
+        index = first[:, None] + start.astype(jnp.int32)[:, None] + jnp.arange(self.window)
+        last = first + self.clip_lengths[clip] + self.window - 2
+        a, b = self.frames[index], self.frames[jnp.minimum(index + 1, last[:, None])]
+        t = (start % 1.)[:, None, None]
+        qa, qb = a[..., :4], b[..., :4]
+        dot = jnp.sum(qa * qb, axis=-1, keepdims=True)
+        qb = jnp.where(dot < 0., -qb, qb)
+        angle = jnp.arccos(jnp.clip(jnp.abs(dot), 0., 1.))
+        # sinc form of slerp is well defined for identical orientations.
+        quat = ((1. - t) * jnp.sinc((1. - t) * angle / jnp.pi) * qa
+                + t * jnp.sinc(t * angle / jnp.pi) * qb)
+        angular, joints, rates, points = jnp.split(a[..., 4:] + t * (b[..., 4:] - a[..., 4:]),
+                                                  [3, 3 + len(zenbot.DOF), 3 + 2 * len(zenbot.DOF)], axis=-1)
+        return source_gait.amp_frame(quat_to_mat(quat), angular, joints, rates,
+                                     points.reshape(*points.shape[:-1], len(zenbot.KEY_BODIES), 3))
 
 
 class CommandGaitDemos(amp.Demos):

@@ -312,9 +312,9 @@ def recovery_features(norm, window, leggedlab):
     return normalize(norm, window)
 
 
-def recovery_style(st, window, scale, leggedlab=False, *, soft_floor=False):
-    x = recovery_features(st["norm"], window, leggedlab).reshape(*window.shape[:-2], -1)
-    d = nets.mlp_apply(st["net"], x, jax.nn.leaky_relu)[..., 0]
+def recovery_style(st, window, scale, leggedlab=False, *, soft_floor=False, motion_train=False):
+    x = recovery_features(st["norm"], window, leggedlab or motion_train).reshape(*window.shape[:-2], -1)
+    d = nets.mlp_apply(st["net"], x, jax.nn.elu if motion_train else jax.nn.leaky_relu)[..., 0]
     quality = 1. - 0.25 * (d - 1.)**2
     if soft_floor:
         # Keep a slope for imagined gait windows just below the least-squares cutoff.
@@ -322,12 +322,12 @@ def recovery_style(st, window, scale, leggedlab=False, *, soft_floor=False):
     return scale * jnp.maximum(quality, 0.)
 
 
-def recovery_loss(net, norm, demo, robot, wt, key, leggedlab=False):
+def recovery_loss(net, norm, demo, robot, wt, key, leggedlab=False, motion_train=False):
     def predict(row):
-        return nets.mlp_apply(net, row, jax.nn.leaky_relu)[..., 0]
+        return nets.mlp_apply(net, row, jax.nn.elu if motion_train else jax.nn.leaky_relu)[..., 0]
 
-    xd = recovery_features(norm, demo, leggedlab).reshape(len(demo), -1)
-    xr = recovery_features(norm, robot, leggedlab).reshape(len(robot), -1)
+    xd = recovery_features(norm, demo, leggedlab or motion_train).reshape(len(demo), -1)
+    xr = recovery_features(norm, robot, leggedlab or motion_train).reshape(len(robot), -1)
     dd, dr = predict(xd), predict(xr)
     n = jnp.maximum(wt.sum(), 1.)
     gp = 10. * jnp.square(jax.vmap(jax.grad(predict))(xd)).sum(-1).mean()
@@ -347,14 +347,14 @@ def train_step_with_robot(st, demo, robot, wt, key, lr, **kwargs):
     return jax.lax.cond((wt > 0).any(), update, skip)
 
 
-def train_step(st, demo, robot, wt, key, lr: float, recovery=False, leggedlab=False, include_demo_norm=False):
+def train_step(st, demo, robot, wt, key, lr: float, recovery=False, leggedlab=False, include_demo_norm=False, motion_train=False):
     """One critic step on a batch of demo and robot windows; the robot windows with weight 0 take no part."""
     args = (st["net"], st["norm"], demo, robot, wt, key)
     if recovery:
-        (_, aux), grads = jax.value_and_grad(recovery_loss, has_aux=True)(*args, leggedlab=leggedlab)
+        (_, aux), grads = jax.value_and_grad(recovery_loss, has_aux=True)(*args, leggedlab=leggedlab, motion_train=motion_train)
     else:
         (_, aux), grads = jax.value_and_grad(loss, has_aux=True)(*args)
-    if not leggedlab:
+    if not (leggedlab or motion_train):
         grads, _ = optim.clip_by_global_norm(grads, 1.0)
     if recovery:
         # Coupled Adam weight decay, following the reference trunk and head parameter groups.
@@ -363,10 +363,10 @@ def train_step(st, demo, robot, wt, key, lr: float, recovery=False, leggedlab=Fa
     net, opt = optim.step(st["net"], grads, st["opt"], jax.tree.map(lambda _: False, st["net"]), lr, betas=(0.9, 0.999) if recovery else (0.5, 0.9))
     # In dev/get_up, PPOAMP.update feeds only the replayed policy windows into
     # update_normalization and applies Adam directly to the discriminator.
-    max_count = 1e8 if leggedlab else 2e8
+    max_count = 1e8 if leggedlab or motion_train else 2e8
     norm = nets.rn_update(st["norm"], robot.reshape(-1, robot.shape[-1]), weights=jnp.repeat(wt, robot.shape[1]),
                           max_count=max_count)
-    if (recovery and not leggedlab) or include_demo_norm:
+    if (recovery and not (leggedlab or motion_train)) or include_demo_norm:
         norm = nets.rn_update(norm, demo.reshape(-1, demo.shape[-1]), max_count=max_count)
     first = (st["mu"][0] == 0) & (st["mu"][1] == 0)
     now = jnp.stack([aux["d_demo"], aux["d_robot"]])

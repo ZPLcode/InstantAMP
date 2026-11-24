@@ -41,6 +41,7 @@ import numpy as np
 from . import amp, critic, env, g1_getup, nets, optim, support_discriminator, zenbot
 from . import buffer as rb
 from . import zenbot_gait_rewards as gait_rewards
+from . import zenbot_source_gait as source_gait
 from .zenbot_gait_demos import reference_command_index
 from .sim import Sim, motion_dirs, unflatten
 from .zenbot_motion_train_obs import MOTION_TRAIN_WIDTH, mirror_action, mirror_observation, motion_train_actor_mean
@@ -294,7 +295,8 @@ class ZenbotWalkRunRecoveryConfig(Config):
 
     @property
     def command_gait_amp(self):
-        return bool(getattr(self, "wm_floor_amp", False) and not self.wm_getup_only and self.gait_ls_scale)
+        return bool(getattr(self, "wm_floor_amp", False) and not self.wm_getup_only and self.gait_ls_scale
+                    and not getattr(self, "wm_global_gait", False))
 
     def __post_init__(self):
         super().__post_init__()
@@ -307,7 +309,7 @@ class ZenbotWalkRunRecoveryConfig(Config):
         if (not np.isfinite(self.gait_ls_scale) or self.gait_ls_scale < 0 or
                 not 1 <= self.gait_amp_stride <= self.recovery_amp_stride or
                 (self.gait_amp_stride != 1 and not self.gait_ls_scale) or
-                (self.gait_ls_scale and not (self.legged_real_ppo or self.command_gait_amp)) or
+                (self.gait_ls_scale and not (self.legged_real_ppo or self.command_gait_amp or getattr(self, "wm_global_gait", False))) or
                 not np.isfinite(self.gait_command_weight) or self.gait_command_weight < 0 or
                 (self.gait_command_weight and not self.legged_real_ppo)):
             raise ValueError("Least-squares gait AMP requires a supported gait task and a stride within the recovery history")
@@ -343,6 +345,9 @@ class ZenbotMotionTrainWMConfig(ZenbotWalkRunRecoveryConfig):
     wm_fixed_floor_envs: int = 0  # reserve reset_floor of the collectors for fallen starts at every reset
     wm_tracking_scale: float = 1.  # multiply the planar and yaw tracking weights in the joint task
     wm_range_commands: int = 0  # continuous Motion Train velocity ranges for the joint task
+    wm_global_gait: int = 0  # Motion Train's global gait AMP and standing locomotion resets
+    wm_gait_frames: int = source_gait.AMP_STEPS  # consecutive 50 Hz frames for global gait AMP
+    wm_side_share: float = 0.  # probability per direction of a pure lateral command
     wm_posture_and_tracking: int = 0  # pelvis posture rewards and separate planar/yaw tracking diagnostics
     wm_gait_rewards: int = 0  # Motion Train foot and joint terms for the joint floor/gait task
     floor_stop_command_share: float = 0.  # fraction of fallen starts requesting a quiet stance for the episode
@@ -369,7 +374,7 @@ class ZenbotMotionTrainWMConfig(ZenbotWalkRunRecoveryConfig):
         if self.ode or self.legged_real_ppo or self.recovery_base_actor:
             raise ValueError("The Motion Train WM profile needs direct actions and a learned world model")
         joint_task = self.wm_floor_amp and not self.wm_getup_only
-        for name in ("wm_range_commands", "wm_posture_and_tracking", "wm_gait_rewards", "wm_fixed_floor_envs"):
+        for name in ("wm_range_commands", "wm_posture_and_tracking", "wm_gait_rewards", "wm_fixed_floor_envs", "wm_global_gait"):
             enabled = getattr(self, name)
             if enabled not in (0, 1) or (enabled and not joint_task):
                 raise ValueError(f"{name} must be 0 or 1 and requires joint floor/locomotion training when enabled")
@@ -377,6 +382,15 @@ class ZenbotMotionTrainWMConfig(ZenbotWalkRunRecoveryConfig):
             raise ValueError("A custom wm_tracking_scale must be finite, nonnegative and used with joint floor/locomotion training")
         if self.gait_source_commands and not self.command_gait_amp:
             raise ValueError("Source-speed commands need command-conditioned locomotion AMP")
+        if self.wm_global_gait:
+            if not (self.wm_fixed_floor_envs and self.wm_range_commands and self.wm_gait_rewards
+                    and self.gait_ls_scale > 0 and self.gait_amp_stride == 1 and 0 < self.amp_lerp <= 1):
+                raise ValueError("Global gait AMP requires fixed gait worlds, ranged commands, gait rewards, LS style and unit stride")
+            history_stride = self.recovery_amp_stride if self.recovery_amp_seconds else 1
+            if not 1 <= self.wm_gait_frames <= 1 + (self.amp_frames - 1) * history_stride:
+                raise ValueError("wm_gait_frames must fit in the available rollout history")
+        if not 0 <= self.wm_side_share <= .375 or (self.wm_side_share and not self.wm_global_gait):
+            raise ValueError("Pure lateral probability per side must fit within the global gait translation share")
         if not 0 <= self.ppo_frac < 1:
             raise ValueError("ppo_frac must be in [0, 1) so imagination contributes policy updates")
         if self.ppo_frac and (not self.critic or not self.action_noise > 0 or
@@ -411,7 +425,7 @@ class ZenbotMotionTrainWMConfig(ZenbotWalkRunRecoveryConfig):
         if self.wm_motion_replay and self.wm_batch < 2:
             raise ValueError("Mixed physical dynamics replay needs at least two transitions per batch")
         if (not np.isfinite(self.gait_mirror_weight) or self.gait_mirror_weight < 0 or
-                self.gait_mirror_weight and not (self.command_gait_amp and self.ppo_frac > 0)):
+                self.gait_mirror_weight and not ((self.command_gait_amp or self.wm_global_gait) and self.ppo_frac > 0)):
             raise ValueError("Upright mirror consistency requires joint floor and gait AMP with real PPO samples")
         if self.obs_clip != 10.:
             raise ValueError("The Motion Train deployment normalizes observations with a clip of 10")
@@ -489,6 +503,8 @@ class InstantAMP:
 
     @property
     def gait_span(self):
+        if getattr(self.cfg, "wm_global_gait", False):
+            return self.cfg.wm_gait_frames
         return 1 + (self.cfg.amp_frames - 1) * getattr(self.cfg, "gait_amp_stride", 1)
 
     def __init__(self, cfg: Config):
@@ -520,6 +536,7 @@ class InstantAMP:
                        wm_tracking_scale=getattr(c, "wm_tracking_scale", 1.),
                        floor_stop_command_share=getattr(c, "floor_stop_command_share", 0.),
                        gait_source_commands=getattr(c, "gait_source_commands", False),
+                       wm_global_gait=bool(getattr(c, "wm_global_gait", 0)), wm_side_share=getattr(c, "wm_side_share", 0.),
                        wm_gait_rewards=bool(getattr(c, "wm_gait_rewards", 0)),
                        wm_posture_and_tracking=bool(getattr(c, "wm_posture_and_tracking", 0)),
                        wm_range_commands=bool(getattr(c, "wm_range_commands", 0)))
@@ -543,7 +560,10 @@ class InstantAMP:
         self.amp = c.amp_w > 0
         if self.amp:
             upright_source = stand_clip if getattr(c, "wm_getup_only", False) else c.amp_dir
-            if getattr(c, "command_gait_amp", False):
+            if getattr(c, "wm_global_gait", False):
+                from .zenbot_gait_demos import GlobalGaitDemos
+                self.demos = GlobalGaitDemos(upright_source, self.sim, self.gait_span)
+            elif getattr(c, "command_gait_amp", False):
                 from .zenbot_gait_demos import CommandGaitDemos
                 self.demos = CommandGaitDemos(upright_source, self.sim, self.gait_span)
             else:
@@ -608,7 +628,9 @@ class InstantAMP:
                  "wm_ema": jnp.zeros((), jnp.float32), "gn_ema": jnp.zeros((), jnp.float32), "wm_ok": jnp.ones((), bool)}  # fmt: skip
         if self.amp:
             gait_dim = self.sim.amp_dim + (3 if getattr(c, "command_gait_amp", False) else 0)
-            carry["amp"] = amp.init(jax.random.fold_in(ks[3], 7), c.amp_frames, frame_dim=gait_dim)
+            global_gait = getattr(c, "wm_global_gait", False)
+            carry["amp"] = amp.init(jax.random.fold_in(ks[3], 7), self.gait_span if global_gait else c.amp_frames,
+                                    frame_dim=source_gait.AMP_DIM if global_gait else gait_dim)
             if self.getup:
                 key_up = jax.random.fold_in(ks[3], 13)
                 carry["amp_up"] = (self.legged_prior.init(key_up) if self.legged else
@@ -698,6 +720,8 @@ class InstantAMP:
             rec["stand_blend"] = tr.stats["stand_blend"]
             if self.sim.wm_floor_locomotion:
                 rec["gait_world"] = self.sim.wm_gait_worlds
+                if self.sim.wm_global_gait:
+                    rec["gait_stage"] = jnp.full_like(s.t, s.gait_curriculum.stage)
             rec["upright_steps"] = s.supported_hold.upright_steps
             rec["loaded_feet"] = s.supported_hold.loaded
             rec["episode_limit"] = s.episode_limit
@@ -814,7 +838,7 @@ class InstantAMP:
         if self.recovery_clock:
             fresh &= ~start["down_start"]
         motion_train = getattr(c, "motion_train_wm", False)
-        cmd = self.sim.sample_wm_command(k_c, B) if motion_train else env.sample_cmd(k_c, B, self.sim.cmd_ranges)
+        cmd = self.sim.sample_wm_command(k_c, B, stage=start.get("gait_stage", 0)) if motion_train else env.sample_cmd(k_c, B, self.sim.cmd_ranges)
         old = env.Cmd(start["cmd"]["vel"], start["cmd"]["heading"], start["cmd"]["is_heading"] > 0, start["cmd"]["is_standing"] > 0, start["cmd"]["time_left"])
         start["cmd"] = env.where_cmd(fresh, cmd, old)
         if self.recovery_clock:
@@ -872,6 +896,28 @@ class InstantAMP:
             from .getup_amp import getup_frame
             return getup_frame(self.sim, state)
         return self.sim.amp_frame(state)
+
+    def rollout_frame(self, state):
+        if getattr(self.cfg, "wm_global_gait", False):
+            pos, rotation, _, angular, joints, rates = state
+            points = self.sim.key_positions(pos, rotation, joints)
+            gait = source_gait.amp_frame(rotation, angular, joints, rates, points - pos[..., None, :])
+            return jnp.concatenate((self.sim._gait_amp_frame(state, points), gait), -1)
+        return self.disc_frame(state)
+
+    def rollout_gait_style(self, st, windows, command):
+        dim = self.sim.amp_dim
+        if getattr(self.cfg, "wm_global_gait", False):
+            gait = windows[..., -self.gait_span:, dim:]
+            return self.style(st, gait), windows[..., :dim]
+        return self.style(st, windows[..., -self.gait_span:, :dim], command), windows
+
+    def mix_amp_reward(self, task, styled, gait_gate, gait_style):
+        """Use the source 70% style mix only on the share of the step assigned to gait."""
+        lerp = self.cfg.amp_lerp
+        extra = (.70 - lerp) * gait_gate if getattr(self.cfg, "wm_global_gait", False) else 0.
+        style_reward = env.DT * (lerp * styled + extra * gait_style)
+        return (1. - lerp - extra) * task + style_reward, style_reward
 
     def getup_gate(self, up, down_start, elapsed):
         if self.cfg.g1_style:
@@ -961,8 +1007,8 @@ class InstantAMP:
         use_amp, use_critic = amp_st is not None, critic_st is not None
         if use_amp:
             hist_s = unflatten(start["h_qpos"], start["h_qvel"])
-            hf = self.disc_frame(hist_s)
-            f0 = self.disc_frame(S0)
+            hf = self.rollout_frame(hist_s)
+            f0 = self.rollout_frame(S0)
             win0 = jnp.concatenate((hf, f0[:, None]), 1)
             ramp = amp_st["ramp"]
         zeros = jnp.zeros((B,))
@@ -987,7 +1033,10 @@ class InstantAMP:
                 d = jnp.maximum(d, sim.recovery_timeout(start["reference_clip"], start["reference_start"], t1))
             if sim.recovery or sim.mixed:
                 d = (t1 >= start.get("episode_limit", sim.episode_steps)).astype(jnp.float32)
-            if sim.wm_floor_locomotion:
+            if sim.wm_global_gait:
+                illegal = (v1.feet.bottom[..., 2:] < 0.) & sim.is_term[sim.term_geoms]
+                d = jnp.maximum(d, start["gait_world"] * source_gait.failed(v1.height, S1[1][..., 2, 2], illegal.any(-1), False))
+            elif sim.wm_floor_locomotion:
                 d = jnp.maximum(d, (start["gait_world"] & up & ~up1).astype(d.dtype))
             recovering = ~up1
             gait_was_ready = remaining == 0 if step_history is not None else None
@@ -1007,6 +1056,8 @@ class InstantAMP:
                 hold, blend = sim.advance_floor_stand(hold, posture, foot_contact.max(-1) > .5, paired_clip, t1)
                 if sim.wm_floor_locomotion:
                     remaining = sim.floor_gait_interval(remaining, up1, blend)
+                    if sim.wm_global_gait:
+                        remaining = jnp.where(start["gait_world"], 0, remaining)
                     active = remaining > 0
             terms = sim.reward_terms(S, S1, v1.kin, a, a_last, c_obs, recovering, fall, foot_contact, zeros, sim.q_soft,
                                      torque=sim.estimated_torque(S, target) if sim.recovery or self.legged_support else None,
@@ -1034,7 +1085,7 @@ class InstantAMP:
                 if getattr(c, "wm_reference_training", False):
                     paired_clip = jnp.where(up & ~up1, -1, paired_clip)
             if use_amp:  # the gates of the two styles at this step: the locomotion one while up, the get-up one while not yet up
-                frame1 = self.disc_frame(S1)
+                frame1 = self.rollout_frame(S1)
                 moving = (jnp.linalg.norm(c_obs[:, :2], axis=-1) + jnp.abs(c_obs[:, 2]) > 0.05).astype(jnp.float32)
                 upf = up1.astype(jnp.float32)
                 g_loco = jnp.ones_like(upf) if sim.recovery else {"track_shift": moving * upf * (c.amp_track_lo + terms.get("track_lin", 0.)), "moving": moving * upf,
@@ -1048,11 +1099,13 @@ class InstantAMP:
                         g_up = jnp.where(active, g_up, 0.)
                 if c.g1_style or self.mixed_amp:
                     g_loco *= 1. - g_up
+                if sim.wm_global_gait:
+                    g_loco = jnp.where(start["gait_world"], 1., g_loco)
                 gate = jnp.stack((g_loco, g_up), -1)
             else:
                 frame1, gate = jnp.zeros((B, 1)), jnp.zeros((B, 2))
             if motion_train:
-                cmd1 = sim.tick_wm_command(cmd, k_c, S1, up1, remaining)
+                cmd1 = sim.tick_wm_command(cmd, k_c, S1, up1, remaining, start.get("gait_stage", 0))
                 c1 = sim.wm_velocity_command(cmd1, S1[1], up1, remaining)
                 hist1 = predicted_sensors(hist, S1, c1, a, k_o, sim.noisy_obs)
             else:
@@ -1085,7 +1138,8 @@ class InstantAMP:
             idx = jnp.arange(1, c.horizon + 1)[:, None] + jnp.arange(F)[None, :]
             wins = seq[:, idx]
             cmd = None if gait_cmd is None else jnp.swapaxes(gait_cmd, 0, 1)
-            style = jnp.swapaxes(self.style(amp_st, wins[..., -self.gait_span:, :sim.amp_dim], cmd), 0, 1)  # (H, B)
+            style, wins = self.rollout_gait_style(amp_st, wins, cmd)
+            style = jnp.swapaxes(style, 0, 1)
             mix = gate[..., 0] * style
             up_full = 0.0  # amp_getup_full: the get-up style at full scale, outside the ramp
             if amp_up_st is not None:
@@ -1103,8 +1157,7 @@ class InstantAMP:
                 else:
                     mix = mix + gate[..., 1] * style_up
             if c.amp_lerp > 0:  # r = (1 - lerp) r_task + lerp dt mix: mix in [0, 1], dt mix the scale of one task term of weight 1
-                r_amp = c.amp_lerp * env.DT * (ramp * mix + up_full) if c.amp_getup_full else c.amp_lerp * env.DT * ramp * mix
-                r = (1 - c.amp_lerp) * r + r_amp
+                r, r_amp = self.mix_amp_reward(r, ramp * mix + up_full, gate[..., 0], ramp * style)
             else:  # XSoma's: r = r_task + amp_w dt ramp mix
                 r_amp = c.amp_w * env.DT * (ramp * mix + up_full) if c.amp_getup_full else c.amp_w * env.DT * ramp * mix
                 r = r + r_amp
@@ -1141,6 +1194,8 @@ class InstantAMP:
         return features
 
     def style(self, st, windows, command=None):
+        if getattr(self.cfg, "wm_global_gait", False):
+            return amp.recovery_style(st, windows, self.cfg.gait_ls_scale, motion_train=True)
         if getattr(self.cfg, "gait_ls_scale", 0.):
             features = self.gait_features(windows, command)
             return amp.recovery_style(st, features, self.cfg.gait_ls_scale,
@@ -1169,14 +1224,14 @@ class InstantAMP:
         S1 = unflatten(flat(w["s1_qpos"][: T - 1]), flat(w["s1_qvel"][: T - 1]))
         r = w["r"][tr]
         if self.amp:
-            feats = self.disc_frame(S1).reshape(T - 1, n, -1)
+            feats = self.rollout_frame(S1).reshape(T - 1, n, -1)
             idx = jnp.arange(L)[:, None] + jnp.arange(F)[None, :]  # the window of transition k: post-step frames k .. k + F - 1 of the rows
             if c.g1_style or sim.robot is g1_getup or self.mixed_amp:
                 # Match imagination: fill missing pre-episode history with the reset pose.
                 first = idx[:, -1:] - w["t"][tr]
                 rows0 = jnp.maximum(first, 0)
                 reset_states = unflatten(w["s_qpos"][rows0, jnp.arange(n)], w["s_qvel"][rows0, jnp.arange(n)])
-                sequence = jnp.where((idx[:, :, None] < first[:, None, :])[..., None], self.disc_frame(reset_states)[:, None], feats[idx])
+                sequence = jnp.where((idx[:, :, None] < first[:, None, :])[..., None], self.rollout_frame(reset_states)[:, None], feats[idx])
             else:
                 sequence = feats[idx]
             wins = jnp.moveaxis(sequence, 2, 0).reshape(n * L, F, -1)  # (n, L) order
@@ -1195,6 +1250,8 @@ class InstantAMP:
                 g_up = (1. - w["stand_blend"][tr]) if getattr(c, "wm_floor_amp", False) else (remaining > 0).astype(jnp.float32)
             if c.g1_style or self.mixed_amp:
                 g_loco *= 1. - g_up
+            if sim.wm_global_gait:
+                g_loco = jnp.where(w["gait_world"][tr], 1., g_loco)
             if getattr(c, "gait_command_weight", 0.):
                 # A stationary robot at a high command has almost no slope under
                 # the Gaussian tracking reward. Give physical progress toward the
@@ -1208,7 +1265,9 @@ class InstantAMP:
             gait_cmd = None
             if getattr(c, "command_gait_amp", False):
                 gait_cmd = jnp.where(w["stand_blend"][tr, :, None] < 1., 0., cob).swapaxes(0, 1).reshape(n * L, 3)
-            mix = g_loco * self.style(carry["amp"], wins[..., -self.gait_span:, :sim.amp_dim], gait_cmd).reshape(n, L).T
+            gait_style, wins = self.rollout_gait_style(carry["amp"], wins, gait_cmd)
+            gait_style = gait_style.reshape(n, L).T
+            mix = g_loco * gait_style
             ramp = carry["amp"]["ramp"]
             up_full = 0.0
             if self.getup:  # (amp_getup_full: the get-up style at full scale, outside the ramp, as in imagination)
@@ -1227,7 +1286,7 @@ class InstantAMP:
                 else:
                     mix = mix + recovery_reward
             styled = ramp * mix + up_full if c.amp_getup_full else ramp * mix
-            r = (1 - c.amp_lerp) * r + c.amp_lerp * env.DT * styled if c.amp_lerp > 0 else r + c.amp_w * env.DT * styled
+            r = self.mix_amp_reward(r, styled, g_loco, ramp * gait_style)[0] if c.amp_lerp > 0 else r + c.amp_w * env.DT * styled
         st = slice(F - 1, T)  # the L + 1 states s_0 .. s_L
         S = unflatten(flat(w["s_qpos"][st]), flat(w["s_qvel"][st]))
         cin = flat(w["obs_critic"][st]) if "obs_critic" in w else self.critic_in(S, sim.view_state(S).height, flat(w["a_last"][st]), flat(w["c_obs"][st]), flat(w["xi"][st]),
@@ -1269,7 +1328,7 @@ class InstantAMP:
         mean = (adv * mask).sum() / jnp.maximum(mask.sum(), 1.0)
         std = jnp.sqrt(((adv - mean) ** 2 * mask).sum() / jnp.maximum(mask.sum(), 1.0)) + 1e-6
         out = {"obs": w["obs"][tr], "a_ode": w["a_ode"][tr], "a": w["a"][tr], "mu": w["mu"][tr], "adv": (adv - mean) / std, "mask": mask}
-        if getattr(c, "gait_mirror_weight", 0.):
+        if getattr(c, "gait_mirror_weight", 0.) or getattr(c, "wm_global_gait", False):
             out["gait_mirror"] = w["stand_blend"][tr] >= 1.
         if self.real_ppo or getattr(c, "wm_floor_amp", False):
             out.update(value_input=cin[:-n].reshape(L, n, -1), old_value=V[:-1], value_target=adv + V[:-1])
@@ -1304,9 +1363,13 @@ class InstantAMP:
         """PPO's clipped surrogate of the live policy on the real batch: Gaussian actions of fixed std action_noise around the mean."""
         c = self.cfg
         mu = self.act(pi, obs_norm, b["obs"], b["a_ode"])
-        logr = (jnp.sum(jnp.square(b["a"] - b["mu"]), -1) - jnp.sum(jnp.square(b["a"] - mu), -1)) / (2 * c.action_noise**2)
-        ratio = jnp.exp(jnp.clip(logr, -20.0, 20.0))
-        surr = jnp.minimum(ratio * b["adv"], jnp.clip(ratio, 1 - c.ppo_clip, 1 + c.ppo_clip) * b["adv"])
+        old_error = jnp.square(b["a"] - b["mu"]).sum(-1)
+        def surrogate(action, mean):
+            logr = (old_error - jnp.square(action - mean).sum(-1)) / (2 * c.action_noise**2)
+            ratio = jnp.exp(jnp.clip(logr, -20., 20.))
+            gain = jnp.minimum(ratio * b["adv"], jnp.clip(ratio, 1 - c.ppo_clip, 1 + c.ppo_clip) * b["adv"])
+            return gain, logr, ratio
+        surr, logr, ratio = surrogate(b["a"], mu)
         m = b["mask"]
         nm = jnp.maximum(m.sum(), 1.0)
         aux = {"ppo_clipfrac": ((jnp.abs(ratio - 1) > c.ppo_clip) * m).sum() / nm, "ppo_logr": (jnp.abs(logr) * m).sum() / nm}
@@ -1315,6 +1378,10 @@ class InstantAMP:
             reflected = self.act(pi, obs_norm, mirror_observation(b["obs"]), mirror_action(b["a_ode"]))
             target = jax.lax.stop_gradient(mirror_action(mu))
             eligible = m * b["gait_mirror"]
+            if getattr(c, "wm_global_gait", False):
+                # The original log probability is invariant to the signed joint permutation.
+                reflected_gain = surrogate(mirror_action(b["a"]), reflected)[0]
+                loss -= .5 * ((reflected_gain - surr) * eligible).sum() / nm
             mse = (eligible * jnp.square(reflected - target).mean(-1)).sum() / jnp.maximum(eligible.sum(), 1.)
             loss += c.gait_mirror_weight * mse
             aux["gait_mirror_mse"] = mse
@@ -1412,7 +1479,12 @@ class InstantAMP:
             k_w, k_d, k_g = jax.random.split(k, 3)
             w = rb.sample_windows(carry["buf"], k_w, c.amp_batch, self.gait_span, recent=c.amp_recent, envs=self.amp_envs)
             S = unflatten(w["s_qpos"], w["s_qvel"])
-            feats = sim.amp_frame(S)
+            global_gait = getattr(c, "wm_global_gait", False)
+            if global_gait:
+                p, rot, _, ang, q, qd = S
+                feats = source_gait.amp_frame(rot, ang, q, qd, sim.key_positions(p, rot, q) - p[..., None, :])
+            else:
+                feats = sim.amp_frame(S)
             ok = self.gait_amp_eligible(w, S)
             usable = ok.mean()
             label = None
@@ -1439,11 +1511,11 @@ class InstantAMP:
             else:
                 demo = self.demos.sample(k_d, c.amp_batch)
             gait_ls = bool(getattr(c, "gait_ls_scale", 0.))
-            if gait_ls:
+            if gait_ls and not global_gait:
                 demo = self.gait_features(demo, label)
                 feats = self.gait_features(feats, label)
             st, aux = disc_step(st, demo, feats, ok.astype(jnp.float32), k_g, c.amp_lr,
-                                     recovery=sim.recovery or gait_ls, leggedlab=sim.robot is g1_getup)
+                                     recovery=sim.recovery or gait_ls, leggedlab=sim.robot is g1_getup, motion_train=global_gait)
             return st, {**aux, "usable": usable}
 
         def paired_update(states, key):
@@ -1698,7 +1770,12 @@ FULL_KEYS = ("pi", "avg", "wm", "wm_b", "obs_norm", "opt_pi", "opt_wm", "amp", "
 
 def save_full(path, carry):
     leaves = jax.tree.leaves(jax.device_get({k: carry[k] for k in FULL_KEYS if k in carry}))
-    np.savez(path + ".tmp.npz", **{f"{i:05d}": np.asarray(x) for i, x in enumerate(leaves)})
+    fields = {f"{i:05d}": np.asarray(x) for i, x in enumerate(leaves)}
+    curriculum = getattr(carry.get("env"), "gait_curriculum", None)
+    if curriculum is not None:
+        # Resumed collectors start new episodes, so only completed-episode statistics carry over.
+        fields.update({f"gait_{k}": np.asarray(v) for k, v in curriculum._asdict().items() if k != "partial"})
+    np.savez(path + ".tmp.npz", **fields)
     os.replace(path + ".tmp.npz", path + ".npz")
 
 
@@ -1706,14 +1783,19 @@ def load_full(carry, path):
     part = {k: carry[k] for k in FULL_KEYS if k in carry}
     leaves, tdef = jax.tree.flatten(part)
     with np.load(path, allow_pickle=False) as z:
-        if len(z.files) != len(leaves):
-            raise ValueError(f"{path} has {len(z.files)} arrays, expected {len(leaves)} for this learner")
+        weights = [name for name in z.files if name.isdigit()]
+        if len(weights) != len(leaves):
+            raise ValueError(f"{path} has {len(weights)} learner arrays, expected {len(leaves)}")
         values = []
         for i, leaf in enumerate(leaves):
             arr = z[f"{i:05d}"]
             if arr.shape != leaf.shape:
                 raise ValueError(f"{path} array {i} has shape {arr.shape}, expected {leaf.shape}")
             values.append(jnp.asarray(arr, dtype=leaf.dtype))
+        curriculum = getattr(carry.get("env"), "gait_curriculum", None)
+        if curriculum is not None and "gait_stage" in z:
+            saved = {k: jnp.asarray(z[f"gait_{k}"], dtype=v.dtype) for k, v in curriculum._asdict().items() if k != "partial"}
+            carry = {**carry, "env": carry["env"]._replace(gait_curriculum=curriculum._replace(**saved))}
     return {**carry, **jax.tree.unflatten(tdef, values)}
 
 
@@ -1879,13 +1961,18 @@ def main(argv=None):
             # The full-checkpoint directory can live on another volume via a symlink.
             previous_cfg = Path(full_path).absolute().parents[2] / "config.json"
             old = json.loads(previous_cfg.read_text()) if previous_cfg.is_file() else {}
-            old_conditioned = bool(old.get("wm_floor_amp") and not old.get("wm_getup_only") and old.get("gait_ls_scale"))
+            old_global = bool(old.get("wm_global_gait"))
+            # Global gait checkpoints predating wm_gait_frames always used three frames.
+            old_frames = old.get("wm_gait_frames", 3) if old_global else old.get("amp_frames", cfg.amp_frames)
+            old_conditioned = bool(old.get("wm_floor_amp") and not old.get("wm_getup_only") and old.get("gait_ls_scale") and not old_global)
             if (bool(old.get("gait_ls_scale")) != bool(getattr(cfg, "gait_ls_scale", 0.)) or
                     old.get("gait_amp_stride", 1) != getattr(cfg, "gait_amp_stride", 1) or
+                    old_global != bool(getattr(cfg, "wm_global_gait", False)) or
+                    (old_global and old_frames != xs.gait_span) or
                     old_conditioned != getattr(cfg, "command_gait_amp", False)):
                 new_gait = carry["amp"]
-                old_dim = xs.sim.amp_dim + (3 if old_conditioned else 0)
-                old_gait = jax.eval_shape(lambda k: amp.init(k, old.get("amp_frames", cfg.amp_frames), frame_dim=old_dim), jax.random.key(0))
+                old_dim = source_gait.AMP_DIM if old_global else xs.sim.amp_dim + (3 if old_conditioned else 0)
+                old_gait = jax.eval_shape(lambda k: amp.init(k, old_frames, frame_dim=old_dim), jax.random.key(0))
                 carry = {**carry, "amp": old_gait}
             carry, new_head = mixed_recovery_restore_template(carry, cfg, old, xs.sim)
         carry = initialize_native_learner(carry, full_path, actor_path, (xs.ode_dmax, xs.ode_amax) if xs.ode else None,
@@ -1963,6 +2050,10 @@ def main(argv=None):
             if samples > 0:
                 st["planar_velocity_error_m_s"] = float(planar / samples)
                 st["yaw_rate_error_rad_s"] = float(yaw / samples)
+        if xs.sim.wm_global_gait:
+            curriculum = carry["env"].gait_curriculum
+            st["gait_max_forward_m_s"] = int(curriculum.stage) + 1
+            st["gait_last_tracking_error"], st["gait_last_forward_error"], st["gait_last_backward_error"], st["gait_last_fall_rate"] = map(float, curriculum.last_metrics)
         if xs.sim.recovery:
             st["assist_n"] = float(np.mean([x["assist_n"] for x in cs]))
         if xs.sim.mixed:

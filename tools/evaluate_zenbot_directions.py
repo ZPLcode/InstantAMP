@@ -15,6 +15,7 @@ import numpy as np
 from instantamp import zenbot
 from tools.evaluate_zenbot_getup import DT, evaluate
 from tools.play_zenbot_getup import ZenbotPlayer
+from tools.score_zenbot_gait import joint_jitter
 
 COMMANDS = {
     "forward": (1.0, 0.0, 0.0),
@@ -38,6 +39,33 @@ def heading_kinematics(poses):
     c, s = np.cos(mid), np.sin(mid)
     speeds = np.column_stack((c * dx + s * dy, -s * dx + c * dy, np.diff(yaw) / DT))
     return speeds, yaw
+
+
+def startup_metrics(poses, command):
+    """Pelvis motion in the first second relative to the heading when the command arrived."""
+    first = poses[:WINDOW + 1]
+    _, yaw = heading_kinematics(first)
+    c, s = np.cos(yaw[0]), np.sin(yaw[0])
+    xy = (first[:, :2] - first[0, :2]) @ np.array([[c, -s], [s, c]])
+    target = np.asarray(command)[:2]
+    speed = np.linalg.norm(target)
+    if speed:
+        along = target / speed
+        departure = np.abs(xy @ [-along[1], along[0]])
+    else:
+        departure = np.linalg.norm(xy, axis=-1)
+    w, x, y, z = first[:, 3:7].T
+    roll = np.arctan2(2 * (w*x + y*z), 1 - 2 * (x*x + y*y))
+    return {"startup_off_axis_m": float(departure.max()),
+            "startup_peak_abs_roll_deg": float(np.rad2deg(np.max(np.abs(roll)))),
+            "startup_along_m": float(xy[-1] @ along) if speed else 0.}
+
+
+def foot_contact_metrics(substep_forces):
+    """Count control intervals with a measured force between the two feet."""
+    forces = np.asarray(substep_forces)
+    return {"foot_contact_steps": int(np.count_nonzero((forces > 0.).any(axis=1))),
+            "max_foot_pair_force_n": float(forces.max())}
 
 
 def direction_metrics(poses, loads, command, *, relative_active_speed=False):
@@ -87,14 +115,18 @@ def evaluate_checkpoint(checkpoint, cases, names, steps, *, cold_start=False, ta
             native.data = copy(snapshot[0])
             native.history, native.memory, native.previous = snapshot[1:]
             native.command = jnp.asarray(targets[name], dtype=jnp.float32)[None]
-            poses = np.empty((steps + 1, 7))
+            poses = np.empty((steps + 1, native.model.nq))
             loads = np.empty((steps, 2))
-            poses[0] = native.data.qpos[:7]
+            foot_force = np.empty((steps, len(native.foot_pair_force)))
+            poses[0] = native.data.qpos
             for i in range(steps):
                 native.step()
-                poses[i + 1] = native.data.qpos[:7]
+                poses[i + 1] = native.data.qpos
                 loads[i] = native.support_load[:2]
+                foot_force[i] = native.foot_pair_force
             row = direction_metrics(poses, loads, targets[name])
+            row.update(startup_metrics(poses, targets[name]), **joint_jitter(poses[-3 * WINDOW:, 7:]),
+                       **foot_contact_metrics(foot_force))
             rows.append(
                 dict(seed=seed, trial=trial, clip=floor["clip"], name=name, from_held=floor["held"], **row)
             )
@@ -109,6 +141,7 @@ def evaluate_checkpoint(checkpoint, cases, names, steps, *, cold_start=False, ta
             "from_held": len(held),
             "passed_from_held": sum(r["passed"] for r in held),
             "falls": sum(r["fell"] for r in group),
+            "trials_with_foot_contact_from_held": sum(r["foot_contact_steps"] > 0 for r in held),
             "median_measured_from_held": np.median([r["mean_last_3s"] for r in held], axis=0).tolist()
             if held
             else None,

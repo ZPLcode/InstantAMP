@@ -10,7 +10,7 @@ import pytest
 
 from instantamp import zenbot
 from instantamp.zenbot_gait_demos import (
-    CommandGaitDemos, DIRECTION_CLIPS, StraightGaitDemos, command_reset_bank,
+    CommandGaitDemos, DIRECTION_CLIPS, GlobalGaitDemos, StraightGaitDemos, command_reset_bank,
     directional_window_starts, reference_command_index, source_command_speeds, straight_window_starts,
 )
 from tools.prepare_zenbot import prepare_locomotion
@@ -55,6 +55,45 @@ def test_sampler_draws_weighted_clips_then_contiguous_moving_windows(tmp_path):
         assert np.all((t <= 31+n*18-28) | (t >= 61+n*18))
     with pytest.raises(ValueError, match="No valid straight run"):
         StraightGaitDemos(tmp_path, SimpleNamespace(J=23), 28, "run")
+
+
+@pytest.mark.parametrize("frames", [10, 3])
+def test_global_gait_uses_the_same_consecutive_frames_for_experts_and_rollouts(tmp_path, frames):
+    from instantamp import amp, zenbot_source_gait
+    from instantamp.train import InstantAMP, ZenbotMotionTrainWMConfig
+
+    options = {} if frames == 10 else {"wm_gait_frames": frames}
+    cfg = ZenbotMotionTrainWMConfig(wm_floor_amp=1, wm_global_gait=1, wm_fixed_floor_envs=1,
+                                    wm_range_commands=1, wm_gait_rewards=1, gait_ls_scale=1.5, **options)
+    learner = InstantAMP.__new__(InstantAMP)
+    learner.cfg = cfg
+    learner.sim = SimpleNamespace(robot=zenbot, J=23, recovery=False, amp_frame=None, amp_dim=74,
+                                  key_positions=lambda p, r, q: jnp.broadcast_to(p[:, None], (len(p), 6, 3)))
+    assert learner.gait_span == frames and learner.amp_span == 28
+    weights = {"short": 1., "long": 1.}
+    for name, length, offset in (("short", frames, 0.), ("long", frames + 20, 100.)):
+        motion = clip(np.ones(length))
+        motion["dof_pos"][:] = offset + np.arange(length)[:, None]
+        motion["dof_vel"][:] = 50.
+        np.savez(tmp_path / (name + ".npz"), **motion)
+    (tmp_path / "sampling.json").write_text(json.dumps({"weights": weights}))
+    bank = GlobalGaitDemos(tmp_path, learner.sim, learner.gait_span)
+    sample = np.asarray(jax.jit(lambda k: bank.sample(k, 128))(jax.random.key(11)))
+    assert sample.shape == (128, frames, 67)
+    q = sample[..., 3]
+    short = q[:, 0] < 100.
+    assert short.any() and (~short).any()
+    np.testing.assert_array_equal(q[short, 0], 0.)
+    assert np.any(q[~short, 0] % 1. > .01)
+    np.testing.assert_allclose(np.diff(q, axis=1), 1., atol=2e-5)
+    np.testing.assert_allclose(sample[..., 26:49], 50., atol=1e-5)
+
+    disc = amp.init(jax.random.key(1), frames, hidden=(8,), frame_dim=zenbot_source_gait.AMP_DIM)
+    assert disc["net"][0]["w"].shape[0] == 67 * frames
+    history = jax.random.normal(jax.random.key(2), (4, learner.amp_span, 74 + 67))
+    style, floor = learner.rollout_gait_style(disc, history, None)
+    np.testing.assert_allclose(style, amp.recovery_style(disc, history[:, -frames:, 74:], 1.5, motion_train=True))
+    np.testing.assert_array_equal(floor, history[..., :74])
 
 
 def test_directional_windows_use_the_pelvis_heading_and_signed_displacement():

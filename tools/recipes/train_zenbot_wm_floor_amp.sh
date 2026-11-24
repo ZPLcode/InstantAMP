@@ -2,10 +2,10 @@
 # Start one WM + AMP + PPO learner from random weights.
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.."
-run=${1:?Usage: train_zenbot_wm_floor_amp.sh FRESH_RUN_DIRECTORY [--locomotion-i|--locomotion]}
+run=${1:?Usage: train_zenbot_wm_floor_amp.sh FRESH_RUN_DIRECTORY [--motion-train-gait|--locomotion-i|--locomotion]}
 mode=${2:-}
-if [[ $# -gt 2 || ( -n "$mode" && "$mode" != --locomotion && "$mode" != --locomotion-i ) ]]; then
-    echo "Usage: $0 FRESH_RUN_DIRECTORY [--locomotion-i|--locomotion]" >&2
+if [[ $# -gt 2 || ( -n "$mode" && "$mode" != --motion-train-gait && "$mode" != --locomotion && "$mode" != --locomotion-i ) ]]; then
+    echo "Usage: $0 FRESH_RUN_DIRECTORY [--motion-train-gait|--locomotion-i|--locomotion]" >&2
     exit 2
 fi
 iterations=${FLOOR_MAX_ITERATIONS:-10000}
@@ -24,14 +24,19 @@ if [[ -n "$mode" ]]; then
     num_envs=4096
     action_rate=-.03
     mirror_weight=.2
+    gait_args=(--gait_ls_scale "$ground_scale" --gait_amp_stride 3 --gait_source_commands 1)
+    if [[ "$mode" == --motion-train-gait ]]; then
+        gait_args=(--wm_global_gait 1 --gait_ls_scale 1.5 --gait_amp_stride 1
+                   --wm_gait_frames "${FLOOR_GAIT_FRAMES:-10}" --wm_side_share "${FLOOR_SIDE_SHARE:-.10}")
+    fi
     if [[ "$mode" == --locomotion-i ]]; then
         mirror_weight=0
     fi
     task_args=(
         --wm_getup_only 0 --wm_range_commands 1 --wm_gait_rewards 1 --wm_posture_and_tracking 1
         --wm_fixed_floor_envs 1 --reset_floor .4 --wm_tracking_scale 2
-        --prob_shove 0 --push 0 --gait_ls_scale "$ground_scale" --gait_amp_stride 3
-        --floor_stop_command_share .5 --gait_source_commands 1 --gait_mirror_weight "$mirror_weight" --cmd_fresh 0
+        --prob_shove 0 --push 0 "${gait_args[@]}"
+        --floor_stop_command_share .5 --gait_mirror_weight "$mirror_weight" --cmd_fresh 0
     )
     practice=.35
     horizon=28
@@ -43,7 +48,7 @@ sim_python=${SIM_PYTHON:-.venv/bin/python}
     --wm_floor_amp 1 --reference_weight 0 \
     --wm_reset_imag_share "${FLOOR_RESET_IMAG_SHARE:-.2}" \
     --wm_tempo_negatives "${FLOOR_TEMPO_NEGATIVES:-.25}" --wm_lift_gate "${FLOOR_LIFT_GATE:-.44}" --support_rsi "${FLOOR_SUPPORT_RSI:-$practice}" --log_dir "$run" \
-    --seed "${FLOOR_SEED:-42}" --max_iterations "$iterations" --minutes 0 --ckpt_iterations 500 --log_every 50 \
+    --seed "${FLOOR_SEED:-42}" --max_iterations "$iterations" --minutes 0 --ckpt_iterations "${FLOOR_CKPT_ITERATIONS:-500}" --log_every 50 \
     --num_envs "${FLOOR_NUM_ENVS:-$num_envs}" --env_steps 16 --ppo_len 16 --buffer_steps 100 --warmup_steps 64 \
     --pi_batch 384 --pi_updates 3 --pi_lr .0003 --wm_batch 512 --amp_batch 512 \
     --wm_only_iters 150 --wm_window 8 --horizon "$horizon" --amp_getup 1 --amp_w 2 \

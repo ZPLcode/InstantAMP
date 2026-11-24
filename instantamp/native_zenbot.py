@@ -64,6 +64,7 @@ class ZenbotNative:
         self.support_geoms={i:bodies[b] for i,b in enumerate(self.model.geom_bodyid) if b in bodies}
         self.support_load=np.zeros(len(names))
         self.flight = np.zeros(env.DECIMATION, dtype=bool)
+        self.foot_pair_force = np.zeros(env.DECIMATION)
 
         def control(actor, norm, ode, qpos, qvel, old, history, memory, delays, noise, command, elapsed=None):
             state = unflatten(qpos[None], qvel[None])
@@ -182,6 +183,7 @@ class ZenbotNative:
                 self.memory, self.delays, self.sample_noise(), self.command, elapsed)
         load_n = 0.
         self.support_load.fill(0.)
+        self.foot_pair_force.fill(0.)
         for substep, target in enumerate(np.asarray(targets)):
             q, v = d.qpos[7:], d.qvel[6:]
             torque = np.clip(zenbot.KP * (target - q) - zenbot.KD * v, -zenbot.EFFORT, zenbot.EFFORT)
@@ -189,6 +191,10 @@ class ZenbotNative:
             mj.mj_step(self.model, d)
             self.flight[substep] = True
             for k, contact in enumerate(d.contact):
+                if contact.geom1 in self.feet and contact.geom2 in self.feet:
+                    mj.mj_contactForce(self.model, d, k, self.force)
+                    self.foot_pair_force[substep] = max(self.foot_pair_force[substep], self.force[0])
+                    continue
                 other = contact.geom2 if contact.geom1==self.floor else contact.geom1 if contact.geom2==self.floor else -1
                 body = self.support_geoms.get(other)
                 if other >= 0 and (self.sim.mixed or self.command_gait):

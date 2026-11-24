@@ -643,6 +643,19 @@ The joint recipe assigns 1,638 of its 4,096 environments to fallen starts and th
 
 In this recipe, 25% of upright starts with a forward-dominant command use a standing pose with zero velocity. When a robot in the gait phase has a positive forward command and a measured forward speed above 0.45 m/s, its next command has a 25% chance of being zero. Commands last 2–4 seconds.
 
+For Motion Train's global locomotion AMP, run `bash tools/recipes/train_zenbot_wm_floor_amp.sh runs/zenbot_global_gait --motion-train-gait`. The gait discriminator reads 10 consecutive 50 Hz frames spanning 180 ms. Each frame contains body angular velocity (3), joint positions (23), joint velocities (23), and pelvis-relative foot, knee and hand positions (18), for 670 inputs per window. Set `FLOOR_GAIT_FRAMES=3` on the same command for a three-frame comparison.
+
+The first 20,000-iteration run used seed 42, 4,096 environments, and separate collectors for floor recovery (40%) and upright locomotion (60%). Each assessment can raise the forward command limit by 1 m/s, from 1 to 2 and then 3 m/s. Pure left and right sidesteps each account for 10% of newly sampled gait commands. Their speed is uniform between 0.15 and 0.40 m/s. Ankle spacing below 10 cm incurs the existing linear crossing penalty with a weight of −10.
+
+Use a fresh output directory to reproduce the first run.
+
+```bash
+FLOOR_MAX_ITERATIONS=20000 FLOOR_CKPT_ITERATIONS=2500 FLOOR_SEED=42 \
+  bash tools/recipes/train_zenbot_wm_floor_amp.sh runs/zenbot_global_gait20k_replay --motion-train-gait
+```
+
+The archived run reached a 2 m/s forward command limit and held the first rise in 47 of 55 trials. The final actor, full learner, evaluation results and native MuJoCo videos are available in the [20,000-iteration run](https://github.com/ZPLcode/InstantAMP/tree/zenbot-global-gait-cross10-20000-20261124/runs/zenbot_global_gait20k_cross10_seed42).
+
 The separate `ZenbotWalkRunRecoveryConfig` baseline uses 35% floor starts and 65% gait starts by default. Floor resets sample non-upright AMP motion states. After a fall, the recovery discriminator scores the robot through the ground phase and its transition to balance. Its ten poses span 0.54 s and include hand, knee and foot heights. The least-squares discriminator compares independently sampled expert and policy windows. During the first four seconds the low-height and tilt penalty is zero. At the end of this interval a balance check penalizes an unfinished recovery. A robot that remains down then receives one quarter of the original low-height and tilt cost. The single penalty for falling during gait still applies. Velocity rewards resume once the scoring interval ends and the robot is upright. Set `--recovery_amp_seconds 0` to select the legacy gait-style discriminator and height-gated rewards. The exported actor uses only its IMU, joint, previous-action and velocity-command history. Training and evaluation use zero lifting force.
 
 For the Wasserstein recovery discriminator, set `--recovery_amp_loss wasserstein`. It independently draws expert windows from a broad pelvis-height range shared with each policy window. The optional `--fall_push_speed` training setting adds random horizontal velocity disturbances to upright robots outside the recovery interval. The value gives the maximum disturbance in m/s.

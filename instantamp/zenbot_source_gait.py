@@ -6,8 +6,19 @@ import jax.numpy as jnp
 
 from . import env, zenbot
 from .rot import mv3, tr3
+from .zenbot_motion_train_obs import LAB_ORDER
 
 GAIT_STEPS = round(20. / env.DT)
+AMP_STEPS = 10
+AMP_DIM = 3 + 2 * len(LAB_ORDER) + 3 * len(zenbot.KEY_BODIES)
+
+
+def amp_frame(rotation, angular, joints, rates, offsets):
+    """Source discriminator order. Angular velocity and landmark offsets enter in world axes."""
+    inverse = tr3(rotation)
+    points = mv3(inverse[..., None, :, :], offsets)
+    return jnp.concatenate((mv3(inverse, angular), joints[..., LAB_ORDER], rates[..., LAB_ORDER],
+                            points.reshape(*joints.shape[:-1], -1)), axis=-1)
 
 
 def stand_reset(key, n):
@@ -27,7 +38,7 @@ def stand_reset(key, n):
     return q, jnp.pad(velocity, ((0, 0), (0, len(zenbot.DOF))))
 
 
-def sample_command(key, n, stage, *, stand_share=.05):
+def sample_command(key, n, stage, *, stand_share=.05, side_share=0.):
     mode, x, y, heading, turn = jax.random.uniform(key, (5, n))
     stand = mode < stand_share
     translate = mode >= stand_share + .20
@@ -35,6 +46,12 @@ def sample_command(key, n, stage, *, stand_share=.05):
     vx = jnp.where(translate, -1. + (cap + 1.) * x, 0.)
     vy = jnp.where(translate, y - .5, 0.)
     wz = jnp.where(~translate & ~stand, 2.2 * (2. * turn - 1.), 0.)
+    # Reserve equal probabilities from the translation budget. Pure sidesteps bypass heading control.
+    side = translate & (mode < stand_share + .20 + 2 * side_share)
+    left = mode < stand_share + .20 + side_share
+    vx = jnp.where(side, 0., vx)
+    vy = jnp.where(side, jnp.where(left, 1., -1.) * (.15 + .25 * y), vy)
+    translate = translate & ~side
     return env.Cmd(jnp.stack((vx, vy, wz), -1), jnp.pi * (2. * heading - 1.), translate, stand, jnp.full(n, 10.))
 
 
@@ -45,6 +62,14 @@ def command(cmd, rot):
     return jnp.where(cmd.is_standing[:, None], 0., velocity)
 
 
+def velocity_progress(cmd, actual):
+    speed = jnp.linalg.norm(cmd[..., :2], axis=-1)
+    aligned = (cmd[..., :2] * actual[..., :2]).sum(-1) / jnp.maximum(speed, 1e-6)
+    move = (speed >= .1) * jnp.tanh(aligned / .5)
+    turn = (jnp.abs(cmd[..., 2]) >= .1) * jnp.clip(1. - speed / .1, 0., 1.)
+    return move + turn * jnp.tanh(jnp.sign(cmd[..., 2]) * actual[..., 2] / .5)
+
+
 def tracking(state, cmd):
     _, rotation, velocity, angular, _, _ = state
     body = mv3(tr3(rotation), velocity)
@@ -53,11 +78,8 @@ def tracking(state, cmd):
     difference = body[:, :2] - cmd[:, :2]
     xy = jnp.exp(-jnp.square(difference).sum(-1) / .25)
     yaw = jnp.exp(-jnp.square(yaw_rate - cmd[:, 2]) / .25)
-    speed = jnp.linalg.norm(cmd[:, :2], axis=1)
-    aligned = (cmd[:, :2] * body[:, :2]).sum(-1) / jnp.maximum(speed, 1e-6)
-    move = (speed >= .1) * jnp.tanh(aligned / .5)
-    turn = (abs(cmd[:, 2]) >= .1) * jnp.clip(1. - speed / .1, 0., 1.) * jnp.tanh(jnp.sign(cmd[:, 2]) * yaw_rate / .5)
-    return upright * (2. * xy + 1.5 * yaw + .5 * (move + turn)), jnp.linalg.norm(difference, axis=-1)
+    actual = jnp.column_stack((body[:, :2], yaw_rate))
+    return upright * (2. * xy + 1.5 * yaw + .5 * velocity_progress(cmd, actual)), jnp.linalg.norm(difference, axis=-1)
 
 
 class Curriculum(NamedTuple):
@@ -70,8 +92,8 @@ class Curriculum(NamedTuple):
 
     @classmethod
     def empty(cls, n):
-        zero = jnp.int32(0)
-        return cls(zero, zero, zero, jnp.zeros((n, 6)), jnp.zeros(8), jnp.zeros(4))
+        # The collector donates each counter to JAX independently.
+        return cls(jnp.int32(0), jnp.int32(0), jnp.int32(0), jnp.zeros((n, 6)), jnp.zeros(8), jnp.zeros(4))
 
     def advance(self, command_x, error, active, terminated, timeout):
         # Only completed gait episodes enter the source's assessment, including failed ones.

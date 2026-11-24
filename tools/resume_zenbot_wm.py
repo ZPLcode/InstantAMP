@@ -19,6 +19,8 @@ def continuation_args(checkpoint, output, until, *, with_gait_rewards=False, wit
     config = json.loads((ckpt_dir.parent / "config.json").read_text())
     # Old joint-task runs saved the time constant of the former pelvis-speed reward.
     config.pop("gait_velocity_time_constant", None)
+    if config.get("wm_global_gait"):
+        config.setdefault("wm_gait_frames", 3)  # original global gait checkpoints used three frames
     if config.get("robot") != "zenbot23_walk_run_recovery" or not config.get("motion_train_wm"):
         raise ValueError("Expected the 234-input Zenbot world-model run configuration")
     if until <= saved["it"]:

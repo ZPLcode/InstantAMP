@@ -38,6 +38,11 @@ def test_continue_archived_i_profile_with_full_directory_on_another_volume(tmp_p
         continuation_args(full, output, 10000)
     with pytest.raises(ValueError, match="full learner"):
         continuation_args(policy, output, 12000)
+    config.update(wm_global_gait=1, wm_fixed_floor_envs=1, wm_range_commands=1,
+                  wm_gait_rewards=1, gait_source_commands=0, gait_amp_stride=1)
+    for settings, expected in (({}, 3), ({"wm_gait_frames": 10}, 10)):
+        (run / "config.json").write_text(json.dumps({**config, **settings}))
+        assert parse(continuation_args(full, output, 12000)).wm_gait_frames == expected
     policy.unlink()
     with pytest.raises(FileNotFoundError, match="companion policy"):
         continuation_args(full, output, 12000)

@@ -19,11 +19,11 @@ from scipy.spatial.transform import Rotation
 from instantamp import env, zenbot
 from instantamp.native_zenbot import ZenbotNative
 from instantamp.zenbot_gait_demos import command_motion_windows, source_command_speeds
-from tools.evaluate_zenbot_directions import direction_metrics, heading_kinematics
+from tools.evaluate_zenbot_directions import direction_metrics, foot_contact_metrics, heading_kinematics, startup_metrics
 from tools.evaluate_zenbot_fall_recovery import standing_pose
 from tools.evaluate_zenbot_four_skills import standing_metrics
 from tools.evaluate_zenbot_walk_recovery import score
-from tools.score_zenbot_gait import compare, gait_metrics
+from tools.score_zenbot_gait import compare, gait_metrics, joint_jitter
 
 NAMES = ("stand", "walk", "run", "back", "left", "right", "turn_left", "turn_right")
 FRAMES = 101  # Two full seconds between the first and final pose at 50 Hz.
@@ -101,6 +101,7 @@ def pose_style(model, data, poses):
     step = np.cos(yaw) * foot_delta[:, 0] + np.sin(yaw) * foot_delta[:, 1]
     angles = poses[:, 7:]
     stats = gait_metrics(angles)
+    stats.update(joint_jitter(angles))
     qtiles = stats.pop("joint_quantiles_deg")
     for prefix, suffix in (("upper_arm", "shoulder_pitch"), ("elbow", "elbow"), ("knee", "knee")):
         for side in ("left", "right"):
@@ -192,14 +193,17 @@ def evaluate(checkpoint, out, bank, seeds, render, recorded_speeds=False):
             delays = np.random.default_rng(seed).integers(3, 8, 5)
             player.reset(start, np.zeros(player.model.nv), delays, command=command)
             poses, speeds, loads, flight = [player.data.qpos.copy()], [], [], []
+            foot_forces = []
             for _ in range(round(6/env.DT)):
                 player.step()
                 poses.append(player.data.qpos.copy())
                 speeds.append(player.data.qvel.copy())
                 loads.append(player.support_load[:2].copy())
                 flight.append(player.flight.copy())
+                foot_forces.append(player.foot_pair_force.copy())
             poses, speeds, loads, flight = map(np.asarray, (poses, speeds, loads, flight))
             motion = direction_metrics(poses, loads, command, relative_active_speed=recorded_speeds)
+            motion.update(startup_metrics(poses, command), **foot_contact_metrics(foot_forces))
             if name in ("walk", "run"):
                 actual_gait = score(name, command[0], poses[1:], speeds, loads, flight, None)
                 motion["passed"] &= actual_gait["passed"]
