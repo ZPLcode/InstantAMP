@@ -10,8 +10,15 @@ import pytest
 
 from instantamp import zenbot
 from instantamp.zenbot_gait_demos import (
-    CommandGaitDemos, DIRECTION_CLIPS, GlobalGaitDemos, StraightGaitDemos, command_reset_bank,
-    directional_window_starts, reference_command_index, source_command_speeds, straight_window_starts,
+    DIRECTION_CLIPS,
+    CommandGaitDemos,
+    GlobalGaitDemos,
+    StraightGaitDemos,
+    command_reset_bank,
+    directional_window_starts,
+    reference_command_index,
+    source_command_speeds,
+    straight_window_starts,
 )
 from tools.prepare_zenbot import prepare_locomotion
 
@@ -88,7 +95,7 @@ def test_global_gait_uses_the_same_consecutive_frames_for_experts_and_rollouts(t
     np.testing.assert_allclose(np.diff(q, axis=1), 1., atol=2e-5)
     np.testing.assert_allclose(sample[..., 26:49], 50., atol=1e-5)
 
-    disc = amp.init(jax.random.key(1), frames, hidden=(8,), frame_dim=zenbot_source_gait.AMP_DIM)
+    disc = amp.init(jax.random.key(1), frames, hidden=(8,), frame_dim=zenbot_source_gait.amp_frame_width(learner.sim.J))
     assert disc["net"][0]["w"].shape[0] == 67 * frames
     history = jax.random.normal(jax.random.key(2), (4, learner.amp_span, 74 + 67))
     style, floor = learner.rollout_gait_style(disc, history, None)
@@ -138,7 +145,7 @@ def test_all_eight_amp_commands_draw_separate_contiguous_reference_windows(tmp_p
     np.testing.assert_allclose(short[..., 4], .25 * sample[..., 4], atol=1e-6)
     learner = InstantAMP.__new__(InstantAMP)
     learner.cfg = SimpleNamespace(command_gait_amp=True, gait_amp_stride=3)
-    learner.J = 1
+    learner.sim = SimpleNamespace(amp_joints=(0,))
     features = learner.gait_features(sample, commands)
     np.testing.assert_allclose(features[..., -3:], np.broadcast_to(commands[:, None], (40, 10, 3)))
     np.testing.assert_allclose(features[..., 1], 1 / env.DT)
@@ -231,41 +238,31 @@ def test_continuous_commands_match_motion_train_and_reach_the_actor():
     assert np.max(np.abs(actual[turn, 2])) > 2.15
 
 
+def test_global_gait_pure_sidestep_speed_range():
+    from instantamp.sim import Sim
+
+    sim = Sim.__new__(Sim)
+    sim.wm_global_gait = sim.wm_range_commands = True
+    sim.wm_side_share = .10
+    n = 8192
+    cmd = sim.sample_wm_command(jax.random.key(92), n)
+    rotation = jnp.broadcast_to(jnp.eye(3), (n, 3, 3))
+    velocity = np.asarray(sim.wm_velocity_command(cmd, rotation, jnp.ones(n, bool)))
+    lateral = velocity[:, 1]
+    for direction in (1, -1):
+        side = ~np.asarray(cmd.is_heading) & (direction * lateral > 0.)
+        np.testing.assert_allclose(side.mean(), .10, atol=.02)
+        np.testing.assert_array_equal(velocity[side][:, [0, 2]], 0.)
+        speed = direction * lateral[side]
+        assert speed.min() < .02 and .98 < speed.max() < 1.
+        np.testing.assert_allclose(np.quantile(speed, [.25, .50, .75]), [.25, .50, .75], atol=.05)
+
+
 def test_continuous_reference_matches_translation_during_heading_corrections():
     commands = jnp.array([[[.82, .12, 1.4], [-.37, .1, -1.3], [.04, -.22, 1.3]],
                           [[0., 0., .04], [0., 0., 0.], [2.45, -.2, .9]]])
     np.testing.assert_array_equal(reference_command_index(commands, zenbot.DIRECTIONAL_COMMANDS),
                                   [[1, 3, 5], [6, 0, 2]])
-
-
-def test_recorded_low_speed_comparison_requires_measured_lateral_progress():
-    from tools.evaluate_zenbot_directions import direction_metrics
-
-    t = .02 * np.arange(201)
-    poses = np.zeros((len(t), 30))
-    poses[:, 2:4] = [.69, 1.]
-    loads = np.full((len(t) - 1, 2), .5)
-    command = np.array([0., .17, 0.])
-    poses[:, 1] = .04 * t
-    assert direction_metrics(poses, loads, command)["passed"]
-    assert not direction_metrics(poses, loads, command, relative_active_speed=True)["passed"]
-    poses[:, 1] = .17 * t
-    assert direction_metrics(poses, loads, command, relative_active_speed=True)["passed"]
-
-
-def test_moving_turn_setpoint_can_depart_from_its_start():
-    from tools.evaluate_zenbot_directions import DT, direction_metrics
-
-    speed, yaw_rate = .7, .6
-    yaw = np.arange(201) * DT * yaw_rate
-    mid = (yaw[1:] + yaw[:-1]) / 2
-    poses = np.zeros((len(yaw), 30))
-    poses[:, 2] = .69
-    poses[:, 3] = np.cos(yaw / 2)
-    poses[:, 6] = np.sin(yaw / 2)
-    poses[1:, :2] = np.cumsum(DT * speed * np.column_stack((np.cos(mid), np.sin(mid))), axis=0)
-    result = direction_metrics(poses, np.ones((200, 2)), (speed, 0., yaw_rate))
-    assert result["passed"] and result["max_departure_m"] > .35
 
 
 def test_command_amp_can_reward_improvements_below_the_least_squares_cutoff():
@@ -281,13 +278,13 @@ def test_command_amp_can_reward_improvements_below_the_least_squares_cutoff():
     np.testing.assert_allclose(score(jnp.array(1.), True), 6., rtol=1e-6)
 
 
-def test_converter_uses_weight_configured_bank_and_manifest_joint_order(tmp_path):
+def test_converter_uses_sole8_with_configured_weights_and_manifest_joint_order(tmp_path):
     source = tmp_path / "source"
     cfg = source / "robolab/robolab/tasks/manager_based/amp/zenbot_amp_env_cfg.py"
     cfg.parent.mkdir(parents=True)
     cfg.write_text('MOTION_WEIGHTS = {"test": 2., "inactive": 0.}\n'
                    'cfg.motion_data_dir = os.path.join(ROBOLAB_ROOT_DIR, "data", "motions", "zenbot_amp_frax")\n')
-    bank = source / "robolab/data/motions/zenbot_amp_frax"
+    bank = source / "robolab/data/motions/zenbot_amp_frax_walk_sole8"
     bank.mkdir(parents=True)
     joints = np.arange(23)[None].repeat(30, axis=0)
     motion = dict(root_pos=np.zeros((30, 3)), root_rot=np.tile([1., 0., 0., 0.], (30, 1)),
@@ -307,3 +304,89 @@ def test_converter_uses_weight_configured_bank_and_manifest_joint_order(tmp_path
     pkl.write_bytes(b"corrupt")
     with pytest.raises(ValueError, match="Source hash"):
         prepare_locomotion(source, dest)
+
+
+def test_step_width_moves_narrow_feet_across_the_heading_and_preserves_sole_orientation():
+    import mujoco
+
+    from tools.zenbot_step_width import MAX_FOOT_SHIFT, StepWidth
+
+    widener = StepWidth()
+    # Face world +Y, with both legs adducted into a narrow stance.
+    pos = np.tile([0., 0., .72], (8, 1))
+    pos[:, 1] = np.arange(8) / 50.
+    quat = np.tile([2 ** -.5, 0., 0., 2 ** -.5], (8, 1))
+    joints = np.tile(zenbot.DEFAULT_Q, (8, 1))
+    joints[:, [1, 7]] = [-.14, .14]
+    widened, shift = widener.adjust(pos, quat, joints, 50.)
+    assert shift == MAX_FOOT_SHIFT
+    np.testing.assert_array_equal(widened[:, 12:], joints[:, 12:])
+
+    def soles(angles, i):
+        widener.data.qpos[:] = np.r_[pos[i], quat[i], angles[i]]
+        mujoco.mj_kinematics(widener.model, widener.data)
+        return widener.data.geom_xpos[widener.boxes].copy(), widener.data.geom_xmat[widener.boxes].copy()
+
+    for i in (0, len(joints) - 1):
+        before, old_rotation = soles(joints, i)
+        after, rotation = soles(widened, i)
+        np.testing.assert_allclose(after[:, 0] - before[:, 0], [-shift, shift], atol=.001)
+        np.testing.assert_allclose(after[:, 1:], before[:, 1:], atol=.004)
+        np.testing.assert_allclose(rotation, old_rotation, atol=.003)
+    assert widener.adjust(pos, quat, np.tile(zenbot.DEFAULT_Q, (8, 1)), 50.)[1] == 0.
+    assert widener.adjust(np.zeros_like(pos), quat, joints, 50.)[1] == 0.
+
+
+def test_footfall_correction_levels_loaded_feet_and_repairs_height_spike():
+    from tools.zenbot_step_width import StepWidth
+
+    rig = StepWidth()
+    pos = np.tile([0., 0., .70], (40, 1))
+    pos[:, 0] = np.arange(40) * .0008
+    pos[19, 2] += .012
+    quat = np.tile([1., 0., 0., 0.], (40, 1))
+    joints = np.tile(zenbot.DEFAULT_Q, (40, 1))
+    joints[:, [4, 10]] += .20
+    root, angles = rig.correct_footfalls(pos, quat, joints, 50.)
+    centers, rotations = rig.sole_poses(np.column_stack((root, quat, angles)))
+    tilt = np.arccos(np.clip(rotations[:, :, 2, 2], -1., 1.))
+    lowest = centers[:, :, 2] - (abs(rotations[:, :, 2, :]) * rig.model.geom_size[rig.boxes]).sum(axis=2)
+    assert np.max(tilt) < np.deg2rad(1.)
+    assert lowest.min() >= 0. and lowest.max() < .005
+    assert np.max(abs(np.diff(root[:, 2], n=2))) < .0016
+    np.testing.assert_array_equal(root[:, :2], pos[:, :2])
+
+
+def test_level_sole_only_after_heel_roll_and_release_at_toe_off():
+    from tools.zenbot_step_width import settled_support
+
+    # Other foot is already planted. Right foot swings close to the ground,
+    # touches down on its heel, settles, then leaves on its toe.
+    height = np.zeros((30, 2))
+    height[:5, 1] = .012
+    speed = np.zeros_like(height)
+    speed[:5, 1] = 1.4
+    gap = np.zeros_like(height)
+    gap[5:10, 1] = .085
+    gap[23:, 1] = .085
+    support = settled_support(height, gap, speed, 50.)
+    np.testing.assert_allclose(support[:, 0], 1.)
+    np.testing.assert_array_equal(support[:13, 1], 0.)
+    assert 0. < support[13, 1] < 1.
+    np.testing.assert_allclose(support[16:23, 1], 1.)
+    np.testing.assert_array_equal(support[23:, 1], 0.)
+
+
+def test_frame_repair_preserves_a_steady_ramp_and_bounds_an_isolated_jump():
+    from tools.zenbot_step_width import limit_step_change
+
+    velocity = np.full((39, 1), .08)
+    acceleration = np.full((38, 1), .02)
+    ramp = (.05 * np.arange(40))[:, None]
+    np.testing.assert_array_equal(limit_step_change(ramp, acceleration, max_step=velocity), ramp)
+    corrupted = ramp.copy()
+    corrupted[20] += .2
+    fixed = limit_step_change(corrupted, acceleration, max_step=velocity)
+    assert np.max(abs(np.diff(fixed, axis=0))) <= .080001
+    assert np.max(abs(np.diff(fixed, n=2, axis=0))) <= .020001
+    np.testing.assert_array_equal(fixed[[0, -1]], ramp[[0, -1]])

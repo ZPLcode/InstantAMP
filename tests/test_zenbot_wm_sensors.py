@@ -5,11 +5,20 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from instantamp import buffer, env, nets, zenbot
+from instantamp import buffer, env, nets, zenbot, zenbot_gait_rewards
 from instantamp.sim import Sim, unflatten
-from instantamp.train import InstantAMP
-from instantamp.zenbot_motion_train_obs import advance_sensors
-from instantamp.zenbot_wm_sensors import pd_targets, predicted_sensors, restore_sensors
+from instantamp.train import InstantAMP, parse
+from instantamp.training_sim import simulation_options
+from instantamp.zenbot_motion_train_obs import (
+    advance_sensors,
+    mirror_action,
+    mirror_observation,
+)
+from instantamp.zenbot_wm_sensors import (
+    pd_targets,
+    predicted_sensors,
+    restore_sensors,
+)
 
 
 def sensor_history(n):
@@ -98,12 +107,12 @@ def test_real_record_resamples_only_newest_command_and_backpropagates_through_wm
     n = 4
     xs = InstantAMP.__new__(InstantAMP)
     xs.B_im, xs.J = n, 23
-    xs.amp, xs.ppo, xs.recovery_clock = False, False, False
+    xs.amp, xs.ppo = False, False
     xs.cfg = SimpleNamespace(motion_train_wm=True, g1_style=False, num_envs=n, det_share=.5,
                              action_noise=0., imag_down=0., cmd_fresh=1., recovery_amp_seconds=4., mm_bf16='none', horizon=5,
                              imag_unroll=1, imag_remat='none', gamma=.99)
     sim = Sim.__new__(Sim)
-    sim.recovery, sim.mixed, sim.robot, sim.reference = False, True, zenbot, None
+    sim.mixed, sim.robot = True, zenbot
     sim.noisy_obs, sim.episode_steps, sim.recovery_amp_steps = True, 400, 200
     sim.q_soft, sim.sole_frame = None, (0,1)
     zeros = jnp.zeros(n)
@@ -111,7 +120,7 @@ def test_real_record_resamples_only_newest_command_and_backpropagates_through_wm
     sim.zenbot_motion_train_wm = True
     sim.view_state = lambda s: SimpleNamespace(height=s[0][:,2], soles=jnp.zeros((n,2)),
                                                clearance=jnp.ones((n,2)), kin=None)
-    sim.reward_terms = lambda s,s1,*args,reference_rate_weight,**kwargs: {'output': s1[4][:,0] * reference_rate_weight}
+    sim.reward_terms = lambda s, s1, *args, **kwargs: {'output': s1[4][:, 0]}
     sim.weighted = lambda terms: terms
     xs.termination = lambda clearance: zeros
     xs.termination_down = lambda *args: zeros
@@ -158,8 +167,54 @@ def test_real_record_resamples_only_newest_command_and_backpropagates_through_wm
     value, grad = jax.jit(jax.value_and_grad(loss))(pi)
     assert np.isfinite(value) and all(np.isfinite(x).all() for x in jax.tree.leaves(grad))
     assert float(jnp.linalg.norm(grad[0]['w'])) > 1.e-5
-    half, _ = xs.imagine(pi, wm, wb, {'raw': True}, {**start, 'reference_rate_weight': .5}, keys)
-    np.testing.assert_allclose(half, .5 * value, rtol=1e-5, atol=1e-7)
+
+
+def test_imagined_mirror_only_updates_actor_on_live_commanded_gait(zenbot23_motion_banks, monkeypatch):
+    # Forward, yaw, stop, recovering and already timing out. All remaining episodes end on step two.
+    n = 5
+    learner = InstantAMP.__new__(InstantAMP)
+    cfg = learner.cfg = parse(["--robot", zenbot.MIXED_TASK, "--num_envs", "32", "--horizon", "2", "--imag_unroll", "1"])
+    learner.sim = Sim(**simulation_options(vars(cfg)), physics=False, obs_noise=False)
+    learner.B_im, learner.J = n, 23
+    monkeypatch.setattr(nets, "wm_step", lambda wm, bounds, state, *args, **kwargs: state)
+    zeros = jnp.zeros(n)
+    command = jnp.array([[.5, 0., 0.], [0., 0., -.5], [0., 0., 0.], [.5, 0., 0.], [.5, 0., 0.]])
+    sensors = sensor_history(n)
+    obs = sensors.observation().at[:, 24:27].set(command)
+    q = jnp.tile(jnp.r_[0., 0., .70, 1., 0., 0., 0., zenbot.DEFAULT_Q], (n, 1))
+    hold = zenbot.SupportedStand.empty(n, env.DT)
+    previous = sensors.frames[:, -1, -23:]
+    start = dict(s_qpos=q, s_qvel=jnp.zeros((n, 29)), xi=jnp.zeros((n, 8)), bias=jnp.zeros_like(previous),
+                 obs=obs, imu_delay=sensors.delay_s, current_imu=sensors.current_imu, previous_imu=sensors.previous_imu,
+                 a_last=previous, a_ode=previous, c_obs=command, cmd=env.Cmd(command, zeros, zeros > 0, zeros > 0, zeros+8.),
+                 t=zeros.astype(int), was_up=jnp.ones(n, bool), recovery_left=jnp.array([0, 0, 0, 200, 0]),
+                 gait_world=jnp.array([True, True, True, False, True]), upright_steps=hold.upright_steps, loaded_feet=hold.loaded,
+                 step_history=zenbot_gait_rewards.StepHistory.empty(n)._asdict())
+    pi = nets.mlp_init(jax.random.key(4), (234, 16, 23))
+    keys = jax.random.split(jax.random.key(5), cfg.horizon)
+    limits = jnp.array([2, 2, 2, 2, 1])
+    norm = {"raw": True}
+
+    def penalty(params, x, episode_limits):
+        loss, stats = learner.imagine(params, None, None, norm, dict(start, obs=x, episode_limit=episode_limits), keys)
+        return stats["imag_gait_mirror_mse"], (loss + stats["G"], stats["imag_gait_mirror_fraction"])
+
+    def expected(params):
+        target = mirror_action(learner.act(params, norm, obs[:2], previous[:2]))
+        reflected = learner.act(params, norm, mirror_observation(obs[:2]), mirror_action(previous[:2]))
+        return jnp.square(reflected - jax.lax.stop_gradient(target)).mean()
+
+    evaluate = jax.jit(jax.value_and_grad(penalty, argnums=(0, 1), has_aux=True))
+    (mse, (added, fraction)), (grad, obs_grad) = evaluate(pi, obs, limits)
+    wanted, target_grad = jax.value_and_grad(expected)(pi)
+    np.testing.assert_allclose([mse, added, fraction], [wanted, .2 * wanted, 2 / (2*n)], atol=2e-6)
+    assert float(wanted) > 0
+    np.testing.assert_array_equal(obs_grad, 0.)
+    for actual, wanted_grad in zip(jax.tree.leaves(grad), jax.tree.leaves(target_grad), strict=True):
+        np.testing.assert_allclose(actual, wanted_grad, atol=2e-6)
+    (mse, (added, fraction)), grads = evaluate(pi, obs, jnp.ones_like(limits))
+    np.testing.assert_allclose([mse, added, fraction], 0., atol=1e-7)
+    assert all(np.all(np.asarray(g) == 0) for g in jax.tree.leaves(grads))
 
 
 def test_imagined_fall_preserves_event_and_has_posture_gradient_only_from_standing():
@@ -187,7 +242,7 @@ def test_imagined_fall_preserves_event_and_has_posture_gradient_only_from_standi
 def test_wm_gait_discriminator_sees_still_after_recovery_and_legacy_keeps_moving_filter():
     xs = InstantAMP.__new__(InstantAMP)
     xs.sim = Sim.__new__(Sim)
-    xs.sim.robot, xs.sim.recovery = zenbot, False
+    xs.sim.robot = zenbot
     n, ticks = 5, 10
     height = jnp.full((n, ticks, 3), .7).at[2, 5, 2].set(.1)
     rotation = jnp.broadcast_to(jnp.eye(3), (n, ticks, 3, 3))
@@ -202,6 +257,7 @@ def test_wm_gait_discriminator_sees_still_after_recovery_and_legacy_keeps_moving
 
 def test_extra_stand_is_one_independent_clip_and_preserves_source_sampling_weights(tmp_path):
     import json
+
     from instantamp import amp
 
     main = tmp_path / "ground"

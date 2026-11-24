@@ -1,31 +1,56 @@
-import pytest
-import numpy as np
+"""Contracts shared by the two integrated Zenbot training tasks."""
+
+import dataclasses
+
 import jax
 import jax.numpy as jnp
+import numpy as np
+import pytest
 
-from instantamp import amp, nets, zenbot
-from instantamp.train import ZenbotMotionTrainWMConfig, ZenbotWalkRunRecoveryConfig, parse, save_policy
+from instantamp import amp, nets, zenbot, zenbot_models
+from instantamp.inference import load
+from instantamp.train import Config, ZenbotJointConfig, parse, save_policy
 from instantamp.zenbot_motion_train_obs import motion_train_actor_mean
-from tools.train_zenbot_skill_actor import DenseActor
 
 
-def test_selecting_the_world_model_profile_keeps_the_deployment_and_learner_contract():
-    task = ["--robot", zenbot.MIXED_TASK]
-    cfg = parse(task + ["--motion_train_wm", "1"])
-    assert isinstance(cfg, ZenbotMotionTrainWMConfig)
-    assert cfg.ode == cfg.legged_real_ppo == 0 and cfg.ppo_frac == .1
-    assert cfg.init_policy == cfg.init_full == cfg.recovery_base_actor == ""
-    assert cfg.obs_clip == 10 and cfg.action_rate_l2_weight == -.015
-    assert cfg.amp_getup and cfg.amp_w > 0 and cfg.amp_gate == "none"
-    assert type(parse(task)) is type(parse(task + ["--motion_train_wm", "0"])) is ZenbotWalkRunRecoveryConfig
+def test_default_entry_point_uses_the_g1_combined_task():
+    config = parse([])
+    assert type(config) is Config
+    assert config.robot == "g1" and config.ode and config.amp_getup
+    assert 0 < config.reset_floor < 1
 
 
-def test_hybrid_getup_stage_starts_on_the_ground_and_keeps_the_same_actor():
-    cfg = parse(["--robot", zenbot.MIXED_TASK, "--motion_train_wm", "1", "--wm_getup_only", "1", "--wm_motion_replay", "1"])
-    assert (cfg.reset_floor, cfg.prob_shove, cfg.push) == (1., 0., 0)
-    assert cfg.ppo_frac == .1 and cfg.ppo_w == 1. and cfg.ode == 0
-    assert cfg.init_policy == cfg.init_full == ""
-    assert parse(["--robot", zenbot.MIXED_TASK, "--motion_train_wm", "1", "--ppo_frac", "0"]).ppo_frac == 0
+def test_models_share_the_training_recipe_and_reward_defaults():
+    default = parse(["--robot", zenbot_models.ZENBOT23.mixed_task])
+    assert isinstance(default, ZenbotJointConfig)
+    assert default.robot == zenbot_models.ZENBOT23.mixed_task
+    assert 0 < default.reset_floor < 1
+    assert default.amp_getup and default.wm_global_gait and default.wm_floor_amp
+    assert default.ppo_frac == .1 and default.ode == 0
+    assert default.obs_clip == 10 and default.wm_initial_gait_stage == 2
+    other = parse(["--robot", zenbot_models.ZENBOT26.mixed_task])
+    model_settings = {"robot", "walk_dir", "amp_dir", "floor_dir", "amp_getup_dir", "log_dir", "imag_gait_mirror_weight"}
+    first = dataclasses.asdict(default)
+    second = dataclasses.asdict(other)
+    assert {key for key in first if first[key] != second[key]} == model_settings
+    assert (default.imag_gait_mirror_weight, other.imag_gait_mirror_weight) == (.2, 0.)
+    for cfg in (default, other):
+        assert (cfg.wm_tracking_scale, cfg.gait_ls_scale, cfg.action_rate_l2_weight) == (1., 5., -.05)
+        assert cfg.walk_dir == cfg.amp_dir
+        assert cfg.floor_dir == cfg.amp_getup_dir
+        assert cfg.walk_dir != cfg.floor_dir
+
+
+@pytest.mark.parametrize("flags", [
+    ["--robot", zenbot.MIXED_TASK, "--wm_getup_only", "1"],
+    ["--robot", zenbot.MIXED_TASK, "--motion_train_wm", "0"],
+    ["--robot", "zenbot23_getup"], ["--robot", "zenbot26_getup"],
+    ["--robot", "g1_getup"], ["--robot", zenbot.MIXED_TASK, "--legged_real_ppo", "1"],
+    ["--robot", "g1", "--g1_style", "1"],
+])
+def test_separate_training_tasks_are_rejected(flags):
+    with pytest.raises(SystemExit):
+        parse(flags)
 
 
 def test_standing_prior_waits_for_an_upright_policy_window():
@@ -41,21 +66,34 @@ def test_standing_prior_waits_for_an_upright_policy_window():
     assert int(fitted["opt"]["t"]) == int(state["opt"]["t"]) + 1
 
 
-@pytest.mark.parametrize("flag,value", [("--ode", "1"), ("--ppo_frac", "1"), ("--ppo_frac", "-.1"), ("--legged_real_ppo", "1"),
-                                         ("--obs_clip", "3")])
+@pytest.mark.parametrize("flag,value", [("--ode", "1"), ("--ppo_frac", "1"), ("--ppo_frac", "-.1"),
+                                         ("--obs_clip", "3"), ("--amp_frames", "1"),
+                                         ("--recovery_amp_seconds", "0"), ("--imag_gait_mirror_weight", "-.1"),
+                                         ("--imag_gait_mirror_weight", "nan")])
 def test_incompatible_world_model_settings_fail_before_training(flag, value):
     with pytest.raises(ValueError):
         parse(["--robot", zenbot.MIXED_TASK, "--motion_train_wm", "1", flag, value])
 
 
-def test_source_mujoco_evaluator_matches_world_model_actor_with_learned_layer_norm(tmp_path):
-    layers = nets.mlp_init(jax.random.key(41), (234, 16, 12, 8, 23))
+@pytest.mark.parametrize("joints,width", [(23, 234), (26, 261)])
+def test_exported_dense_actor_preserves_normalization_and_actions(tmp_path, joints, width):
+    layers = nets.mlp_init(jax.random.key(41), (width, 16, 12, 8, joints))
     layers[0].update(ln_g=jnp.linspace(.6, 1.1, 16), ln_b=jnp.linspace(-.1, .2, 16))
-    norm = nets.rn_init(234)
-    norm["mean"] = jnp.linspace(-.5, .5, 234)
+    norm = nets.rn_init(width)
+    norm["mean"] = jnp.linspace(-.5, .5, width)
     path = tmp_path / "policy"
     save_policy(str(path), dict(avg=layers, pi=layers, obs_norm=norm), {"it": 0})
-    evaluate = DenseActor(path.with_suffix(".npz"), allow_layer_norm=True)
-    obs = np.random.default_rng(4).normal(size=(8, 234)).astype(np.float32)
-    np.testing.assert_allclose([evaluate(row) for row in obs], motion_train_actor_mean(layers, norm, obs),
+    actor, stats, ode = load(path.with_suffix(".npz"))
+    assert ode is None
+    obs = np.random.default_rng(4).normal(size=(8, width)).astype(np.float32)
+    expected = np.clip((obs - norm["mean"]) / np.sqrt(norm["var"] + .01**2), -10, 10)
+    for index, layer in enumerate(layers):
+        expected = np.asarray(expected) @ np.asarray(layer["w"]) + np.asarray(layer["b"])
+        if index < len(layers) - 1:
+            if "ln_g" in layer:
+                centered = expected - expected.mean(axis=-1, keepdims=True)
+                variance = (centered**2).mean(axis=-1, keepdims=True)
+                expected = centered / np.sqrt(variance + 1e-6) * layer["ln_g"] + layer["ln_b"]
+            expected = np.maximum(0, expected) + np.expm1(np.minimum(0, expected))
+    np.testing.assert_allclose(motion_train_actor_mean(actor, stats, obs), expected,
                                atol=2e-6, rtol=2e-6)

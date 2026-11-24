@@ -57,6 +57,24 @@ def test_joint_costs_and_foot_yaw_crossing_and_recovery_masks():
         np.testing.assert_allclose(terms[key], [val, 0.], rtol=1e-5)
 
 
+def test_global_gait_crossing_penalizes_spacing_below_15_cm(zenbot23_motion_banks):
+    spacing = jnp.array([-.02, .12, .15, .18, .12])
+    n = len(spacing)
+    sim = Sim(n, robot=zenbot.MIXED_TASK, physics=False, zenbot_motion_train_wm=True,
+              wm_floor_amp=True, wm_global_gait=True, wm_gait_rewards=True)
+    qpos = jnp.broadcast_to(jnp.r_[jnp.array([0., 0., .68, 1., 0., 0., 0.]), zenbot.DEFAULT_Q], (n, 30))
+    state = unflatten(qpos, jnp.zeros((n, 29)))
+    feet = sim.view_state(state).feet
+    positions = jnp.zeros_like(feet.positions).at[:, 0, 1].set(spacing)
+    zeros = jnp.zeros(n)
+    _, terms = rewards.reward_terms(
+        state, feet._replace(positions=positions), jnp.zeros((n, 3)), state[5], state[5], sim.q_soft,
+        jnp.ones((n, 2), bool), zeros, zeros, jnp.zeros((n, 2)), rewards.StepHistory.empty(n),
+        jnp.array([True, True, True, True, False]), min_ankle_spacing=sim.min_ankle_spacing)
+    np.testing.assert_allclose(sim.weights["feet_crossing"] * terms["feet_crossing"],
+                               [-1.7, -.3, 0., 0., 0.], atol=1e-6)
+
+
 def test_sound_suppression_gates_each_foot_and_caps_before_summing():
     n = 4
     q = jnp.zeros((n, 23))
@@ -75,7 +93,7 @@ def test_sound_suppression_gates_each_foot_and_caps_before_summing():
     np.testing.assert_array_equal(jax.grad(lambda a: cost(a).sum())(acc), [[-6., 0.], [-6., 0.], [0., 0.], [0., 0.]])
 
 
-def test_foot_vertical_acceleration_matches_mujoco_com_jacobians_at_both_ends_of_substep(monkeypatch):
+def test_foot_vertical_acceleration_matches_mujoco_com_jacobians_at_both_ends_of_substep(zenbot23_motion_banks, monkeypatch):
     # The kinematics check starts from a prescribed pose and needs no directional reset clips.
     monkeypatch.setattr("instantamp.zenbot_gait_demos.command_reset_bank", lambda *args, **kwargs: {})
     sim = Sim(1, robot=zenbot.MIXED_TASK, physics=False, zenbot_motion_train_wm=True,

@@ -78,4 +78,7 @@ def step(params, grads, state, mask, lr, betas=(0.9, 0.999), eps: float = 1e-8, 
 def ema(avg, live, decay: float, first):
     """Exponential moving average of the weights, avg + (1 - decay) * (live - avg), as torch's AveragedModel with
     get_ema_multi_avg_fn. On the first update (`first` is True) it copies the live weights instead."""
-    return jax.tree.map(lambda a, l: jnp.where(first, l, a + (1 - decay) * (l - a)), avg, live)
+    def update(average, current):
+        return jnp.where(first, current, average + (1 - decay) * (current - average))
+
+    return jax.tree.map(update, avg, live)

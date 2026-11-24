@@ -14,7 +14,12 @@ import mujoco  # noqa: E402
 import numpy as np  # noqa: E402
 
 from instantamp import amp, env  # noqa: E402
-from instantamp.sim import VelKinematics, build_scene, collider_points, unflatten  # noqa: E402
+from instantamp.sim import (  # noqa: E402
+    VelKinematics,
+    build_scene,
+    collider_points,
+    unflatten,
+)
 
 
 def random_state(m, rng):

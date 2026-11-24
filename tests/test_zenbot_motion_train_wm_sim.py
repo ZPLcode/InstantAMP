@@ -11,6 +11,8 @@ import pytest
 from instantamp import env, zenbot
 from instantamp.sim import Sim, unflatten
 
+pytestmark = pytest.mark.usefixtures("zenbot23_motion_banks")
+
 
 class CpuState(NamedTuple):
     qpos: object
@@ -49,7 +51,8 @@ def native_substeps(sim, world, state, targets, assist, fresh):
         for target in np.asarray(targets[i]).reshape(4,23):
             d.ctrl[:]=zenbot.actuator_ctrl(d.qpos[7:],d.qvel[6:],target)
             mujoco.mj_step(sim.m,d)
-        pos.append(d.qpos.copy());vel.append(d.qvel.copy())
+        pos.append(d.qpos.copy())
+        vel.append(d.qvel.copy())
     # Contacts do not enter these six terms; termination and timeout use the real post-step pelvis state.
     zeros=jnp.zeros(sim.N)
     return state.replace(qpos=jnp.asarray(pos),qvel=jnp.asarray(vel)),jnp.zeros((sim.N,2)),zeros,zeros.astype(bool),None,None
@@ -109,7 +112,8 @@ def test_world_model_and_real_rewards_use_body_heading_and_recovery_clock():
     q=jnp.tile(jnp.r_[jnp.array([0,0,.69,np.sqrt(.5),0,0,np.sqrt(.5)]),jnp.asarray(zenbot.DEFAULT_Q)],(4,1))
     q=q.at[3,2].set(.25)
     v=jnp.zeros((4,29)).at[:,1].set(1.).at[:,5].set(.6)
-    state=unflatten(q,v);view=sim.view_state(state)
+    state = unflatten(q, v)
+    view = sim.view_state(state)
     cmd=jnp.tile(jnp.array([1.,0.,.6]),(4,1)).at[1,:].set(jnp.array([.5,0.,.1]))
     action=jnp.ones((4,23))*.5
     down=jnp.array([False,False,False,True])
@@ -126,7 +130,8 @@ def test_world_model_and_real_rewards_use_body_heading_and_recovery_clock():
 
 def test_wm_mixes_native_cold_openings_with_moving_recovery_frames():
     from scipy.spatial.transform import Rotation
-    from instantamp.evaluate import fallen_starts
+
+    from instantamp.zenbot_trials import fallen_starts
 
     sim = simulator(n=12288, prob_shove=.2)
     sim.reset_floor = .35

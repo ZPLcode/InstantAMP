@@ -1,56 +1,25 @@
-"""The floor-only hybrid learner rewards a supported stance and samples independent recovery windows."""
+"""Recovery and locomotion rewards for the joint Zenbot policy."""
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from test_zenbot_motion_train_wm_sim import CpuState
 
-from instantamp import amp, env, zenbot
+from instantamp import amp, buffer as rb, env, zenbot
 from instantamp.sim import Sim, unflatten
 from instantamp.train import InstantAMP, parse
-from instantamp import buffer as rb
-from instantamp.zenbot_wm_reference import PhysicalRecoveryReference
-from test_zenbot_motion_train_wm_sim import CpuState, native_substeps
 
 
-def test_all_resets_are_perturbed_ground_openings_even_after_episode_expiry(monkeypatch):
-    def forbidden(*args):
-        pytest.fail("Floor-only AMP must not load recorded motor trajectories")
-
-    monkeypatch.setattr(PhysicalRecoveryReference, "__init__", forbidden)
-    sim = Sim(256, robot=zenbot.MIXED_TASK, physics=False, zenbot_motion_train_wm=True,
-              zenbot_wm_getup_only=True, wm_floor_amp=True)
-    sim.dx = CpuState(jnp.zeros(30), jnp.zeros(29), jnp.zeros(29))
-    state = sim.init(jax.random.key(13))
-    for seed in (37, 59):
-        state = sim._reset(state, jnp.ones(sim.N, bool), jax.random.key(seed))
-        (q, v, up), (clips, frames) = sim._fresh(jax.random.key(seed), state.world, return_source=True)
-        assert len(set(np.asarray(clips))) == 11
-        np.testing.assert_array_equal(frames, 0)
-        np.testing.assert_array_equal(up, False)
-        np.testing.assert_array_equal(v[:, 2:], 0.)
-        assert np.all(np.asarray(q)[:, 2] < .5)
-        np.testing.assert_array_equal(state.was_up, False)
-        np.testing.assert_array_equal(state.t, 0)
-        np.testing.assert_array_equal(state.assist, 0.)
-        assert state.reference_clip is None and state.motion_train_sensors.observation().shape == (256, 234)
-
-
-def test_floor_amp_requires_online_motion_and_physical_rollouts():
-    flags = ["--robot", zenbot.MIXED_TASK, "--motion_train_wm", "1", "--wm_getup_only", "1",
-             "--wm_floor_amp", "1", "--wm_only_iters", "150", "--ppo_frac", ".1"]
+def test_joint_floor_amp_requires_online_motion_and_physical_rollouts():
+    with pytest.raises(SystemExit):
+        parse(["--robot", zenbot.MIXED_TASK, "--wm_motion_replay", "1"])
     with pytest.raises(ValueError, match="Floor-opening AMP"):
-        parse(flags + ["--wm_motion_replay", "1"])
-    with pytest.raises(ValueError, match="motion-rate ramp"):
-        parse(flags + ["--wm_rate_ramp", "2500"])
-    learner = InstantAMP.__new__(InstantAMP)
-    learner.cfg = parse(flags + ["--reference_weight", "18", "--wm_rate_ramp", "2500"])
-    steps = jnp.array([0, 2500, 3750, 5000, 10000])
-    np.testing.assert_allclose(learner.reference_rate_weight(steps), [0., 0., .5, 1., 1.])
+        parse(["--robot", zenbot.MIXED_TASK, "--ppo_frac", "0"])
 
 
 @pytest.mark.parametrize("posture", [False, True])
-def test_joint_floor_amp_exposes_eight_commands_and_uses_measured_support_to_release_locomotion(posture):
+def test_joint_floor_amp_exposes_eight_commands_and_uses_measured_support_to_release_locomotion(zenbot23_motion_banks, posture):
     sim = Sim(256, physics=False, robot=zenbot.MIXED_TASK, zenbot_motion_train_wm=True,
               wm_floor_amp=True, wm_lift_gate=.44, support_rsi=.35, reset_floor=.5, wm_posture_and_tracking=posture,
               randomize_world=False, obs_noise=False, push=False, prob_shove=0.)
@@ -61,7 +30,6 @@ def test_joint_floor_amp_exposes_eight_commands_and_uses_measured_support_to_rel
     if posture:
         expected.update(("flat_orientation_l2", "slow_speed_base_height_l2"))
     assert set(sim.weights) == expected and (sim.weights[lin], sim.weights[ang]) == (2., 1.5)
-    assert sim.assist_newtons == 0. and sim.reference is None and not sim.reference_reward
     assert .25 < np.mean(s.down) < .5 and np.all(s.was_up[sim.wm_gait_worlds])
     assert set(map(tuple, np.asarray(s.cmd.vel))) == set(map(tuple, zenbot.DIRECTIONAL_COMMANDS))
     assert np.all((s.cmd.time_left >= 2.) & (s.cmd.time_left <= 4.))
@@ -105,7 +73,7 @@ def test_joint_floor_amp_exposes_eight_commands_and_uses_measured_support_to_rel
     np.testing.assert_allclose(scores[ang], (.5/.7)*np.exp(-4.), rtol=1e-6)
 
 
-def test_fixed_joint_collectors_keep_their_tasks_across_resets_and_double_tracking():
+def test_fixed_joint_collectors_keep_their_tasks_across_resets_and_double_tracking(zenbot23_motion_banks):
     sim = Sim(256, physics=False, robot=zenbot.MIXED_TASK, zenbot_motion_train_wm=True,
               wm_floor_amp=True, wm_range_commands=True, wm_posture_and_tracking=True,
               wm_gait_rewards=True, wm_lift_gate=.44, support_rsi=.35, reset_floor=.4,
@@ -126,7 +94,7 @@ def test_fixed_joint_collectors_keep_their_tasks_across_resets_and_double_tracki
         np.testing.assert_array_equal(state.recovery_left > 0, floor)
 
 
-def test_joint_task_samples_ground_to_stance_requests():
+def test_joint_task_samples_ground_to_stance_requests(zenbot23_motion_banks):
     sim = Sim(256, physics=False, robot=zenbot.MIXED_TASK, zenbot_motion_train_wm=True,
               wm_floor_amp=True, wm_lift_gate=.44, support_rsi=.35, reset_floor=2/3,
               floor_stop_command_share=.5,
@@ -142,7 +110,7 @@ def test_joint_task_samples_ground_to_stance_requests():
     assert state.motion_train_sensors.observation().shape == (sim.N, 234)
 
 
-def test_range_forward_starts_include_standing_with_live_commands(monkeypatch):
+def test_range_forward_starts_include_standing_with_live_commands(zenbot23_motion_banks, monkeypatch):
     # This reset only needs standing and forward walking clips.
     monkeypatch.setattr("instantamp.zenbot_gait_demos.source_command_speeds", lambda _: zenbot.DIRECTIONAL_COMMANDS[:2])
     sim = Sim(1024, physics=False, robot=zenbot.MIXED_TASK, zenbot_motion_train_wm=True,
@@ -183,22 +151,7 @@ def test_walk_to_stop_only_changes_expired_commands_while_moving():
     assert np.all((sample.time_left[stopped] >= 2.) & (sample.time_left[stopped] < 4.))
 
 
-def test_amp_led_ground_practice_draws_unassisted_down_poses_on_both_sides_of_the_gate():
-    sim = Sim(512, robot=zenbot.MIXED_TASK, physics=False, zenbot_motion_train_wm=True,
-              zenbot_wm_getup_only=True, wm_floor_amp=True, wm_lift_gate=.44, support_rsi=.35)
-    (qpos, qvel), (clip, frame, _) = sim._wm_floor_start(jax.random.key(689), sim.floor)
-    middle = np.asarray(frame) > 0
-    z = np.asarray(qpos[:, 2])
-    assert sim.reference is None and set(sim.weights) == {"lift", "stand", "action_rate"}
-    assert .28 < middle.mean() < .42
-    assert len(set(np.asarray(clip)[~middle])) == 11
-    assert (z[~middle] < .44).all() and (z[middle] <= zenbot.UP_HEIGHT).all()
-    assert (z[middle] < .44).any() and (z[middle] > .54).any()
-    np.testing.assert_array_equal(qvel[:, 2:], 0.)
-    assert not sim.assist_newtons
-
-
-def test_joint_floor_practice_includes_moving_low_support_and_cold_openings():
+def test_joint_floor_practice_includes_moving_low_support_and_cold_openings(zenbot23_motion_banks):
     sim = Sim(512, robot=zenbot.MIXED_TASK, physics=False, zenbot_motion_train_wm=True,
               wm_floor_amp=True, wm_lift_gate=.44, support_rsi=.35, reset_floor=2/3)
     (q, v), (clip, frame, _) = sim._wm_floor_start(jax.random.key(689), sim.floor)
@@ -259,140 +212,6 @@ def test_quiet_supported_stand_beats_a_jump_and_a_floor_pose():
         np.testing.assert_array_equal(low, 0.)
 
 
-def test_amp_first_lift_waits_for_height_and_only_pays_for_progress():
-    sim = Sim(1, robot=zenbot.MIXED_TASK, physics=False, zenbot_motion_train_wm=True,
-              zenbot_wm_getup_only=True, wm_floor_amp=True, wm_lift_gate=.44)
-    assert sim.reference is None and set(sim.weights) == {"lift", "stand", "action_rate"}
-    def terms(z0, z1, joints=None, support=0.):
-        p = jnp.array([[0., 0., z0]])
-        q = sim.floor_stand_joints[None, :] if joints is None else joints
-        v, actions = jnp.zeros_like(p), jnp.zeros_like(q)
-        state = (p, jnp.eye(3)[None], v, v, q, actions)
-        next_state = (p.at[:, 2].set(z1), *state[1:])
-        return sim.weighted(sim.reward_terms(
-            state, next_state, sim.view_state(next_state).kin, actions, actions, v, jnp.array([False]),
-            jnp.zeros(1), jnp.ones((1, 2)), jnp.zeros(1), sim.q_soft, stand_blend=support))
-    for a,b in ((.15,.32), (.41,.44), (.51,.51), (.6,.75)):
-        np.testing.assert_allclose(terms(a,b)["lift"], 0.)
-        np.testing.assert_allclose(terms(a,b)["stand"], 0.)
-    fast = terms(.34,.67)["lift"]
-    slow = sum(terms(a,b)["lift"] for a,b in ((.34,.44),(.44,.48),(.48,.54),(.54,.67)))
-    np.testing.assert_allclose(fast, .5)
-    np.testing.assert_allclose(slow, fast, atol=1e-6)
-    np.testing.assert_allclose(fast + terms(.67,.34)["lift"], 0.)
-    quiet = terms(zenbot.RISE_HEIGHT, zenbot.RISE_HEIGHT, support=1.)["stand"]
-    np.testing.assert_allclose(quiet, sim.weights["stand"] * env.DT, atol=1e-6)
-    crooked = sim.floor_stand_joints[None, :].at[:, 2:].add(.6)
-    assert np.all(terms(.68,.68,crooked,support=1.)["stand"] < quiet)
-    grad = jax.vmap(jax.grad(lambda h: zenbot.lift_progress(h,.44)))(jnp.array([.3,.44,.5,.58,.71]))
-    assert grad[2] > 0.
-    np.testing.assert_allclose(grad[jnp.array([0,1,3,4])], 0., atol=1e-5)
-
-
-def test_floor_pose_score_keeps_the_assigned_clock_until_the_motion_ends(monkeypatch):
-    def forbidden(*args):
-        pytest.fail("Floor recovery uses only kinematic AMP references")
-
-    monkeypatch.setattr(PhysicalRecoveryReference, "__init__", forbidden)
-    sim = Sim(16, robot=zenbot.MIXED_TASK, physics=False, zenbot_motion_train_wm=True,
-              zenbot_wm_getup_only=True, wm_floor_amp=True, reference_weight=18.)
-    sim.dx = CpuState(jnp.zeros(30), jnp.zeros(29), jnp.zeros(29))
-
-    def physics(*args):
-        data, contact, hits, touch, _, acc = native_substeps(sim, *args)
-        loads = jnp.zeros((sim.N, len(zenbot.SUPPORT_BODIES)))
-        return data, contact, hits, touch, loads, acc
-
-    sim.physics = physics
-    s = sim.init(jax.random.key(15))
-    key = jax.random.key(98)
-    s = sim._reset(s, jnp.ones(sim.N, bool), key)
-    _, (clip, frame) = sim._fresh(jax.random.split(key, 3)[0], s.world, return_source=True)
-    np.testing.assert_array_equal(clip, s.reference_clip)
-    np.testing.assert_array_equal(frame, s.t)
-    assert s.motion_train_sensors.observation().shape == (16, 234)
-
-    actions = jnp.zeros((sim.N, sim.J))
-    post, transition = sim.step(s, actions)
-    def rewarded(tr):
-        return tr.parts[:, sim.terms.index("motion_reference")] / (.02 * sim.weights["motion_reference"])
-    def expected_score(ref, tr, clip, frame, rate_weight=1.):
-        current = unflatten(tr.qpos1, tr.qvel1)
-        rate = ref.motion_rate(current[0], current[1], current[4], tr.qpos[..., :3], tr.qpos[..., 7:])
-        return ref.score(sim.reference_pose(current), clip, frame, smooth_l1=True, rates=rate, rate_weight=rate_weight)
-
-    np.testing.assert_allclose(rewarded(transition), expected_score(sim.reference, transition, clip, s.t + 1), atol=1e-6)
-    for share in (0., .5):
-        _, adjusted = sim.step(s, actions, reference_rate_weight=share)
-        np.testing.assert_array_equal(adjusted.qpos1, transition.qpos1)
-        expected = expected_score(sim.reference, transition, clip, s.t + 1, rate_weight=share)
-        np.testing.assert_allclose(rewarded(adjusted), expected, atol=1e-6)
-        assert np.all(rewarded(adjusted) > rewarded(transition))
-    _, at_end = sim.step(s._replace(t=sim.reference.lengths[clip] - 1), actions)
-    stand_ref = sim.standing_reference
-    terminal = expected_score(stand_ref, at_end, jnp.zeros_like(clip), stand_ref.lengths[0] // 2, at_end.stats["stand_blend"])
-    np.testing.assert_allclose(rewarded(at_end), terminal, atol=1e-6)
-    assert np.all(np.asarray(terminal) < 0.)
-    # At the opening, the fallen pose matches its own clip. Once late, it must get credit for moving.
-    assert np.all(expected_score(sim.reference, transition, clip, s.t + 1, rate_weight=0.) > terminal)
-    assert np.all(terminal > expected_score(stand_ref, at_end, jnp.zeros_like(clip), stand_ref.lengths[0] // 2))
-    post_fall, falling = sim.step(s._replace(was_up=jnp.ones(sim.N, bool)), actions)
-    np.testing.assert_array_equal(post_fall.reference_clip, clip)
-    np.testing.assert_allclose(rewarded(falling), rewarded(transition), atol=1e-6)
-    _, after_fall = sim.step(post_fall, actions)
-    expected = expected_score(sim.reference, after_fall, clip, post_fall.t + 1)
-    np.testing.assert_allclose(rewarded(after_fall), expected, atol=1e-6)
-    target = sim.reference.at(clip, s.t)
-    np.testing.assert_allclose(sim.reference.score(target, clip, s.t, smooth_l1=True), 1., atol=1e-6)
-    assert np.all(sim.reference.score(target.at[:, 0].add(1.), clip, s.t, smooth_l1=True) < 0.)
-    hold = zenbot.SupportedStand.empty(sim.N, .02)
-    yes = jnp.ones(sim.N, bool)
-    for _ in range(50):
-        hold, blend = sim.advance_floor_stand(hold, yes, yes, clip, s.t)
-    np.testing.assert_array_equal(blend, 0.)
-    for _ in range(50):
-        hold, blend = sim.advance_floor_stand(hold, yes, yes, clip, sim.reference.lengths[clip])
-    np.testing.assert_array_equal(blend, 1.)
-
-    with np.load(sim.standing_reference.files[0]) as data:
-        mid = len(data["dof_pos"]) // 2
-        qpos = np.r_[data["root_pos"][mid], data["root_quat"][mid][[3, 0, 1, 2]], data["dof_pos"][mid]]
-    qpos = jnp.broadcast_to(qpos, (sim.N, len(qpos)))
-    def standing_reward(q, blend):
-        state = unflatten(q, jnp.zeros_like(s.data.qvel))
-        end = sim.reference.lengths[clip]
-        return sim.reward_terms(state, state, sim.view_state(state).kin, actions, actions, s.c_obs,
-                                jnp.zeros(sim.N, bool), jnp.zeros(sim.N), jnp.ones((sim.N, 2)),
-                                jnp.zeros(sim.N), sim.q_soft, clip=clip, step=end, stand_blend=blend)["motion_reference"]
-
-    standing = standing_reward(qpos, 1.)
-    np.testing.assert_allclose(standing, 1., atol=.001)
-    np.testing.assert_allclose(standing_reward(qpos, .4), standing, atol=.001)
-    np.testing.assert_allclose(standing_reward(qpos, 0.), standing, atol=.001)
-    assert np.all(standing_reward(qpos.at[:, 20:].add(1.), 1.) < standing)
-
-
-def test_timed_reference_distinguishes_fast_kicks_and_sliding_at_the_same_pose():
-    from pathlib import Path
-    from instantamp.rot import quat_to_mat
-
-    ref = zenbot.RecoveryReference(Path("data/zenbot23_walk_run_recovery/recovery"), None,
-                                   coupled_pose=True, with_rates=True)
-    with np.load(ref.files[0]) as data:
-        p, q = data["root_pos"], data["dof_pos"]
-        rot = quat_to_mat(data["root_quat"][1:, [3, 0, 1, 2]])
-    frames = jnp.arange(1, len(q))
-    rates = ref.motion_rate(p[1:], rot, q[1:], p[:-1], q[:-1])
-    pose = ref.at(0, frames)
-    def score(rate):
-        return ref.score(pose, 0, frames, smooth_l1=True, rates=rate)
-    np.testing.assert_allclose(score(rates), 1., atol=1e-6)
-    assert np.all(score(rates.at[:, 3].add(10.)) < .95)
-    assert np.all(score(rates.at[:, 0].add(1.)) < .7)
-    moving = rates.at[:, 0].add(1.)
-    np.testing.assert_allclose(ref.score(pose, 0, frames, smooth_l1=True, rates=moving, rate_weight=0.), 1.)
-
-
 def test_negative_windows_change_only_tempo_and_preserve_clip_boundaries():
     demos = amp.Demos.__new__(amp.Demos)
     demos.window = 28
@@ -430,7 +249,10 @@ def test_negative_windows_change_only_tempo_and_preserve_clip_boundaries():
 def test_upright_mirror_uses_valid_supported_rows_and_one_sided_gradient():
     from types import SimpleNamespace
 
-    from instantamp.zenbot_motion_train_obs import mirror_action, mirror_observation
+    from instantamp.zenbot_motion_train_obs import (
+        mirror_action,
+        mirror_observation,
+    )
 
     learner = InstantAMP.__new__(InstantAMP)
     learner.cfg = SimpleNamespace(motion_train_wm=True, action_noise=.8, ppo_clip=.2, gait_mirror_weight=.2)
@@ -460,7 +282,7 @@ def test_upright_mirror_uses_valid_supported_rows_and_one_sided_gradient():
     assert float(value) == 0 and all(np.all(np.asarray(g) == 0) for g in jax.tree.leaves(grads))
 
 
-def test_upright_mirror_traces_the_complete_policy_iteration():
+def test_upright_mirror_traces_the_complete_policy_iteration(zenbot23_motion_banks):
     if jax.devices()[0].platform not in ("gpu", "cuda"):
         pytest.skip("The physical MuJoCo Warp collector requires CUDA")
     cfg = parse(["--robot", zenbot.MIXED_TASK, "--motion_train_wm", "1", "--wm_floor_amp", "1",
@@ -471,3 +293,4 @@ def test_upright_mirror_traces_the_complete_policy_iteration():
     carry = learner.init(jax.random.PRNGKey(42))
     _, stats = jax.eval_shape(learner.pi_iter, carry)
     assert stats["gait_mirror_mse"].shape == ()
+    assert stats["imag_gait_mirror_mse"].shape == stats["imag_gait_mirror_fraction"].shape == ()

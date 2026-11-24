@@ -129,10 +129,6 @@ class Demos:
     """The frame features of all demo clips, and the start of every window of `frames` frames that stays inside a clip."""
 
     def __init__(self, directory: str, sim, frames: int, *, per_clip=False, frame_fn=None, extra_clip=None):
-        from . import g1_getup
-        self.g1_bank = g1_getup.load_reference(directory) if sim.robot is g1_getup else None
-        self.amp_frame = sim.amp_frame
-        self.frame_fn = frame_fn
         files = [str(directory)] if Path(directory).is_file() else sorted(glob.glob(os.path.join(directory, "*.npz")))
         assert files, f"no clips in {directory} (bash tools/download_data.sh)"
         source_names = [Path(f).stem for f in files]
@@ -159,7 +155,7 @@ class Demos:
         self.frames = jnp.concatenate(feats, 0)
         self.starts = jnp.asarray(np.concatenate(starts), jnp.int32)
         self.window = frames
-        self.clip_lengths = jnp.array([len(a) for a in starts]) if sim.recovery or per_clip else None
+        self.clip_lengths = jnp.array([len(a) for a in starts]) if per_clip else None
         self.clip_probabilities = None
         if self.clip_lengths is not None:
             if min(map(len, starts)) < 1:
@@ -179,11 +175,6 @@ class Demos:
 
     def sample(self, key, B):
         """Sample recovery windows uniformly by clip, or locomotion windows uniformly by start frame."""
-        if self.g1_bank is not None:
-            from .g1_getup import sample_reference
-            f = sample_reference(self.g1_bank, key, B, self.window)
-            state = (f["pos"], quat_to_mat(f["quat"]), f["v"], f["w"], f["q"], f["qd"])
-            return self.frame_fn(state) if self.frame_fn is not None else self.amp_frame(state, f.get("points"))
         i = self.starts[jax.random.randint(key, (B,), 0, len(self.starts))]
         if self.clip_lengths is not None:
             kc, kt = jax.random.split(key)

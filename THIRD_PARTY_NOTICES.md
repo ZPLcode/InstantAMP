@@ -99,12 +99,6 @@ SOFTWARE.
 
 ## Unitree G1 description
 
-The named G1 get-up task uses the Unitree G1 rev 1.0 asset from
-[LeggedLab, commit f5f54fe](https://gitee.com/chaomingsanhua/legged_lab/tree/f5f54fe506d7c2e558e07163fd6624ae3d44bbed/source/legged_lab/legged_lab/data/Robots/Unitree/g1_29dof/usd/g1_29dof_rev_1_0).
-`tools/convert_leggedlab_g1.py` converts the USD joints, inertials, primitive collisions, and convex collision meshes to
-`assets/g1_leggedlab.xml`. The conversion retains up to 64 source vertices per hull for MuJoCo Warp.
-The Unitree G1 description is covered by the BSD notice below. The LeggedLab repository carries the Apache 2.0 license.
-
 The G1 model in `assets/g1_mjlab.xml` and the meshes that `tools/download_meshes.sh` downloads (from Holosoma's repository,
 https://github.com/amazon-far/holosoma, at a fixed commit; only rendering needs them, and they are not included here) derive from
 Unitree's G1 description, distributed under the BSD 3-Clause License:
@@ -145,9 +139,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 `tools/download_data.sh` retrieves the G1 walk-and-run clips from LeggedLab (AMASS / ACCAD retargets under AMASS's license) and Unitree's G1 retarget of LAFAN1. LAFAN1 is by Ubisoft La Forge and carries the CC BY-NC-ND 4.0 license. [LeggedLab](https://github.com/zitongbai/legged_lab) · [Unitree LAFAN1 retarget](https://huggingface.co/datasets/lvhaidong/LAFAN1_Retargeting_Dataset)
 
-The eleven Zenbot recovery motions originate from the LAFAN1 recording `fallAndGetUp1_subject1.bvh`. The LeggedLab `get_up_frax` pipeline retargeted selected frame ranges to the 43 kg Zenbot using Frax differential inverse kinematics and MuJoCo ground-contact refinement. InstantAMP converted those results to 50 Hz NPZ files in the robot's joint order. [Source file and clip hashes](training_logs/zenbot23_getup_standing_amp_pd/recovery_sources.json) · [LAFAN1 license](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+Zenbot recovery references are derived from the LAFAN1 take `fallAndGetUp1_subject1.bvh` using the prepared LeggedLab FRAX bank. The gait references use the Motion Train `zenbot_amp_frax_walk_sole8` bank. The preparation tools read separately obtained inputs and generate local 23- and 26-joint clips. Check the source dataset permissions before sharing recordings or converted motion files. [LAFAN1 source and license](https://github.com/ubisoft/ubisoft-laforge-animation-dataset) · [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
 
-The six Zenbot standing motions were generated separately in MuJoCo using the Zenbot model. [Generator and recording method](tools/prepare_zenbot_standing_amp.py) · [Standing dataset manifest](data/zenbot23_walk_run_recovery/standing/manifest.json)
+## Zenbot robot descriptions
+
+The 23- and 26-DoF MJCF files in `assets/` come from Motion Train's RoboLab robot descriptions. The simulator uses actuator calibration from the corresponding models. The source project's BSD-3-Clause notice is included under `licenses/`. [Robot source revision](https://github.com/ZPLcode/h1_train/tree/4733fc9649dc3f2b99b2c3ba21fb2ec5e259e6ff/robolab/data/robots/roboparty) · [RoboLab BSD-3-Clause notice](licenses/Zenbot-BSD-3-Clause.txt)
 
 ## Dependencies
 

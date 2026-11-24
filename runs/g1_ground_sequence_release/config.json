@@ -1,6 +1,0 @@
-{
-  "robot": "g1_getup",
-  "floor_dir": "data/g1_getup/recovery",
-  "assist_newtons": 0.0,
-  "learner": "native_ppo_amp"
-}

@@ -72,10 +72,10 @@ def fit(st, x, r, d, key, gamma: float, lam: float, lr: float, epochs: int, mini
 
         def mb(c2, idx):
             net, opt = c2
-            l, g = jax.value_and_grad(loss)(net, X[idx], Y[idx], W[idx])
+            batch_loss, g = jax.value_and_grad(loss)(net, X[idx], Y[idx], W[idx])
             g, _ = optim.clip_by_global_norm(g, 1.0)
             net, opt = optim.step(net, g, opt, mask, lr)
-            return (net, opt), l
+            return (net, opt), batch_loss
 
         (net, opt), ls = jax.lax.scan(mb, (net, opt), perm)
         return (net, opt), ls[-1]

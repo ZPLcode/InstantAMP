@@ -25,14 +25,19 @@ fi
   git lfs install --local
   git lfs pull --include "source/legged_lab/legged_lab/data/MotionData/g1_29dof/amp/walk_and_run/*"
 )
-$PY tools/convert_motions.py amp --src "$LL" --dst data/amp/walk_run
+"$PY" tools/convert_motions.py amp --src "$LL" --dst data/amp/walk_run
 
 # 2. Unitree's LAFAN1 retarget: the fallAndGetUp takes (30 fps CSV)
 HF=https://huggingface.co/datasets/lvhaidong/LAFAN1_Retargeting_Dataset/resolve/main/g1
 mkdir -p "$RAW/lafan1_g1"
+stage=$(mktemp -d "$RAW/lafan1_g1/.download.XXXXXX")
+trap 'rm -rf -- "$stage"' EXIT
 for take in fallAndGetUp1_subject1 fallAndGetUp1_subject4 fallAndGetUp1_subject5 fallAndGetUp2_subject2 fallAndGetUp2_subject3 fallAndGetUp3_subject1; do
-  [ -f "$RAW/lafan1_g1/$take.csv" ] || curl -fL "$HF/$take.csv" -o "$RAW/lafan1_g1/$take.csv"
+  if [[ ! -s "$RAW/lafan1_g1/$take.csv" ]]; then
+    curl -fL "$HF/$take.csv" -o "$stage/$take.csv"
+    mv -- "$stage/$take.csv" "$RAW/lafan1_g1/$take.csv"
+  fi
 done
-$PY tools/convert_motions.py csv --src "$RAW/lafan1_g1" --dst data/recovery/lafan1 --pattern 'fallAndGetUp*.csv'
+"$PY" tools/convert_motions.py csv --src "$RAW/lafan1_g1" --dst data/recovery/lafan1 --pattern 'fallAndGetUp*.csv'
 
 echo "clips: $(ls data/amp/walk_run/*.npz | wc -l) walking / running, $(ls data/recovery/lafan1/*.npz | wc -l) get-up"

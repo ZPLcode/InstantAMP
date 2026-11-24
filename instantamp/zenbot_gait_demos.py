@@ -11,7 +11,6 @@ from numpy.lib.stride_tricks import sliding_window_view
 from . import amp, zenbot, zenbot_source_gait as source_gait
 from .rot import mat_to_quat, quat_to_mat
 
-
 # The four transitions contain steady forward walking between the start and stop.
 # Earlier motion_train banks use the two CMU walk takes instead.
 STRAIGHT_CLIPS = {
@@ -136,6 +135,8 @@ class GlobalGaitDemos(amp.Demos):
     """Draw consecutive 50 Hz frames at fractional start times using Motion Train's clip weights."""
 
     def __init__(self, directory, sim, frames=source_gait.AMP_STEPS):
+        self.joints = sim.J
+
         def world_frame(state):
             pos, rotation, _, angular, joints, rates = state
             offsets = sim.key_positions(pos, rotation, joints) - pos[..., None, :]
@@ -166,7 +167,7 @@ class GlobalGaitDemos(amp.Demos):
         quat = ((1. - t) * jnp.sinc((1. - t) * angle / jnp.pi) * qa
                 + t * jnp.sinc(t * angle / jnp.pi) * qb)
         angular, joints, rates, points = jnp.split(a[..., 4:] + t * (b[..., 4:] - a[..., 4:]),
-                                                  [3, 3 + len(zenbot.DOF), 3 + 2 * len(zenbot.DOF)], axis=-1)
+                                                  [3, 3 + self.joints, 3 + 2 * self.joints], axis=-1)
         return source_gait.amp_frame(quat_to_mat(quat), angular, joints, rates,
                                      points.reshape(*points.shape[:-1], len(zenbot.KEY_BODIES), 3))
 

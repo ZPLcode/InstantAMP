@@ -31,6 +31,7 @@ def test_continue_archived_i_profile_with_full_directory_on_another_volume(tmp_p
     assert cfg.init_full == str(full) and cfg.init_policy == ""
     assert cfg.log_dir == str(output) and cfg.max_iterations == 12000
     assert cfg.gait_mirror_weight == 0
+    assert cfg.imag_gait_mirror_weight == 0
     ranged = parse(continuation_args(full, output, 12000, range_commands=True, num_envs=4096))
     assert ranged.num_envs == 4096 and ranged.wm_range_commands == 1
     assert ranged.init_full == cfg.init_full
@@ -43,6 +44,23 @@ def test_continue_archived_i_profile_with_full_directory_on_another_volume(tmp_p
     for settings, expected in (({}, 3), ({"wm_gait_frames": 10}, 10)):
         (run / "config.json").write_text(json.dumps({**config, **settings}))
         assert parse(continuation_args(full, output, 12000)).wm_gait_frames == expected
+    config.update(wm_initial_gait_stage=0, imag_gait_mirror_weight=.12)
+    (run / "config.json").write_text(json.dumps(config))
+    assert parse(continuation_args(full, output, 12000)).imag_gait_mirror_weight == .12
+    assert parse(continuation_args(full, output, 12000, imag_gait_mirror_weight=.2)).imag_gait_mirror_weight == .2
+    del config["wm_initial_gait_stage"], config["imag_gait_mirror_weight"]
+    config.update(robot="zenbot26_walk_run_recovery", wm_global_gait=1)
+    (run / "config.json").write_text(json.dumps(config))
+    cfg = parse(continuation_args(full, output, 12000))
+    assert cfg.robot == config["robot"] and cfg.wm_initial_gait_stage == 2
+    assert (cfg.wm_tracking_scale, cfg.gait_ls_scale, cfg.action_rate_l2_weight) == (2., 10., -.03)
+    del config["gait_ls_scale"]
+    (run / "config.json").write_text(json.dumps(config))
+    assert parse(continuation_args(full, output, 12000)).gait_ls_scale == 1.5
+    config.update(wm_getup_only=1)
+    (run / "config.json").write_text(json.dumps(config))
+    with pytest.raises(ValueError, match="only on floor recovery"):
+        continuation_args(full, output, 12000)
     policy.unlink()
     with pytest.raises(FileNotFoundError, match="companion policy"):
         continuation_args(full, output, 12000)

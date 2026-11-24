@@ -1,10 +1,9 @@
-"""Sampling regressions for the G1 segmented and untrimmed get-up banks."""
+"""Check the G1 recovery prior on untrimmed fall-and-get-up motions."""
 
 import os
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
-import jax
 import numpy as np
 
 from instantamp.getup_amp import GetupDemos
@@ -34,20 +33,7 @@ def write_clip(path, height, first_joint_value):
     return vel[:, 2]
 
 
-def test_forward_windows_include_standing_and_balance_clips(tmp_path):
-    vz = write_clip(tmp_path / "a.npz", [.10, .30, .65, .72], 10)
-    write_clip(tmp_path / "b.npz", np.linspace(.12, .72, 20), 200)
-    bank = GetupDemos(tmp_path, MotionFeatures(), 3, segmented=True)
-    assert bank.n_windows == 2 + 18
-    np.testing.assert_allclose(bank.frames[:4, -2], [.10, .30, .65, .72])
-    np.testing.assert_allclose(bank.frames[:4, -1], vz)
-    windows = np.asarray(jax.jit(lambda key: bank.sample(key, 4096))(jax.random.PRNGKey(12)))
-    assert np.all(np.diff(windows[..., 0], axis=1) == 1)  # contiguous, never crosses clips
-    assert .45 < np.mean(windows[:, 0, 0] < 100) < .55
-    assert np.any((windows[:, 0, 0] == 11) & (windows[:, -1, -2] > .70))
-
-
-def test_legacy_windows_keep_only_all_down_frames(tmp_path):
+def test_recovery_windows_keep_only_all_down_frames(tmp_path):
     write_clip(tmp_path / "sequence.npz", [.12, .30, .50, .70, .65, .42, .30, .15], 0)
     bank = GetupDemos(tmp_path, MotionFeatures(), 3)
     np.testing.assert_array_equal(bank.starts, [0, 5])

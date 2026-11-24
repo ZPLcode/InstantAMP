@@ -1,48 +1,63 @@
-"""Training observations for Motion Train's 43 kg Zenbot AMP locomotion actor."""
+"""Sensor history, joint order, and observation symmetry for Zenbot policies."""
 
+from functools import lru_cache
 from typing import NamedTuple
 
 import numpy as np
 
-# Motion Train's 43 kg Zenbot robot_cfg.usd2urdf. Each value indexes an MJCF hinge.
-LAB_ORDER = np.array(
-    [0, 6, 12, 1, 7, 13, 18, 2, 8, 14, 19, 3, 9, 15, 20, 4, 10, 16, 21, 5, 11, 17, 22]
-)
-_history = np.arange(5 * 78).reshape(5, 78)[-3:]
-MOTION_TRAIN_INDEX = np.concatenate(
-    [
-        block.ravel()
-        for block in (
-            _history[:, :3],
-            _history[:, 3:6],
-            _history[:, 6:9],
-            _history[:, 9 + LAB_ORDER],
-            _history[:, 32 + LAB_ORDER],
-            _history[:, 55 + LAB_ORDER],
-        )
+from . import zenbot_models
+
+
+class JointLayout(NamedTuple):
+    default_q: np.ndarray
+    lab_order: np.ndarray
+    history_index: np.ndarray
+    frame_order: np.ndarray
+    noise: np.ndarray
+    mirror: np.ndarray
+    signs: np.ndarray
+    lab_mirror: np.ndarray
+
+
+@lru_cache(maxsize=2)
+def joint_layout(joints):
+    """Build Motion Train's three-frame observation layout in MJCF joint order."""
+    model = zenbot_models.for_joint_count(joints)
+    order = model.lab_order
+    frame_width = 9 + 3 * joints
+    frames = np.arange(3 * frame_width).reshape(3, frame_width)
+    terms = (
+        frames[:, :3], frames[:, 3:6], frames[:, 6:9], frames[:, 9 + order],
+        frames[:, 9 + joints + order], frames[:, 9 + 2 * joints + order],
+    )
+    index = np.concatenate([term.ravel() for term in terms])
+    names = model.dof
+    mirror_names = [
+        name.replace("left_", "right_") if name.startswith("left_")
+        else name.replace("right_", "left_") for name in names
     ]
-)
-MOTION_TRAIN_WIDTH = len(MOTION_TRAIN_INDEX)
-TERM_HISTORY_INDEX = MOTION_TRAIN_INDEX - 2 * 78
-SENSOR_NOISE = np.repeat([0.28, 0.042, 0.0, 0.03, 1.5, 0.0], [3, 3, 3, 23, 23, 23]).astype(
-    np.float32
-)
-
-
-# The sagittal reflection swaps the matching limbs. Pitch and knee flexion
-# keep their signs. Roll, yaw and the unpaired waist hinge change signs.
-_MIRROR_JOINTS = np.r_[6:12, 0:6, 12, 18:23, 13:18]
-_MIRROR_SIGNS = np.array([1, -1, -1, 1, 1, -1] * 2 + [-1] + [1, -1, -1, 1, -1] * 2, np.float32)
-_MIRROR_LAB_JOINTS = np.argsort(LAB_ORDER)[_MIRROR_JOINTS[LAB_ORDER]]
+    mirror = np.array([names.index(name) for name in mirror_names])
+    signs = np.array(
+        [-1 if name.endswith(("_roll", "_yaw")) else 1 for name in names],
+        dtype=np.float32,
+    )
+    noise = np.repeat(
+        [.28, .042, 0., .03, 1.5, 0.], [3, 3, 3, joints, joints, joints]
+    ).astype(np.float32)
+    return JointLayout(
+        model.default_q, order, index, np.argsort(index), noise, mirror, signs,
+        np.argsort(order)[mirror[order]],
+    )
 
 
 def mirror_action(action):
-    """Reflect a 23-channel action in the physical MJCF joint order."""
-    return action[..., _MIRROR_JOINTS] * _MIRROR_SIGNS
+    """Reflect an action in the physical MJCF joint order."""
+    layout = joint_layout(action.shape[-1])
+    return action[..., layout.mirror] * layout.signs
 
 
 def mirror_observation(observation):
-    """Reflect all three frames of the term-major 234-channel Motion Train observation."""
+    """Reflect all three frames of the term-major Motion Train observation."""
     import jax.numpy as jnp
 
     shape = observation.shape[:-1]
@@ -51,19 +66,22 @@ def mirror_observation(observation):
     # and the command contains forward, lateral and yaw speeds.
     vector_signs = jnp.array([[-1, 1, -1], [1, -1, 1], [1, -1, -1]], observation.dtype)
     vectors = vectors * vector_signs[:, None, :]
-    joints = observation[..., 27:].reshape(*shape, 3, 3, 23)
-    joints = joints[..., _MIRROR_LAB_JOINTS] * _MIRROR_SIGNS[LAB_ORDER]
-    return jnp.concatenate((vectors.reshape(*shape, 27), joints.reshape(*shape, 207)), axis=-1)
+    count = (observation.shape[-1] - 27) // 9
+    layout = joint_layout(count)
+    joints = observation[..., 27:].reshape(*shape, 3, 3, count)
+    joints = joints[..., layout.lab_mirror] * layout.signs[layout.lab_order]
+    return jnp.concatenate((vectors.reshape(*shape, 27), joints.reshape(*shape, 9 * count)), axis=-1)
 
 
 class MotionTrainSensors(NamedTuple):
     delay_s: object
     current_imu: object
     previous_imu: object
-    frames: object  # (world, oldest -> newest time, 78 physical-order features)
+    frames: object  # (world, oldest to newest time, physical-order features)
 
     def observation(self):
-        return self.frames.reshape((*self.frames.shape[:-2], -1))[..., TERM_HISTORY_INDEX]
+        layout = joint_layout((self.frames.shape[-1] - 9) // 3)
+        return self.frames.reshape((*self.frames.shape[:-2], -1))[..., layout.history_index]
 
 
 def map_imu_delay(samples):
@@ -95,7 +113,7 @@ def advance_sensors(
     import jax
     import jax.numpy as jnp
 
-    from . import zenbot
+    layout = joint_layout(joint_angle.shape[-1])
 
     delay_key, noise_key = jax.random.split(key)
     delay = (
@@ -113,30 +131,15 @@ def advance_sensors(
         older = jnp.where(fresh[..., None], raw_imu, previous.previous_imu)
     imu = interpolate_delayed_imu(raw_imu, last, older, delay) if corrupt else raw_imu
     frame = jnp.concatenate(
-        (imu, command, joint_angle - zenbot.DEFAULT_Q, joint_speed, last_action), axis=-1
+        (imu, command, joint_angle - layout.default_q, joint_speed, last_action), axis=-1
     )
     if corrupt:
-        frame += jax.random.uniform(noise_key, frame.shape, minval=-1.0, maxval=1.0) * SENSOR_NOISE
+        frame += jax.random.uniform(noise_key, frame.shape, minval=-1.0, maxval=1.0) * layout.noise
     filled = jnp.repeat(frame[..., None, :], 3, axis=-2)
     if previous is not None:
         shifted = jnp.concatenate((previous.frames[..., 1:, :], frame[..., None, :]), axis=-2)
         filled = jnp.where(fresh[..., None, None], filled, shifted)
     return MotionTrainSensors(delay, raw_imu, last, filled)
-
-
-def teacher_yaw(command, measured):
-    """Calibrate the 14300 demonstrator's turn rate from measured body gyro while collecting labels."""
-    sign = (command > 0) * 1.0 - (command < 0) * 1.0
-    return (command != 0.0) * (1.42 * sign + command - measured)
-
-
-def motion_train_observation(frames):
-    """Select the 234 clean policy inputs from five full-state Zenbot frames."""
-    from .zenbot_command_actor import gait_teacher_observation
-
-    if frames.shape[-2:] != (5, 99):
-        raise ValueError("Expected five consecutive 99-channel Zenbot sensor frames")
-    return gait_teacher_observation(frames)[..., MOTION_TRAIN_INDEX]
 
 
 def motion_train_actor_mean(actor, norm, observation):

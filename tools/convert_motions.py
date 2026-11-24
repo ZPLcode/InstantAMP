@@ -23,10 +23,10 @@ The clips are not part of the repository: AMASS's and LAFAN1's licenses apply to
 import argparse
 import glob
 import os
-import tempfile
-from pathlib import Path
 import pickle
 import sys
+import tempfile
+from pathlib import Path
 
 import numpy as np
 
@@ -166,10 +166,15 @@ def convert_recovery_clip(path, pos, wxyz, joints, order, fps, landmarks=None, *
 
 def convert_amp(src, dst):
     lab = lab_dof_names(os.path.join(src, JOINT_ORDER))
-    assert sorted(lab) == sorted(G1_DOF), "the lab joint list is not the G1's 29 joints"
+    if sorted(lab) != sorted(G1_DOF):
+        raise ValueError("Expected the G1's 29 named joints in the source joint order")
     perm = [lab.index(n) for n in G1_DOF]  # joint i is lab column perm[i]
     total = 0
-    for path in sorted(glob.glob(os.path.join(src, CLIPS, "*.pkl"))):
+    directory = Path(src) / CLIPS
+    paths = sorted(directory.glob("*.pkl"))
+    if not paths:
+        raise FileNotFoundError(f"No G1 walking or running motion pickles in {directory}")
+    for path in paths:
         with open(path, "rb") as f:
             d = NumpyUnpickler(f).load()
         fps = float(d["fps"])
@@ -186,7 +191,10 @@ def convert_amp(src, dst):
 
 def convert_csv(src, dst, pattern, fps_in):
     total = 0
-    for path in sorted(glob.glob(os.path.join(src, pattern))):
+    paths = sorted(glob.glob(os.path.join(src, pattern)))
+    if not paths:
+        raise FileNotFoundError(f"No G1 motion files matching {pattern!r} in {src}")
+    for path in paths:
         a = np.loadtxt(path, delimiter=",")
         assert a.shape[1] == 36, f"{path}: {a.shape[1]} columns"
         n = save(os.path.join(dst, os.path.basename(path).replace(".csv", ".npz")), a[:, :3], a[:, 3:7] / np.linalg.norm(a[:, 3:7], axis=1, keepdims=True), a[:, 7:], fps_in)

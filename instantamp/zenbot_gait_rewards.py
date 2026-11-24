@@ -10,9 +10,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from . import env, zenbot
+from . import env, zenbot_models
 from .rot import mv3, tr3, yaw_mat
-
 
 WEIGHTS = {
     "foot_slip": -.25,
@@ -29,7 +28,12 @@ WEIGHTS = {
     "joint_pos_limits": -1.,
     "ankle_roll_l2": -.10,
 }
-ANKLE_ROLL = np.array([zenbot.DOF.index(side + "_ankle_roll") for side in ("left", "right")])
+_ANKLE_JOINTS = ("left_ankle_roll", "right_ankle_roll")
+_ANKLE_INDICES = {
+    len(model.dof): np.array([model.dof.index(name) for name in _ANKLE_JOINTS])
+    for model in zenbot_models.MODELS
+}
+ANKLE_ROLL = _ANKLE_INDICES[len(zenbot_models.ZENBOT23.dof)]
 
 SOURCE_WEIGHTS = {
     "velocity_progress_tanh": .5, "alive": .15, "lin_vel_z_l2": -.2, "ang_vel_xy_l2": -.1,
@@ -136,7 +140,7 @@ class StepHistory(NamedTuple):
 
 
 def reward_terms(state, feet, command, torque, acceleration, q_soft, foot_contact, undesired, foot_slip,
-                 foot_acc_z, history, gait):
+                 foot_acc_z, history, gait, *, min_ankle_spacing=.10):
     """Use measured motor/contact signals in physics and predicted signals in imagination."""
     _, rotation, _, _, q, qd = state
     history, landing, clearance = history.advance(foot_contact, feet.bottom[..., :2], command)
@@ -148,7 +152,9 @@ def reward_terms(state, feet, command, torque, acceleration, q_soft, foot_contac
     horizontal = jnp.sum(axis[..., :2]**2, axis=-1) > 1e-10
     yaw = jnp.arctan2(jnp.where(horizontal, axis[..., 1], 0.), jnp.where(horizontal, axis[..., 0], 1.))
     straight = jnp.clip(1. - jnp.abs(command[..., 2]) / .05, 0., 1.)
-    ankle_error = jnp.abs(q[..., ANKLE_ROLL] - zenbot.DEFAULT_Q[ANKLE_ROLL])
+    model = zenbot_models.for_joint_count(q.shape[-1])
+    ankle = _ANKLE_INDICES[len(model.dof)]
+    ankle_error = jnp.abs(q[..., ankle] - model.default_q[ankle])
     ankle_excess = jax.nn.relu(ankle_error - np.deg2rad(5.)) / np.deg2rad(10.)
     speed = jnp.linalg.norm(command[..., :2], axis=-1)
     walking = (speed > .10) & (jnp.abs(command[..., 0]) >= jnp.abs(command[..., 1]))
@@ -158,7 +164,7 @@ def reward_terms(state, feet, command, torque, acceleration, q_soft, foot_contac
         "sound_suppression": (speed < 1.5) * jnp.where(foot_contact, jnp.minimum(foot_acc_z**2, 50.), 0.).sum(-1),
         "feet_effective_landing": gait * landing,
         "feet_swing_clearance": gait * clearance,
-        "feet_crossing": gait * jax.nn.relu(.10 - lateral),
+        "feet_crossing": gait * jax.nn.relu(min_ankle_spacing - lateral),
         "feet_yaw_l2": gait * straight * jnp.sum(jax.nn.relu(jnp.abs(yaw) - np.deg2rad(2.))**2, -1),
         "undesired_contacts": gait * undesired,
         "ankle_roll_l2": gait * ankle_gate * jnp.sum(ankle_excess**2, -1),

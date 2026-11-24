@@ -5,7 +5,7 @@ of consecutive steps of one env (`sample_windows`) and policy learning samples s
 (`sample_starts`).
 
 Leaves are the flattened transition record (see train.InstantAMP.record). The dynamics context xi and the default actor history use
-float16. The Motion Train world-model profile keeps its 234 sensor values in float32 to recover the exact delayed actions.
+float16. The Motion Train world-model profile stores the actor sensor history in float32 to recover the exact delayed actions.
 States, actions and the task context use float32 / int32. A transition j ends a world-model window when its env was done, or when the
 next transition does not start where it ended (a push overwrote the root velocity in between).
 """
