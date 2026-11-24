@@ -1,0 +1,438 @@
+{
+  "start": "floor",
+  "checkpoint_sha256": "c69d04b04b3147746d72466a3e6c5791c18d517a8a16cc9c0ff794157775d6f7",
+  "summary": {
+    "started_upright": 18,
+    "fell": 8,
+    "recovered": 8,
+    "held": 7,
+    "kept_balance": 10,
+    "trials": 20
+  },
+  "cases": [
+    {
+      "seed": 932277,
+      "opening": "fallAndGetUp1_subject1_1058_1140.npz",
+      "impulse_mps": [
+        2.5,
+        0.0
+      ],
+      "delays": [
+        6,
+        5,
+        4,
+        6,
+        4
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 932277,
+      "opening": "fallAndGetUp1_subject1_1262_1320.npz",
+      "impulse_mps": [
+        -2.5,
+        0.0
+      ],
+      "delays": [
+        7,
+        5,
+        6,
+        3,
+        5
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.72,
+      "recovered": true,
+      "rise_after_impact_s": 3.94,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 932277,
+      "opening": "fallAndGetUp1_subject1_1395_1461.npz",
+      "impulse_mps": [
+        0.0,
+        2.5
+      ],
+      "delays": [
+        3,
+        7,
+        6,
+        6,
+        3
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.5,
+      "recovered": true,
+      "rise_after_impact_s": 3.68,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 932277,
+      "opening": "fallAndGetUp1_subject1_1584_1684.npz",
+      "impulse_mps": [
+        0.0,
+        -2.5
+      ],
+      "delays": [
+        7,
+        7,
+        5,
+        5,
+        6
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 1654679,
+      "opening": "fallAndGetUp1_subject1_1808_1916.npz",
+      "impulse_mps": [
+        2.5,
+        0.0
+      ],
+      "delays": [
+        3,
+        3,
+        7,
+        6,
+        3
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 1654679,
+      "opening": "fallAndGetUp1_subject1_2088_2210.npz",
+      "impulse_mps": [
+        -2.5,
+        0.0
+      ],
+      "delays": [
+        6,
+        7,
+        5,
+        6,
+        5
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 1654679,
+      "opening": "fallAndGetUp1_subject1_2301_2391.npz",
+      "impulse_mps": [
+        0.0,
+        2.5
+      ],
+      "delays": [
+        3,
+        3,
+        4,
+        5,
+        5
+      ],
+      "started_upright": false,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": false
+    },
+    {
+      "seed": 1654679,
+      "opening": "fallAndGetUp1_subject1_458_565.npz",
+      "impulse_mps": [
+        0.0,
+        -2.5
+      ],
+      "delays": [
+        7,
+        6,
+        6,
+        5,
+        3
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 2718869,
+      "opening": "fallAndGetUp1_subject1_4873_4962.npz",
+      "impulse_mps": [
+        2.5,
+        0.0
+      ],
+      "delays": [
+        6,
+        6,
+        5,
+        7,
+        5
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 2718869,
+      "opening": "fallAndGetUp1_subject1_670_785.npz",
+      "impulse_mps": [
+        -2.5,
+        0.0
+      ],
+      "delays": [
+        7,
+        6,
+        3,
+        7,
+        4
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.56,
+      "recovered": true,
+      "rise_after_impact_s": 4.04,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 2718869,
+      "opening": "fallAndGetUp1_subject1_845_936.npz",
+      "impulse_mps": [
+        0.0,
+        2.5
+      ],
+      "delays": [
+        5,
+        7,
+        3,
+        5,
+        6
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 2718869,
+      "opening": "fallAndGetUp1_subject1_1058_1140.npz",
+      "impulse_mps": [
+        0.0,
+        -2.5
+      ],
+      "delays": [
+        3,
+        5,
+        5,
+        4,
+        5
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.8,
+      "recovered": true,
+      "rise_after_impact_s": 3.66,
+      "held": false,
+      "first_attempt": false
+    },
+    {
+      "seed": 3950477,
+      "opening": "fallAndGetUp1_subject1_1262_1320.npz",
+      "impulse_mps": [
+        2.5,
+        0.0
+      ],
+      "delays": [
+        5,
+        4,
+        3,
+        4,
+        3
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.82,
+      "recovered": true,
+      "rise_after_impact_s": 4.42,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 3950477,
+      "opening": "fallAndGetUp1_subject1_1395_1461.npz",
+      "impulse_mps": [
+        -2.5,
+        0.0
+      ],
+      "delays": [
+        4,
+        7,
+        4,
+        3,
+        6
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.5,
+      "recovered": true,
+      "rise_after_impact_s": 4.0,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 3950477,
+      "opening": "fallAndGetUp1_subject1_1584_1684.npz",
+      "impulse_mps": [
+        0.0,
+        2.5
+      ],
+      "delays": [
+        7,
+        3,
+        4,
+        4,
+        6
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.8,
+      "recovered": true,
+      "rise_after_impact_s": 3.94,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 3950477,
+      "opening": "fallAndGetUp1_subject1_1808_1916.npz",
+      "impulse_mps": [
+        0.0,
+        -2.5
+      ],
+      "delays": [
+        5,
+        3,
+        7,
+        3,
+        3
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 5969183,
+      "opening": "fallAndGetUp1_subject1_2088_2210.npz",
+      "impulse_mps": [
+        2.5,
+        0.0
+      ],
+      "delays": [
+        6,
+        5,
+        5,
+        3,
+        5
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    },
+    {
+      "seed": 5969183,
+      "opening": "fallAndGetUp1_subject1_2301_2391.npz",
+      "impulse_mps": [
+        -2.5,
+        0.0
+      ],
+      "delays": [
+        3,
+        4,
+        7,
+        7,
+        7
+      ],
+      "started_upright": false,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": false
+    },
+    {
+      "seed": 5969183,
+      "opening": "fallAndGetUp1_subject1_458_565.npz",
+      "impulse_mps": [
+        0.0,
+        2.5
+      ],
+      "delays": [
+        6,
+        4,
+        4,
+        4,
+        7
+      ],
+      "started_upright": true,
+      "fell": true,
+      "kept_balance": false,
+      "impact_s": 0.52,
+      "recovered": true,
+      "rise_after_impact_s": 4.0600000000000005,
+      "held": true,
+      "first_attempt": true
+    },
+    {
+      "seed": 5969183,
+      "opening": "fallAndGetUp1_subject1_4873_4962.npz",
+      "impulse_mps": [
+        0.0,
+        -2.5
+      ],
+      "delays": [
+        7,
+        4,
+        5,
+        7,
+        6
+      ],
+      "started_upright": true,
+      "fell": false,
+      "recovered": false,
+      "held": false,
+      "kept_balance": true
+    }
+  ]
+}

@@ -1,0 +1,175 @@
+diff --git a/instantamp/native_zenbot.py b/instantamp/native_zenbot.py
+index 7089119..cf9a224 100644
+--- a/instantamp/native_zenbot.py
++++ b/instantamp/native_zenbot.py
+@@ -64,6 +64,7 @@ class ZenbotNative:
+         self.support_geoms={i:bodies[b] for i,b in enumerate(self.model.geom_bodyid) if b in bodies}
+         self.support_load=np.zeros(len(names))
+         self.flight = np.zeros(env.DECIMATION, dtype=bool)
++        self.foot_pair_force = np.zeros(env.DECIMATION)
+ 
+         def control(actor, norm, ode, qpos, qvel, old, history, memory, delays, noise, command, elapsed=None):
+             state = unflatten(qpos[None], qvel[None])
+@@ -182,6 +183,7 @@ class ZenbotNative:
+                 self.memory, self.delays, self.sample_noise(), self.command, elapsed)
+         load_n = 0.
+         self.support_load.fill(0.)
++        self.foot_pair_force.fill(0.)
+         for substep, target in enumerate(np.asarray(targets)):
+             q, v = d.qpos[7:], d.qvel[6:]
+             torque = np.clip(zenbot.KP * (target - q) - zenbot.KD * v, -zenbot.EFFORT, zenbot.EFFORT)
+@@ -189,6 +191,10 @@ class ZenbotNative:
+             mj.mj_step(self.model, d)
+             self.flight[substep] = True
+             for k, contact in enumerate(d.contact):
++                if contact.geom1 in self.feet and contact.geom2 in self.feet:
++                    mj.mj_contactForce(self.model, d, k, self.force)
++                    self.foot_pair_force[substep] = max(self.foot_pair_force[substep], self.force[0])
++                    continue
+                 other = contact.geom2 if contact.geom1==self.floor else contact.geom1 if contact.geom2==self.floor else -1
+                 body = self.support_geoms.get(other)
+                 if other >= 0 and (self.sim.mixed or self.command_gait):
+diff --git a/tools/evaluate_zenbot_command_style.py b/tools/evaluate_zenbot_command_style.py
+index 60154ab..0e0c274 100644
+--- a/tools/evaluate_zenbot_command_style.py
++++ b/tools/evaluate_zenbot_command_style.py
+@@ -19,11 +19,11 @@ from scipy.spatial.transform import Rotation
+ from instantamp import env, zenbot
+ from instantamp.native_zenbot import ZenbotNative
+ from instantamp.zenbot_gait_demos import command_motion_windows, source_command_speeds
+-from tools.evaluate_zenbot_directions import direction_metrics, heading_kinematics
++from tools.evaluate_zenbot_directions import direction_metrics, foot_contact_metrics, heading_kinematics, startup_metrics
+ from tools.evaluate_zenbot_fall_recovery import standing_pose
+ from tools.evaluate_zenbot_four_skills import standing_metrics
+ from tools.evaluate_zenbot_walk_recovery import score
+-from tools.score_zenbot_gait import compare, gait_metrics
++from tools.score_zenbot_gait import compare, gait_metrics, joint_jitter
+ 
+ NAMES = ("stand", "walk", "run", "back", "left", "right", "turn_left", "turn_right")
+ FRAMES = 101  # Two full seconds between the first and final pose at 50 Hz.
+@@ -101,6 +101,7 @@ def pose_style(model, data, poses):
+     step = np.cos(yaw) * foot_delta[:, 0] + np.sin(yaw) * foot_delta[:, 1]
+     angles = poses[:, 7:]
+     stats = gait_metrics(angles)
++    stats.update(joint_jitter(angles))
+     qtiles = stats.pop("joint_quantiles_deg")
+     for prefix, suffix in (("upper_arm", "shoulder_pitch"), ("elbow", "elbow"), ("knee", "knee")):
+         for side in ("left", "right"):
+@@ -192,14 +193,17 @@ def evaluate(checkpoint, out, bank, seeds, render, recorded_speeds=False):
+             delays = np.random.default_rng(seed).integers(3, 8, 5)
+             player.reset(start, np.zeros(player.model.nv), delays, command=command)
+             poses, speeds, loads, flight = [player.data.qpos.copy()], [], [], []
++            foot_forces = []
+             for _ in range(round(6/env.DT)):
+                 player.step()
+                 poses.append(player.data.qpos.copy())
+                 speeds.append(player.data.qvel.copy())
+                 loads.append(player.support_load[:2].copy())
+                 flight.append(player.flight.copy())
++                foot_forces.append(player.foot_pair_force.copy())
+             poses, speeds, loads, flight = map(np.asarray, (poses, speeds, loads, flight))
+             motion = direction_metrics(poses, loads, command, relative_active_speed=recorded_speeds)
++            motion.update(startup_metrics(poses, command), **foot_contact_metrics(foot_forces))
+             if name in ("walk", "run"):
+                 actual_gait = score(name, command[0], poses[1:], speeds, loads, flight, None)
+                 motion["passed"] &= actual_gait["passed"]
+diff --git a/tools/evaluate_zenbot_directions.py b/tools/evaluate_zenbot_directions.py
+index 3f69fcb..b8502c0 100644
+--- a/tools/evaluate_zenbot_directions.py
++++ b/tools/evaluate_zenbot_directions.py
+@@ -15,6 +15,7 @@ import numpy as np
+ from instantamp import zenbot
+ from tools.evaluate_zenbot_getup import DT, evaluate
+ from tools.play_zenbot_getup import ZenbotPlayer
++from tools.score_zenbot_gait import joint_jitter
+ 
+ COMMANDS = {
+     "forward": (1.0, 0.0, 0.0),
+@@ -40,6 +41,33 @@ def heading_kinematics(poses):
+     return speeds, yaw
+ 
+ 
++def startup_metrics(poses, command):
++    """Pelvis motion in the first second relative to the heading when the command arrived."""
++    first = poses[:WINDOW + 1]
++    _, yaw = heading_kinematics(first)
++    c, s = np.cos(yaw[0]), np.sin(yaw[0])
++    xy = (first[:, :2] - first[0, :2]) @ np.array([[c, -s], [s, c]])
++    target = np.asarray(command)[:2]
++    speed = np.linalg.norm(target)
++    if speed:
++        along = target / speed
++        departure = np.abs(xy @ [-along[1], along[0]])
++    else:
++        departure = np.linalg.norm(xy, axis=-1)
++    w, x, y, z = first[:, 3:7].T
++    roll = np.arctan2(2 * (w*x + y*z), 1 - 2 * (x*x + y*y))
++    return {"startup_off_axis_m": float(departure.max()),
++            "startup_peak_abs_roll_deg": float(np.rad2deg(np.max(np.abs(roll)))),
++            "startup_along_m": float(xy[-1] @ along) if speed else 0.}
++
++
++def foot_contact_metrics(substep_forces):
++    """Count control intervals with a measured force between the two feet."""
++    forces = np.asarray(substep_forces)
++    return {"foot_contact_steps": int(np.count_nonzero((forces > 0.).any(axis=1))),
++            "max_foot_pair_force_n": float(forces.max())}
++
++
+ def direction_metrics(poses, loads, command, *, relative_active_speed=False):
+     speeds, yaw = heading_kinematics(poses)
+     windows = speeds[-3 * WINDOW :].reshape(3, WINDOW, 3).mean(axis=1)
+@@ -87,14 +115,18 @@ def evaluate_checkpoint(checkpoint, cases, names, steps, *, cold_start=False, ta
+             native.data = copy(snapshot[0])
+             native.history, native.memory, native.previous = snapshot[1:]
+             native.command = jnp.asarray(targets[name], dtype=jnp.float32)[None]
+-            poses = np.empty((steps + 1, 7))
++            poses = np.empty((steps + 1, native.model.nq))
+             loads = np.empty((steps, 2))
+-            poses[0] = native.data.qpos[:7]
++            foot_force = np.empty((steps, len(native.foot_pair_force)))
++            poses[0] = native.data.qpos
+             for i in range(steps):
+                 native.step()
+-                poses[i + 1] = native.data.qpos[:7]
++                poses[i + 1] = native.data.qpos
+                 loads[i] = native.support_load[:2]
++                foot_force[i] = native.foot_pair_force
+             row = direction_metrics(poses, loads, targets[name])
++            row.update(startup_metrics(poses, targets[name]), **joint_jitter(poses[-3 * WINDOW:, 7:]),
++                       **foot_contact_metrics(foot_force))
+             rows.append(
+                 dict(seed=seed, trial=trial, clip=floor["clip"], name=name, from_held=floor["held"], **row)
+             )
+@@ -109,6 +141,7 @@ def evaluate_checkpoint(checkpoint, cases, names, steps, *, cold_start=False, ta
+             "from_held": len(held),
+             "passed_from_held": sum(r["passed"] for r in held),
+             "falls": sum(r["fell"] for r in group),
++            "trials_with_foot_contact_from_held": sum(r["foot_contact_steps"] > 0 for r in held),
+             "median_measured_from_held": np.median([r["mean_last_3s"] for r in held], axis=0).tolist()
+             if held
+             else None,
+diff --git a/tools/score_zenbot_gait.py b/tools/score_zenbot_gait.py
+index 9d324e3..1ab2152 100644
+--- a/tools/score_zenbot_gait.py
++++ b/tools/score_zenbot_gait.py
+@@ -4,8 +4,18 @@ import json
+ from pathlib import Path
+ 
+ import numpy as np
++from scipy.signal import butter, sosfiltfilt
+ 
+-from instantamp import zenbot
++from instantamp import env, zenbot
++
++
++def joint_jitter(angles):
++    """RMS joint motion above 8 Hz on a contiguous 50 Hz trajectory, in degrees."""
++    sos = butter(4, 8., btype="highpass", fs=1. / env.DT, output="sos")
++    filtered = sosfiltfilt(sos, angles, axis=0)[10:-10]
++    amplitudes = np.rad2deg(np.sqrt(np.mean(filtered**2, axis=0)))
++    return {"joint_jitter_rms_deg": float(np.sqrt(np.mean(amplitudes**2))),
++            "worst_joint_jitter_rms_deg": float(amplitudes.max())}
+ 
+ 
+ def straight_walk_clips(walk_dir):

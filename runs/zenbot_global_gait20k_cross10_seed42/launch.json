@@ -1,0 +1,25 @@
+{
+  "pid": 1218064,
+  "base_commit": "23a7ed9def7933b88c2f654df8577ea6cab62682",
+  "args": [
+    "taskset",
+    "-c",
+    "0-11",
+    "bash",
+    "tools/recipes/train_zenbot_wm_floor_amp.sh",
+    "/home/zhepeng/InstantAMP/runs/zenbot_global_gait20k_cross10_seed42",
+    "--motion-train-gait"
+  ],
+  "environment": {
+    "FLOOR_MAX_ITERATIONS": "20000",
+    "FLOOR_CKPT_ITERATIONS": "2500",
+    "FLOOR_NUM_ENVS": "4096",
+    "FLOOR_SEED": "42",
+    "FLOOR_GAIT_FRAMES": "10",
+    "FLOOR_SIDE_SHARE": ".10",
+    "TMPDIR": "/dev/shm/zenbot-global-20k-jzc0amod",
+    "JAX_COMPILATION_CACHE_DIR": "/dev/shm/zenbot-global-20k-jzc0amod/cache",
+    "JAX_ENABLE_COMPILATION_CACHE": "false",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  }
+}
