@@ -1,0 +1,164 @@
+{
+  "checkpoint": "releases/zenbot23_continuous_74000/ckpt/74000.npz",
+  "sha256": "cefc950eeaafe93a0a5ae06cb3f7e4c978a8d34526452dbab531c6fb414e4a53",
+  "iteration": 74000,
+  "seed": 42,
+  "duration_s": 10.0,
+  "assistance_N": 0,
+  "automatic_resets": false,
+  "teacher_inference": false,
+  "gait": [
+    {
+      "command_m_s": 1.0,
+      "measured_m_s": 0.9712495352915629,
+      "upright": true,
+      "alternating_feet": true,
+      "flight_periods_at_least_10ms": 0,
+      "passed": true
+    },
+    {
+      "command_m_s": 2.5,
+      "measured_m_s": 0.8609418461079805,
+      "upright": true,
+      "alternating_feet": true,
+      "flight_periods_at_least_10ms": 0,
+      "passed": false
+    }
+  ],
+  "getup_successes": 22,
+  "getup_total": 22,
+  "trials": [
+    {
+      "clip": "fallAndGetUp1_subject1_1058_1140.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.6895213926615509
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1058_1140.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.6901564471505343
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1262_1320.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.6901642783182043
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1262_1320.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.6901611847536245
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1395_1461.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.6840690604032329
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1395_1461.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.6868331210214543
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1584_1684.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.684275868026265
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1584_1684.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.6901553564915102
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1808_1916.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.6889906785190624
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1808_1916.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.6877543948138458
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_2088_2210.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.6866526545350661
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_2088_2210.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.690152922760104
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_2301_2391.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.687716921771691
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_2301_2391.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.6901635791325302
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_458_565.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.6901667178435695
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_458_565.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.6901068342730826
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_4873_4962.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.6901625964235187
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_4873_4962.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.6878829315763543
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_670_785.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.6858498570745514
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_670_785.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.6856065580408743
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_845_936.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.6849835250933357
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_845_936.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.6866883361910905
+    }
+  ]
+}

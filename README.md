@@ -56,10 +56,12 @@ The script prepares both motion banks for the selected robot, trains from scratc
 | --- | ---: |
 | Planar velocity tracking weight | 2.0 |
 | Yaw-rate tracking weight | 1.5 |
-| Gait AMP scale (`gait_ls_scale`) | 5.0 |
+| Shared recovery and gait AMP scale (`gait_ls_scale`) | 5.0 |
 | Action-rate penalty weight (`action_rate_l2_weight`) | -0.05 |
 
-The 23-DoF recipe also applies a mirror consistency loss to imagined frames with an active motion command and an upright robot in the gait phase. Its weight is `--imag_gait_mirror_weight 0.2` (26-DoF default `0`). The log records the unweighted error in `imag_gait_mirror_mse` and the fraction of imagined frames used in `imag_gait_mirror_fraction`. Resuming keeps the saved weight, with zero for checkpoints that predate this loss. To enable it on an older run, pass `--imag-gait-mirror-weight 0.2` to the resume tool.
+A continuous weight blends recovery and gait using the current pelvis height and uprightness. Its height range is 0.44–0.58 m, and its uprightness range runs from a 60° tilt to 30°. The same weight controls the task terms, AMP styles and their training samples, and mirror consistency. The default `amp_lerp=0.5` keeps the task/AMP mixture fixed throughout recovery and locomotion. Both discriminators use the same least-squares score scale. Quiet-standing reward remains active at a zero command and fades as movement is requested. The lifting-progress reward still starts at 0.44 m with weight 0.5. [Training rewards](instantamp/sim.py) · [AMP mixing](instantamp/train.py)
+
+The 23-DoF recipe also applies a mirror consistency loss to imagined frames with an active motion command, weighted by the same current posture signal. Its weight is `--imag_gait_mirror_weight 0.2` (26-DoF default `0`). The log records the unweighted error in `imag_gait_mirror_mse` and the mean posture weight of eligible imagined frames in `imag_gait_mirror_fraction`. Resuming keeps the saved weight, with zero for checkpoints that predate this loss. To enable it on an older run, pass `--imag-gait-mirror-weight 0.2` to the resume tool.
 
 To override these defaults, pass `--wm_tracking_scale`, `--gait_ls_scale` or `--action_rate_l2_weight` to the Python entry point. Prepare the data first and use a fresh run directory for each model.
 
@@ -85,6 +87,12 @@ The viewer starts in a neutral stance. Use W/S and A/D for linear velocity, Q/E 
 ```bash
 python -m tools.resume_zenbot_wm "$run/ckpt/full/0039.npz" "${run}_continued" --until 22000
 ```
+
+These reward changes take effect during training; updating the code does not change an existing exported policy's actions during playback. When continuing a full checkpoint from the previous reward scheme, the learner initializes a fresh critic and critic optimizer: its two phase inputs now contain the current pose weight and its complement, and its target returns have changed. The actor, world model and motion discriminators are restored. Evaluate the continued policy before selecting it. Episode termination and the evaluator's supported-standing success criteria remain separate from the continuous training weight.
+
+### Exported Zenbot23 checkpoint
+
+The [74,000-update export](releases/zenbot23_continuous_74000/README.md) includes the policy, complete learner state, configuration, training metrics and native evaluation. Training was stopped at the user's request before the planned 100,000 updates. This checkpoint passed 22/22 fixed recovery trials and tracked a 1.0 m/s command at 0.97 m/s; it reached only 0.86 m/s for a 2.5 m/s command and did not pass the running test. See the export for playback and continuation commands.
 
 ## G1 reference results
 

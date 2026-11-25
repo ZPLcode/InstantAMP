@@ -181,14 +181,13 @@ def test_imagined_mirror_only_updates_actor_on_live_commanded_gait(zenbot23_moti
     command = jnp.array([[.5, 0., 0.], [0., 0., -.5], [0., 0., 0.], [.5, 0., 0.], [.5, 0., 0.]])
     sensors = sensor_history(n)
     obs = sensors.observation().at[:, 24:27].set(command)
-    q = jnp.tile(jnp.r_[0., 0., .70, 1., 0., 0., 0., zenbot.DEFAULT_Q], (n, 1))
-    hold = zenbot.SupportedStand.empty(n, env.DT)
+    q = jnp.tile(jnp.r_[0., 0., .70, 1., 0., 0., 0., zenbot.DEFAULT_Q], (n, 1)).at[3, 2].set(.20)
     previous = sensors.frames[:, -1, -23:]
     start = dict(s_qpos=q, s_qvel=jnp.zeros((n, 29)), xi=jnp.zeros((n, 8)), bias=jnp.zeros_like(previous),
                  obs=obs, imu_delay=sensors.delay_s, current_imu=sensors.current_imu, previous_imu=sensors.previous_imu,
                  a_last=previous, a_ode=previous, c_obs=command, cmd=env.Cmd(command, zeros, zeros > 0, zeros > 0, zeros+8.),
-                 t=zeros.astype(int), was_up=jnp.ones(n, bool), recovery_left=jnp.array([0, 0, 0, 200, 0]),
-                 gait_world=jnp.array([True, True, True, False, True]), upright_steps=hold.upright_steps, loaded_feet=hold.loaded,
+                 t=zeros.astype(int), was_up=jnp.ones(n, bool),
+                 gait_world=jnp.array([True, True, True, False, True]),
                  step_history=zenbot_gait_rewards.StepHistory.empty(n)._asdict())
     pi = nets.mlp_init(jax.random.key(4), (234, 16, 23))
     keys = jax.random.split(jax.random.key(5), cfg.horizon)

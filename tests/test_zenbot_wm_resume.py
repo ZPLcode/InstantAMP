@@ -1,8 +1,17 @@
 import json
 
+import jax
+import jax.numpy as jnp
+import numpy as np
 import pytest
 
-from instantamp.train import parse
+from instantamp import nets
+from instantamp.train import (
+    initialize_native_learner,
+    parse,
+    save_full,
+    save_policy,
+)
 from tools.resume_zenbot_wm import continuation_args
 
 
@@ -64,3 +73,31 @@ def test_continue_archived_i_profile_with_full_directory_on_another_volume(tmp_p
     policy.unlink()
     with pytest.raises(FileNotFoundError, match="companion policy"):
         continuation_args(full, output, 12000)
+
+
+@pytest.mark.parametrize("saved_version", [None, 1])
+def test_resume_resets_only_critic_when_the_reward_objective_changes(tmp_path, saved_version):
+    actor = nets.mlp_init(jax.random.key(16), (3, 4, 2))
+    fresh = {
+        "pi": actor, "avg": actor, "obs_norm": nets.rn_init(3),
+        "critic": {"value": jnp.array(0.), "opt": {"t": jnp.array(0)}},
+        "wm": {"weight": jnp.array(0.)}, "amp": {"weight": jnp.array(0.)},
+    }
+    saved = jax.tree.map(lambda value: value + 7, fresh)
+    directory = tmp_path / "ckpt"
+    (directory / "full").mkdir(parents=True)
+    full = directory / "full/policy"
+    save_full(str(full), saved)
+    exported = dict(saved)
+    if saved_version is not None:
+        exported["floor_reward_version"] = saved_version
+    save_policy(str(directory / "policy"), exported, {})
+    restored = initialize_native_learner(
+        fresh, full.with_suffix(".npz"), "", None, floor_reward_version=1,
+    )
+    for key in ("pi", "avg", "obs_norm", "wm", "amp"):
+        for actual, expected in zip(jax.tree.leaves(restored[key]), jax.tree.leaves(saved[key]), strict=True):
+            np.testing.assert_array_equal(actual, expected)
+    expected_critic = saved["critic"] if saved_version == 1 else fresh["critic"]
+    for actual, expected in zip(jax.tree.leaves(restored["critic"]), jax.tree.leaves(expected_critic), strict=True):
+        np.testing.assert_array_equal(actual, expected)

@@ -1,0 +1,12 @@
+{
+  "seed": 42,
+  "iteration": 0,
+  "initialization": "seeded_random",
+  "actor_sha256": "2191629a8b0be5223bf15ff61f5422d45d379d13f8b025db502eaff6c232c5ec",
+  "world_model_sha256": "85d19dadbb0863a9335b823f98665ed002f867f26860d82c7c28aa2f175e0945",
+  "actor_inputs": 234,
+  "action_outputs": 23,
+  "policy_gradient": "BPTT through the learned world model and PPO on real rollouts",
+  "ppo_envs": 205,
+  "imagined_rollouts": 346
+}

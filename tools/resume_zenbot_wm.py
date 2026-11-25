@@ -1,4 +1,8 @@
-"""Continue a Zenbot WM run with the hyperparameters saved alongside its full checkpoint."""
+"""Continue a Zenbot WM run with saved hyperparameters and the current reward objective.
+
+The learner resets an older joint-task critic when migrating to the continuous reward blend.
+Actor, world model and motion discriminators remain available for continuation.
+"""
 
 import argparse
 import dataclasses
@@ -43,7 +47,7 @@ def continuation_args(
     if config.get("wm_getup_only"):
         raise ValueError("The checkpoint was trained only on floor recovery")
     config.pop("gait_velocity_time_constant", None)
-    # A continuation retains the objective used to produce its checkpoint.
+    # Keep optional optimizer settings; reward-version migration is handled by the learner.
     config.setdefault("imag_gait_mirror_weight", 0.)
     inactive = {
         "g1_style": 0,

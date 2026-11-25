@@ -1,0 +1,24 @@
+{
+  "cpu_tests": {
+    "passed": 115,
+    "skipped": 1,
+    "skip_reason": "The physical MuJoCo Warp collector test requires CUDA."
+  },
+  "full_checkpoint": {
+    "arrays": 198,
+    "all_arrays_exactly_equal_to_source": true,
+    "all_numeric_arrays_finite": true
+  },
+  "policy": {
+    "byte_identical_to_source": true,
+    "resolved_from_export_directory": true,
+    "native_evaluation": "evaluation/native.json"
+  },
+  "continuation_arguments": {
+    "parse_passed": true,
+    "target_iteration": 100000,
+    "num_envs": 2048,
+    "wm_only_iters": 150
+  },
+  "ruff": "passed: ruff check instantamp tools tests"
+}

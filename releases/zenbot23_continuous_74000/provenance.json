@@ -1,0 +1,36 @@
+{
+  "robot": "zenbot23_walk_run_recovery",
+  "initialization": "seeded_random",
+  "seed": 42,
+  "num_envs": 2048,
+  "wm_only_iters": 150,
+  "requested_iterations": 100000,
+  "last_logged_iteration": 74550,
+  "exported_iteration": 74000,
+  "stop_reason": "Stopped at user request; exported the latest complete checkpoint.",
+  "source_revision": "f6b3207294d843874b0a0ad4f0582dda5856498d",
+  "training_patch_sha256": "4891e685a3f5f59e14a211772c3948ea611d957eeb6c0b2ad002127d010d7f6b",
+  "reward_version": 1,
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5060 Ti",
+    "gpu_memory_GiB": 16
+  },
+  "python": "3.11.15",
+  "packages": {
+    "jax": "0.7.2",
+    "jaxlib": "0.7.2",
+    "numpy": "2.4.6",
+    "mujoco": "3.17.0",
+    "mujoco-mjx": "3.17.0",
+    "mujoco-warp": "3.17.0",
+    "warp-lang": "1.19.0",
+    "scipy": "1.17.1"
+  },
+  "packaging": {
+    "full_checkpoint": "Lossless np.savez_compressed; all arrays compared exactly to the source checkpoint.",
+    "config_changes": "Portable log/cache paths and max_iterations=74000 so run-directory playback resolves this export.",
+    "motion_data": "Not bundled; use the repository preparation recipe and motion_reference.sha256."
+  },
+  "training_patch_archive": "training_source.patch.gz",
+  "training_patch_sha256_applies_to": "uncompressed patch"
+}

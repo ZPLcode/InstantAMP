@@ -144,7 +144,7 @@ def reward_terms(state, feet, command, torque, acceleration, q_soft, foot_contac
     """Use measured motor/contact signals in physics and predicted signals in imagination."""
     _, rotation, _, _, q, qd = state
     history, landing, clearance = history.advance(foot_contact, feet.bottom[..., :2], command)
-    history = history.reset(~gait)
+    history = history.reset(gait <= 0.)
     separation = feet.positions[..., 0, :] - feet.positions[..., 1, :]
     lateral = jnp.sum(separation * yaw_mat(rotation)[..., :, 1], -1)
     # First column of each foot rotation in the full pelvis frame.
@@ -178,7 +178,7 @@ def reward_terms(state, feet, command, torque, acceleration, q_soft, foot_contac
         # The source penalizes the loaded foot body's world speed. Keep the original slip cost on the floor.
         speed_xy = jnp.sqrt(jnp.maximum(jnp.sum(feet.com_velocity_xy**2, -1), 1e-12))
         terms["feet_slide"] = gait * jnp.sum(foot_contact * speed_xy, -1)
-        terms["foot_slip"] = jnp.where(gait, 0., foot_slip)
+        terms["foot_slip"] = (1. - gait) * foot_slip
         command_speed = jnp.linalg.norm(command, axis=-1)
         terms["feet_double_flight"] = gait * ~foot_contact.any(-1) * jnp.clip((1.5 - command_speed) / .5, 0., 1.)
     return history, terms

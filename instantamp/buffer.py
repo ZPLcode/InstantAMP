@@ -99,7 +99,7 @@ def sample_windows(buf, key, B: int, k: int, recent: int = 0, envs=None, recover
         age = (jnp.arange(_T(buf)) - (buf["ptr"] - buf["size"])) % _T(buf)
         end = buf["t"][:, available_envs]
         if pad_opening:
-            elapsed = end if "stand_blend" in buf else jnp.minimum(end, recovery_steps - buf["recovery_left"][:, available_envs])
+            elapsed = end if "gait_weight" in buf else jnp.minimum(end, recovery_steps - buf["recovery_left"][:, available_envs])
             history = jnp.clip(elapsed, 0, k - 1)
             oldest = jnp.maximum(buf["size"] - recent, 0) if recent else 0
             eligible = ((age >= oldest) & (age < buf["size"]))[:, None] & (age[:, None] >= history)
@@ -109,9 +109,9 @@ def sample_windows(buf, key, B: int, k: int, recent: int = 0, envs=None, recover
             eligible = ((age >= oldest) & (age < buf["size"] - 1))[:, None]
             eligible &= end >= k-1
         if recovery_only:
-            if "stand_blend" in buf:
-                # The floor-only learner practices transitions through the first second of foot support.
-                eligible &= buf["stand_blend"][:, available_envs] < 1.
+            if "gait_weight" in buf:
+                # Joint-task windows are selected by their current pose, not a recovery timer.
+                eligible &= buf["gait_weight"][:, available_envs] < 1.
             else:
                 eligible &= buf["recovery_left"][:, available_envs] > 0
         else:

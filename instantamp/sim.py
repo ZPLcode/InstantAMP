@@ -205,7 +205,6 @@ class State(NamedTuple):
     delay_steps: jax.Array  # per actuator group, in physics steps
     episode_limit: jax.Array | None = None  # first timeout can be staggered while the reference starts at elapsed time zero
     recovery_left: jax.Array | None = None  # post-fall AMP scoring interval in physical control steps
-    supported_hold: zenbot.SupportedStand | None = None
     motion_train_sensors: MotionTrainSensors | None = None
     gait_curriculum: source_gait.Curriculum | None = None
     step_history: gait_rewards.StepHistory | None = None
@@ -591,7 +590,8 @@ class Sim:
             return env.tick(cmd, key, sample=lambda k: self.sample_wm_command(k, cmd.vel.shape[0], stage=stage))
         if self.wm_range_commands:
             forward_speed = gait_rewards.base_velocity(state, self.root_com)[:, 0]
-            walking = upright & (recovery_left == 0) & (cmd.vel[:, 0] > 0.) & (forward_speed > .45)
+            suitable = self.gait_weight(state) >= 1. if self.wm_floor_amp else upright & (recovery_left == 0)
+            walking = suitable & (cmd.vel[:, 0] > 0.) & (forward_speed > .45)
             stand_share = jnp.where(walking, GAIT_TRANSITION_SHARE, stand_share)
         return env.tick(cmd, key, sample=lambda k: self.sample_wm_command(k, cmd.vel.shape[0], stand_share=stand_share))
 
@@ -656,10 +656,9 @@ class Sim:
         fall = previous_up & ~up & (remaining == 0)
         return jnp.where(fall, self.recovery_amp_steps, jnp.maximum(remaining - 1, 0))
 
-    def floor_gait_interval(self, previous, upright, support):
-        """Release the gait reward after standing on the feet; retain it through running flight until a fall."""
-        ready = upright & ((previous == 0) | (support >= 1.))
-        return jnp.where(ready, 0, self.recovery_amp_steps)
+    def gait_weight(self, state):
+        """Shared pose weight for physical and imagined joint-task rewards."""
+        return zenbot.gait_weight(state[0][..., 2], state[1][..., 2, 2])
 
     def recovery_features(self, state, key_pos=None):
         pos, rot, _, ang, q, _ = state
@@ -672,11 +671,12 @@ class Sim:
         return {k: env.DT * self.weights[k] * terms[k] for k in self.terms}
 
     def reward_terms(self, *args, torque=None, joint_acc=None,
-                     recovery_active=False, recovery_deadline=False, stand_blend=1.):
+                     recovery_active=False, recovery_deadline=False):
         terms = env.reward_terms(*args, wrist_idx=self.robot.WRIST_IDX, default_q=self.robot.DEFAULT_Q,
                                  rise_height=self.robot.RISE_HEIGHT)
         if self.wm_floor_amp:
-            floor_terms = {"stand": stand_blend * zenbot.floor_stand_score(args[1], args[8]),
+            gait = self.gait_weight(args[1])
+            floor_terms = {"stand": gait * zenbot.quiet_command_weight(args[5]) * zenbot.quiet_stand_score(args[1], args[8]),
                            "action_rate": terms["action_rate"]}
             if self.wm_lift_gate:
                 before = zenbot.lift_progress(args[0][0][..., 2], self.wm_lift_gate)
@@ -687,26 +687,20 @@ class Sim:
                 floor_terms["stand"] /= 1. + joint_error
             if self.wm_floor_locomotion:
                 cmd = args[5]
-                ready = ~jnp.asarray(recovery_active, dtype=bool)
-                moving = ready & jnp.any(cmd != 0., axis=-1)
                 actual = gait_rewards.base_velocity(args[1], self.root_com)
                 error_sq = (actual - cmd)**2
-                upright = ready * jnp.clip(args[1][1][..., 2, 2], 0., .7) / .7
+                upright = gait * jnp.clip(args[1][1][..., 2, 2], 0., .7) / .7
                 floor_terms["track_lin_vel_xy_exp"] = upright * jnp.exp(-error_sq[..., :2].sum(-1) / .5**2)
                 floor_terms["track_ang_vel_z_exp"] = upright * jnp.exp(-error_sq[..., 2] / .5**2)
                 if self.wm_posture_and_tracking:
-                    floor_terms.update(gait_rewards.posture_terms(args[1], cmd, ready, actual))
-                floor_terms["stand"] = jnp.where(moving, 0., floor_terms["stand"])
+                    floor_terms.update(gait_rewards.posture_terms(args[1], cmd, gait, actual))
                 if self.wm_global_gait:
                     _, rotation, velocity, angular = args[1][:4]
                     gyro = mv3(tr3(rotation), angular)
                     body_vel = mv3(tr3(rotation), velocity) + jnp.cross(gyro, self.root_com)
                     floor_terms.update(velocity_progress_tanh=upright * source_gait.velocity_progress(cmd, actual),
-                                       alive=ready * (1. - args[7]), lin_vel_z_l2=ready * body_vel[..., 2]**2,
-                                       ang_vel_xy_l2=ready * jnp.sum(gyro[..., :2]**2, -1))
-                    floor_terms["stand"] = jnp.where(ready, 0., floor_terms["stand"])
-                if self.wm_lift_gate:
-                    floor_terms["lift"] = jnp.where(recovery_active, floor_terms["lift"], 0.)
+                                       alive=gait * (1. - args[7]), lin_vel_z_l2=gait * body_vel[..., 2]**2,
+                                       ang_vel_xy_l2=gait * jnp.sum(gyro[..., :2]**2, -1))
             return floor_terms
         if self.zenbot_motion_train_wm:
             pos, rotation, velocity, angular = args[1][:4]
@@ -933,10 +927,8 @@ class Sim:
                 is_standing=sampled_cmd.is_standing | stop,
                 time_left=jnp.where(stop, (self.episode_steps + 1) * env.DT, sampled_cmd.time_left),
             )
-        if self.recovery_amp_steps:
+        if self.recovery_amp_steps and not self.wm_floor_amp:
             s = s._replace(recovery_left=jnp.where(done, jnp.where(was_up, 0, self.recovery_amp_steps), s.recovery_left))
-        if s.supported_hold is not None:
-            s = s._replace(supported_hold=s.supported_hold.reset(done))
         if s.step_history is not None:
             s = s._replace(step_history=s.step_history.reset(done))
         cmd = env.where_cmd(done, sampled_cmd, s.cmd)
@@ -961,10 +953,8 @@ class Sim:
         cmd = env.Cmd(jnp.zeros((N, 3)), z, zb, zb, z)
         s = State(data, world, jnp.zeros((N, self.obs_dim)), jnp.zeros((N, J)), jnp.zeros((N, J)), cmd, jnp.zeros((N, 3)), zi, jnp.ones((N,), bool),
                   jnp.zeros((N,), bool), zi, zi, jnp.zeros((N, len(self.terms))), key, jnp.full((N,), self.assist_newtons, jnp.float32), jnp.zeros((N, self.motor_delay_groups), jnp.int32))  # fmt: skip
-        if self.recovery_amp_steps:
+        if self.recovery_amp_steps and not self.wm_floor_amp:
             s = s._replace(recovery_left=zi)
-        if self.wm_floor_amp:
-            s = s._replace(supported_hold=zenbot.SupportedStand.empty(N, env.DT))
         if self.wm_global_gait:
             curriculum = source_gait.Curriculum.empty(N, self.wm_initial_gait_stage)
             s = s._replace(gait_curriculum=curriculum, episode_limit=zi)
@@ -1069,31 +1059,19 @@ class Sim:
             terminated |= self.wm_gait_worlds & s.was_up & ~was_up1
         fall = (s.was_up & ~was_up1) | terminated if self.mixed else terminated
         remaining, active, deadline = None, None, False
-        if self.recovery_amp_steps:
+        if self.recovery_amp_steps and not self.wm_floor_amp:
             remaining = self.next_recovery_interval(s.recovery_left, s.was_up, was_up1)
             active, deadline = remaining > 0, s.recovery_left == 1
-        hold = s.supported_hold
-        hold_score = None
-        if self.wm_floor_amp:
-            weight = s.world.body_mass.sum(-1) * abs(self.m.opt.gravity[2])
-            posture = zenbot.standing_posture(v.height, S1[1][..., 2, 2])
-            hold, hold_score = hold.advance(
-                posture & ~diverged, loads[:, :2].sum(-1) >= .5 * weight
-            )
-            if self.wm_floor_locomotion:
-                remaining = self.floor_gait_interval(s.recovery_left, was_up1, hold_score)
-                if self.wm_global_gait:
-                    remaining = jnp.where(self.wm_gait_worlds, 0, remaining)
-                active = remaining > 0
+        gait = self.gait_weight(S1) if self.wm_floor_amp else None
         terms = self.reward_terms(S0, S1, v.kin, a, s.a_last, s.c_obs, ~was_up1, fall.astype(jnp.float32), contact, hits, self.q_soft,
                                   torque=data.actuator_force if self.legged_support else data.ctrl,
                                   joint_acc=joint_acc, recovery_active=active,
-                                  recovery_deadline=deadline, stand_blend=hold_score)
+                                  recovery_deadline=deadline)
         step_history = s.step_history
         if self.wm_gait_rewards:
             foot_acc_z = gait_rewards.measured_foot_acc_z(data, self.gait_bodies[:2], v.feet.com_velocity_z)
             step_history, added = gait_rewards.reward_terms(S1, v.feet, s.c_obs, data.actuator_force, joint_acc,
-                self.q_soft, *body_contacts, foot_acc_z, step_history, (s.recovery_left == 0) | ~active,
+                self.q_soft, *body_contacts, foot_acc_z, step_history, gait,
                 min_ankle_spacing=self.min_ankle_spacing)
             terms.update(added)
         parts = self.weighted(terms)
@@ -1109,15 +1087,15 @@ class Sim:
                  "down_done": (fin * s.down).sum(), "down_up": (fin * s.down * was_up1).sum(), "up_frac": was_up1.mean(),
                  "self_hits": hits.mean(), "foot_contact": contact.mean()}  # fmt: skip
         s1 = s._replace(data=data, a_last=a, a_ode=clean_action, t=t,
-                        was_up=was_up1, ep_sums=ep_sums, recovery_left=remaining, supported_hold=hold,
+                        was_up=was_up1, ep_sums=ep_sums, recovery_left=remaining,
                         step_history=step_history)
         if self.wm_posture_and_tracking:
-            moving = ~active & ~diverged & jnp.any(s.c_obs != 0., axis=-1)
+            moving = (gait > 0.) & ~diverged & jnp.any(s.c_obs != 0., axis=-1)
             error = gait_rewards.base_velocity(S1, self.root_com) - s.c_obs
             stats["velocity_errors"] = jnp.stack((jnp.where(moving, jnp.linalg.norm(error[:, :2], axis=-1), 0.).sum(),
                                                  jnp.where(moving, jnp.abs(error[:, 2]), 0.).sum(), moving.sum()))
         if self.wm_floor_amp:
-            stats["stand_blend"] = jnp.where(active, hold_score, 1.) if self.wm_floor_locomotion else hold_score
+            stats["gait_weight"] = gait
         if self.wm_global_gait:
             error = gait_rewards.base_velocity(S1, self.root_com)[..., :2] - s.c_obs[..., :2]
             worlds = self.wm_gait_worlds
@@ -1144,7 +1122,8 @@ class Sim:
         push = push_due
         qvel = s1.data.qvel
         if self.fall_push_speed:
-            push &= (s1.recovery_left == 0) & s1.was_up
+            suitable = self.gait_weight(unflatten(s1.data.qpos, s1.data.qvel)) >= 1. if self.wm_floor_amp else s1.recovery_left == 0
+            push &= suitable & s1.was_up
             angle, magnitude = jax.random.uniform(k_push, (2, N))
             angle = angle * (2*jnp.pi)
             impulse = (self.fall_push_speed * (.4 + .6*magnitude))[:, None] * jnp.stack((jnp.cos(angle), jnp.sin(angle)), -1)

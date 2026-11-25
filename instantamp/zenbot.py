@@ -56,8 +56,23 @@ def standing_posture(height, up_cos):
     return (height > UP_HEIGHT) & (height <= 2 * RISE_HEIGHT - UP_HEIGHT) & (up_cos > np.cos(np.pi / 6))
 
 
+def gait_weight(height, up_cos):
+    """Current-pose suitability for locomotion, independent of history and foot contact."""
+    def smooth_fraction(value, low, high):
+        fraction = jnp.clip((value - low) / (high - low), 0., 1.)
+        return fraction**2 * (3. - 2. * fraction)
+
+    return (smooth_fraction(height, .44, UP_HEIGHT)
+            * smooth_fraction(up_cos, .5, np.cos(np.pi / 6)))
+
+
+def quiet_command_weight(command):
+    """Fade the quiet-stance objective out as a linear or angular command grows."""
+    return jnp.exp(-jnp.sum(jnp.square(command / .1), axis=-1))
+
+
 class SupportedStand(NamedTuple):
-    """LeggedLab's one-second upright streak and foot-load history, independently for each world."""
+    """One-second posture and foot-load success criterion; not a training reward gate."""
 
     upright_steps: jax.Array
     loaded: jax.Array
@@ -87,6 +102,14 @@ def floor_stand_score(state, foot_contact):
     still = jnp.exp(-4. * jnp.square(vel).sum(-1) - .5 * jnp.square(angular).sum(-1))
     upright = standing_posture(pos[..., 2], rot[..., 2, 2])
     return upright * height * still * jnp.mean(foot_contact, axis=-1)
+
+
+def quiet_stand_score(state, foot_contact):
+    """Continuous stance quality; the caller supplies pose and command suitability."""
+    pos, _, vel, angular, _, _ = state
+    height = jnp.exp(-20. * jnp.abs(pos[..., 2] - RISE_HEIGHT))
+    still = jnp.exp(-4. * jnp.square(vel).sum(-1) - .5 * jnp.square(angular).sum(-1))
+    return height * still * jnp.mean(foot_contact, axis=-1)
 
 
 def lift_progress(height, onset):

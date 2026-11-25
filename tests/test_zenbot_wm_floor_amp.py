@@ -19,7 +19,7 @@ def test_joint_floor_amp_requires_online_motion_and_physical_rollouts():
 
 
 @pytest.mark.parametrize("posture", [False, True])
-def test_joint_floor_amp_exposes_eight_commands_and_uses_measured_support_to_release_locomotion(zenbot23_motion_banks, posture):
+def test_joint_floor_amp_commands_and_rewards_follow_current_pose(zenbot23_motion_banks, posture):
     sim = Sim(256, physics=False, robot=zenbot.MIXED_TASK, zenbot_motion_train_wm=True,
               wm_floor_amp=True, wm_lift_gate=.44, support_rsi=.35, reset_floor=.5, wm_posture_and_tracking=posture,
               randomize_world=False, obs_noise=False, push=False, prob_shove=0.)
@@ -39,10 +39,7 @@ def test_joint_floor_amp_exposes_eight_commands_and_uses_measured_support_to_rel
     transition = jax.jit(lambda cmd, obs: (cmd + 1., obs - 1.), donate_argnums=(0, 1))
     advanced, observed = transition(s.cmd.vel, s.c_obs)
     np.testing.assert_allclose(advanced - observed, 2., atol=1e-6)
-    np.testing.assert_array_equal(s.recovery_left > 0, s.down)
-    ready = sim.floor_gait_interval(jnp.array([200, 200, 0, 0]),
-                                    jnp.array([True, True, True, False]), jnp.array([.9, 1., 0., 0.]))
-    np.testing.assert_array_equal(ready, [200, 0, 0, 200])
+    assert s.recovery_left is None
 
     v = jnp.zeros((1, 3))
     q = sim.floor_stand_joints[None]
@@ -52,12 +49,13 @@ def test_joint_floor_amp_exposes_eight_commands_and_uses_measured_support_to_rel
         state = (pose[0], rotation, speed, spin, q, a)
         return sim.reward_terms(pose, state, sim.view_state(state).kin, a, a, command,
                                 jnp.array([False]), jnp.zeros(1), jnp.ones((1, 2)), jnp.zeros(1),
-                                sim.q_soft, recovery_active=jnp.array([recovering]), stand_blend=1.)
+                                sim.q_soft, recovery_active=jnp.array([recovering]))
     run = jnp.array([[2.5, 0., 0.]])
     np.testing.assert_allclose(reward(run, v, False)[lin], np.exp(-2.5**2 / .5**2), rtol=1e-6)
     assert reward(v, v, False)[lin].item() == reward(v, v, False)[ang].item() == 1.
     assert reward(run, run, False)["stand"].item() == 0.
-    assert reward(run, v, True)[lin].item() == reward(run, v, True)[ang].item() == 0.
+    np.testing.assert_array_equal(reward(run, v, True)[lin], reward(run, v, False)[lin])
+    np.testing.assert_array_equal(reward(run, v, True)[ang], reward(run, v, False)[ang])
     assert reward(v, v, False)["stand"].item() > .99
     assert jax.grad(lambda vx: reward(run, v.at[0,0].set(vx), False)[lin].sum())(0.) > 0.
 
@@ -69,8 +67,8 @@ def test_joint_floor_amp_exposes_eight_commands_and_uses_measured_support_to_rel
     cmd = jnp.array([[.1, -.3, -.1]])
     scores = reward(cmd, jnp.asarray(rotation @ origin_speed)[None], False,
                     jnp.asarray(rotation)[None], jnp.asarray(rotation @ omega)[None])
-    np.testing.assert_allclose(scores[lin], (.5/.7)*np.exp(-1.), rtol=1e-6)
-    np.testing.assert_allclose(scores[ang], (.5/.7)*np.exp(-4.), rtol=1e-6)
+    np.testing.assert_allclose(scores[lin], zenbot.gait_weight(.68, .5)*np.exp(-1.), rtol=1e-6)
+    np.testing.assert_allclose(scores[ang], zenbot.gait_weight(.68, .5)*np.exp(-4.), rtol=1e-6)
 
 
 def test_fixed_joint_collectors_keep_their_tasks_across_resets_and_double_tracking(zenbot23_motion_banks):
@@ -91,7 +89,7 @@ def test_fixed_joint_collectors_keep_their_tasks_across_resets_and_double_tracki
     for seed in (7, 23):
         state = sim._reset(state, jnp.ones(sim.N, bool), jax.random.key(seed))
         np.testing.assert_array_equal(state.down, floor)
-        np.testing.assert_array_equal(state.recovery_left > 0, floor)
+        assert state.recovery_left is None
 
 
 def test_joint_task_samples_ground_to_stance_requests(zenbot23_motion_banks):
@@ -173,15 +171,15 @@ def test_joint_floor_practice_includes_moving_low_support_and_cold_openings(zenb
     np.testing.assert_array_equal(joint_speed, bank["qd"][rows])
 
 
-def test_recovery_sampling_finds_rare_transitions_to_supported_standing():
+def test_recovery_sampling_finds_rare_intermediate_poses():
     steps, worlds = 32, 8
     states = jnp.zeros((steps, worlds, 1))
     gate = jnp.ones((steps, worlds)).at[18:21, 5].set(.7)
-    buf = dict(s_qpos=states, s1_qpos=states, s_qvel=states, s1_qvel=states, stand_blend=gate,
+    buf = dict(s_qpos=states, s1_qpos=states, s_qvel=states, s1_qvel=states, gait_weight=gate,
                done=jnp.zeros_like(gate), ok=jnp.ones_like(gate), size=steps, ptr=0,
                t=jnp.broadcast_to(jnp.arange(steps)[:, None], gate.shape))
     windows = rb.sample_windows(buf, jax.random.key(43), 64, 5, recovery_only=True)
-    np.testing.assert_array_equal(windows["stand_blend"][:, -1] < 1., True)
+    np.testing.assert_array_equal(windows["gait_weight"][:, -1] < 1., True)
     np.testing.assert_array_equal(windows["mask"][:, -1], 1.)
 
 
@@ -189,10 +187,9 @@ def test_floor_discriminator_sees_the_same_reset_padding_as_the_policy():
     steps, worlds, frames = 20, 2, 5
     time = jnp.tile(jnp.arange(steps)[:,None], (1,worlds))
     states = time[..., None].astype(jnp.float32)
-    # The recovery counter can restart when a robot refalls during the same physical episode.
-    buf = dict(s_qpos=states, s1_qpos=states+1, s_qvel=states, s1_qvel=states+1, stand_blend=jnp.zeros_like(time),
-               done=jnp.zeros_like(time), ok=jnp.ones_like(time), size=steps, ptr=0, t=time,
-               recovery_left=jnp.where(time < 10, 200-time, 210-time))
+    # Pose suitability can change inside an episode without restarting its history.
+    buf = dict(s_qpos=states, s1_qpos=states+1, s_qvel=states, s1_qvel=states+1, gait_weight=jnp.zeros_like(time),
+               done=jnp.zeros_like(time), ok=jnp.ones_like(time), size=steps, ptr=0, t=time)
     windows = rb.sample_windows(buf, jax.random.key(73), 512, frames, recovery_only=True, recovery_steps=200)
     last = windows["t"][:, -1:]
     assert np.any(last == 1) and np.any(last == 10)
