@@ -46,9 +46,15 @@ def continuation_args(
         raise ValueError("Expected a combined Zenbot world-model training run")
     if config.get("wm_getup_only"):
         raise ValueError("The checkpoint was trained only on floor recovery")
-    config.pop("gait_velocity_time_constant", None)
+    for retired in ("gait_velocity_time_constant", "imu_replay_path", "imu_replay_share", "imu_replay_scale"):
+        config.pop(retired, None)
+    # Older configs with implicit widths used the original three 512-unit layers.
+    config.setdefault("wm_hidden", "512,512,512")
     # Keep optional optimizer settings; reward-version migration is handled by the learner.
     config.setdefault("imag_gait_mirror_weight", 0.)
+    # Archived world models/critics lack the randomized-dynamics context.
+    # Keep their original physical recipe when doing an exact continuation.
+    config.setdefault("motion_train_randomization", 0)
     inactive = {
         "g1_style": 0,
         "init_g1_full": "",

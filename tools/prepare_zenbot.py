@@ -21,6 +21,7 @@ from tools.convert_motions import (
 from tools.zenbot_step_width import MAX_FOOT_SHIFT, TARGET_WIDTH, StepWidth
 
 LOCOMOTION_BANK = "zenbot_amp_frax_walk_sole8"
+FRAX_BANK = "zenbot_amp_frax"
 
 
 def permutation(names):
@@ -70,16 +71,22 @@ def prepare_locomotion(source, dest, bank_name=LOCOMOTION_BANK):
     bank = source / "robolab/data/motions" / bank_name
     source_manifest = bank / "manifest.json"
     expected_hashes = None
-    if bank_name == LOCOMOTION_BANK or source_manifest.is_file():
+    import_manifest = bank / "import_manifest.json"
+    if source_manifest.is_file() or import_manifest.is_file():
+        if not source_manifest.is_file():
+            source_manifest = import_manifest
         manifest = json.loads(source_manifest.read_text())
         if manifest["quaternion_order"] != "wxyz":
             raise ValueError(
                 f"Unexpected quaternion order in {source_manifest}"
             )
         order = permutation(manifest["joint_names"])
-        expected_hashes = {
-            c["name"]: c["output_sha256"] for c in manifest["clips"]
-        }
+        if source_manifest == import_manifest:
+            expected_hashes = {Path(k).stem: v for k, v in manifest["files"].items()}
+        else:
+            expected_hashes = {c["name"]: c["output_sha256"] for c in manifest["clips"]}
+    elif bank_name in (LOCOMOTION_BANK, FRAX_BANK):
+        raise FileNotFoundError(f"Missing motion manifest in {bank}")
     else:
         order = permutation(
             [
@@ -89,7 +96,7 @@ def prepare_locomotion(source, dest, bank_name=LOCOMOTION_BANK):
                 )
             ]
         )
-    directory = dest / "walk_run"
+    directory = dest / ("walk_run_frax" if bank_name == FRAX_BANK else "walk_run")
     extra = {p.stem for p in directory.glob("*.npz")} - weights.keys()
     if extra:
         raise ValueError(
@@ -134,6 +141,8 @@ def prepare_locomotion(source, dest, bank_name=LOCOMOTION_BANK):
         "source_bank": bank_name,
         "source_sha256": hashes,
     }
+    if bank_name in (LOCOMOTION_BANK, FRAX_BANK):
+        sampling["reference_sampling"] = "motion_train_command_speed"
     if widener is not None:
         sampling["step_width"] = {
             "target_m": TARGET_WIDTH,

@@ -202,11 +202,8 @@ def test_quiet_supported_stand_beats_a_jump_and_a_floor_pose():
     rotation = jnp.broadcast_to(jnp.eye(3), (3, 3, 3)).at[0, 2, 2].set(0.)
     vel = jnp.zeros((3, 3)).at[1, 2].set(1.)
     feet = jnp.array([[0., 0.], [0., 0.], [1., 1.]])
-    score = zenbot.floor_stand_score((pos, rotation, vel, jnp.zeros_like(vel), None, None), feet)
+    score = zenbot.quiet_stand_score((pos, rotation, vel, jnp.zeros_like(vel), None, None), feet)
     np.testing.assert_allclose(score, [0., 0., 1.], atol=1.e-5)
-    for z in (.15, .35, .57):
-        low = zenbot.floor_stand_score((pos.at[:, 2].set(z), rotation, vel, vel, None, None), jnp.ones_like(feet))
-        np.testing.assert_array_equal(low, 0.)
 
 
 def test_negative_windows_change_only_tempo_and_preserve_clip_boundaries():

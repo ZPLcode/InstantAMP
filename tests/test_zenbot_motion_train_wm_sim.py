@@ -55,7 +55,7 @@ def native_substeps(sim, world, state, targets, assist, fresh):
         vel.append(d.qvel.copy())
     # Contacts do not enter these six terms; termination and timeout use the real post-step pelvis state.
     zeros=jnp.zeros(sim.N)
-    return state.replace(qpos=jnp.asarray(pos),qvel=jnp.asarray(vel)),jnp.zeros((sim.N,2)),zeros,zeros.astype(bool),None,None
+    return state.replace(qpos=jnp.asarray(pos),qvel=jnp.asarray(vel)),jnp.zeros((sim.N,2)),zeros,zeros.astype(bool),None
 
 
 def test_fixed_commands_match_real_initial_and_resampled_sensor_inputs():

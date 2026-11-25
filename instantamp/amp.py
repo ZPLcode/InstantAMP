@@ -345,7 +345,7 @@ def train_step(st, demo, robot, wt, key, lr: float, recovery=False, leggedlab=Fa
         (_, aux), grads = jax.value_and_grad(recovery_loss, has_aux=True)(*args, leggedlab=leggedlab, motion_train=motion_train)
     else:
         (_, aux), grads = jax.value_and_grad(loss, has_aux=True)(*args)
-    if not (leggedlab or motion_train):
+    if motion_train or not leggedlab:
         grads, _ = optim.clip_by_global_norm(grads, 1.0)
     if recovery:
         # Coupled Adam weight decay, following the reference trunk and head parameter groups.

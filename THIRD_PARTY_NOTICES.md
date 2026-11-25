@@ -139,11 +139,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 `tools/download_data.sh` retrieves the G1 walk-and-run clips from LeggedLab (AMASS / ACCAD retargets under AMASS's license) and Unitree's G1 retarget of LAFAN1. LAFAN1 is by Ubisoft La Forge and carries the CC BY-NC-ND 4.0 license. [LeggedLab](https://github.com/zitongbai/legged_lab) · [Unitree LAFAN1 retarget](https://huggingface.co/datasets/lvhaidong/LAFAN1_Retargeting_Dataset)
 
-Zenbot recovery references are derived from the LAFAN1 take `fallAndGetUp1_subject1.bvh` using the prepared LeggedLab FRAX bank. The gait references use the Motion Train `zenbot_amp_frax_walk_sole8` bank. The preparation tools read separately obtained inputs and generate local 23- and 26-joint clips. Check the source dataset permissions before sharing recordings or converted motion files. [LAFAN1 source and license](https://github.com/ubisoft/ubisoft-laforge-animation-dataset) · [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+Zenbot recovery references are derived from the LAFAN1 take `fallAndGetUp1_subject1.bvh` using the prepared LeggedLab FRAX bank. The 23-DoF gait references use Motion Train’s `zenbot_amp_frax` bank. The 74k release and the 26-DoF retarget use `zenbot_amp_frax_walk_sole8`. The preparation tools read separately obtained inputs and generate local 23- and 26-joint clips. Check the source dataset permissions before sharing recordings or converted motion files. [LAFAN1 source and license](https://github.com/ubisoft/ubisoft-laforge-animation-dataset) · [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
 
 ## Zenbot robot descriptions
 
 The 23- and 26-DoF MJCF files in `assets/` come from Motion Train's RoboLab robot descriptions. The simulator uses actuator calibration from the corresponding models. The source project's BSD-3-Clause notice is included under `licenses/`. [Robot source revision](https://github.com/ZPLcode/h1_train/tree/4733fc9649dc3f2b99b2c3ba21fb2ec5e259e6ff/robolab/data/robots/roboparty) · [RoboLab BSD-3-Clause notice](licenses/Zenbot-BSD-3-Clause.txt)
+
+The Zenbot23 dynamics sampling, shoulder/hip force schedule and mild-terrain parameters in `instantamp/zenbot_domain_randomization.py`, `instantamp/zenbot_push.py` and `instantamp/zenbot_terrain.py` follow Motion Train's local revision `ad923704f7fa1835730d04a10023b15d4e2b29e3`. They are implemented for JAX and native MuJoCo contact geometry; the source RoboLab notice above applies to the adapted task logic.
 
 ## Dependencies
 

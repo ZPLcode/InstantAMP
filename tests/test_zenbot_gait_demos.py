@@ -16,6 +16,7 @@ from instantamp.zenbot_gait_demos import (
     StraightGaitDemos,
     command_reset_bank,
     directional_window_starts,
+    motion_train_reference_tier,
     reference_command_index,
     source_command_speeds,
     straight_window_starts,
@@ -301,9 +302,62 @@ def test_converter_uses_sole8_with_configured_weights_and_manifest_joint_order(t
     sampling = json.loads((dest / "walk_run/sampling.json").read_text())
     assert sampling["weights"] == {"test": 2.}
     assert sampling["source_bank"] == bank.name
+    assert sampling["reference_sampling"] == "motion_train_command_speed"
     pkl.write_bytes(b"corrupt")
     with pytest.raises(ValueError, match="Source hash"):
         prepare_locomotion(source, dest)
+
+
+def test_original_frax_converter_preserves_joint_trajectory_and_checks_import_manifest(tmp_path):
+    cfg = tmp_path / "robolab/robolab/tasks/manager_based/amp/zenbot_amp_env_cfg.py"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text('MOTION_WEIGHTS = {"walk": 3.75}\n')
+    bank = tmp_path / "robolab/data/motions/zenbot_amp_frax"
+    bank.mkdir(parents=True)
+    q = np.linspace(-.2, .3, 23 * 50).reshape(50, 23)
+    pkl = bank / "walk.pkl"
+    pkl.write_bytes(pickle.dumps(dict(root_pos=np.zeros((50, 3)), root_rot=np.tile([1., 0., 0., 0.], (50, 1)),
+                                      dof_pos=q, fps=50.)))
+    manifest = dict(joint_names=[f"{name}_joint" for name in reversed(zenbot.DOF)], quaternion_order="wxyz",
+                    files={pkl.name: hashlib.sha256(pkl.read_bytes()).hexdigest()})
+    (bank / "import_manifest.json").write_text(json.dumps(manifest))
+    prepare_locomotion(tmp_path, tmp_path, bank.name)
+    with np.load(tmp_path / "walk_run_frax/walk.npz") as result:
+        np.testing.assert_allclose(result["dof_pos"], q[:, ::-1], atol=1.e-7)
+    info = json.loads((tmp_path / "walk_run_frax/sampling.json").read_text())
+    assert info["reference_sampling"] == "motion_train_command_speed"
+    assert info["weights"] == {"walk": 3.75}
+    pkl.write_bytes(b"changed")
+    with pytest.raises(ValueError, match="Source hash"):
+        prepare_locomotion(tmp_path, tmp_path, bank.name)
+
+
+def test_slow_reference_rates_follow_command_and_preserve_clip_end_velocities(tmp_path):
+    commands = jnp.array([[.1, 0, 0], [.3, 0, 0], [.375, 0, 0], [.375, 0, 0], [.45, 0, 0],
+                          [0, 0, -.6], [0, 0, .75], [0, 0, .9], [-.2, 0, 0], [0, .2, 0], [2., 0, 0]])
+    draw = jnp.array([.1, .9, .25, .75, .01, .9, .25, .01, .2, .2, .2])
+    pools, rates = motion_train_reference_tier(commands, draw)
+    np.testing.assert_array_equal(pools, [0, 8, 8, 1, 1, 7, 6, 6, 3, 4, 2])
+    np.testing.assert_allclose(rates, [1., .35, .35, 1., 1., .5, .5, 1., 1., 1., 1.])
+
+    frames = 21
+    motion = clip(np.ones(frames))
+    ticks = np.arange(frames)
+    motion["dof_pos"][:] = ticks[:, None]
+    yaw = ticks * .01
+    motion["root_quat"][:, 2:] = np.stack((np.sin(yaw/2), np.cos(yaw/2)), axis=-1)
+    np.savez(tmp_path / "first.npz", **motion)
+    motion["dof_pos"] += 1000.
+    np.savez(tmp_path / "second.npz", **motion)
+    (tmp_path / "sampling.json").write_text(json.dumps({"weights": {"first": 1, "second": 1}}))
+    sim = SimpleNamespace(J=23, key_positions=lambda p, r, q: jnp.broadcast_to(p[:, None], (len(p), 6, 3)))
+    demos = GlobalGaitDemos(tmp_path, sim, 10)
+    rate = jnp.array([.35, .5])
+    start = (frames - 1) - 9 * rate
+    windows = jax.jit(demos.at_time)(jnp.array([0, 0]), start, rate)
+    np.testing.assert_allclose(windows[:, :, 3], start[:, None] + jnp.arange(10)*rate[:, None], atol=2.e-5)
+    np.testing.assert_allclose(windows[:, :, 26], np.broadcast_to((rate*50)[:, None], (2, 10)), atol=2.e-4)
+    np.testing.assert_allclose(windows[:, :, 2], np.broadcast_to((rate*.5)[:, None], (2, 10)), atol=2.e-5)
 
 
 def test_step_width_moves_narrow_feet_across_the_heading_and_preserves_sole_orientation():

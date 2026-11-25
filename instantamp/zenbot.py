@@ -1,8 +1,5 @@
 """Shared gait/recovery task logic and the 23-DoF articulation profile."""
 
-from typing import NamedTuple
-
-import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -69,39 +66,6 @@ def gait_weight(height, up_cos):
 def quiet_command_weight(command):
     """Fade the quiet-stance objective out as a linear or angular command grows."""
     return jnp.exp(-jnp.sum(jnp.square(command / .1), axis=-1))
-
-
-class SupportedStand(NamedTuple):
-    """One-second posture and foot-load success criterion; not a training reward gate."""
-
-    upright_steps: jax.Array
-    loaded: jax.Array
-
-    @classmethod
-    def empty(cls, num_envs, dt):
-        window = max(1, round(1. / dt))
-        return cls(jnp.zeros(num_envs, dtype=jnp.int32), jnp.zeros((num_envs, window), dtype=bool))
-
-    def reset(self, done):
-        return SupportedStand(jnp.where(done, 0, self.upright_steps), self.loaded & ~done[:, None])
-
-    def advance(self, posture, loaded):
-        window = self.loaded.shape[1]
-        upright_steps = jnp.where(posture, jnp.minimum(self.upright_steps + 1, window), 0)
-        history = jnp.concatenate((self.loaded[:, 1:], loaded[:, None]), axis=1)
-        support_fraction = history.sum(axis=1) / int(np.ceil(.90 * window))
-        progress = jnp.minimum(upright_steps / window, support_fraction)
-        score = progress * (loaded | (progress >= 1.))
-        return SupportedStand(upright_steps, history), score
-
-
-def floor_stand_score(state, foot_contact):
-    """Quality of a supported standing pose. Lifting the pelvis below standing height earns zero."""
-    pos, rot, vel, angular, _, _ = state
-    height = jnp.exp(-20. * jnp.abs(pos[..., 2] - RISE_HEIGHT))
-    still = jnp.exp(-4. * jnp.square(vel).sum(-1) - .5 * jnp.square(angular).sum(-1))
-    upright = standing_posture(pos[..., 2], rot[..., 2, 2])
-    return upright * height * still * jnp.mean(foot_contact, axis=-1)
 
 
 def quiet_stand_score(state, foot_contact):

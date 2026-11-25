@@ -113,6 +113,7 @@ def test_real_record_resamples_only_newest_command_and_backpropagates_through_wm
                              imag_unroll=1, imag_remat='none', gamma=.99)
     sim = Sim.__new__(Sim)
     sim.mixed, sim.robot = True, zenbot
+    sim.root_com = jnp.zeros(3)
     sim.noisy_obs, sim.episode_steps, sim.recovery_amp_steps = True, 400, 200
     sim.q_soft, sim.sole_frame = None, (0,1)
     zeros = jnp.zeros(n)
@@ -173,7 +174,8 @@ def test_imagined_mirror_only_updates_actor_on_live_commanded_gait(zenbot23_moti
     # Forward, yaw, stop, recovering and already timing out. All remaining episodes end on step two.
     n = 5
     learner = InstantAMP.__new__(InstantAMP)
-    cfg = learner.cfg = parse(["--robot", zenbot.MIXED_TASK, "--num_envs", "32", "--horizon", "2", "--imag_unroll", "1"])
+    cfg = learner.cfg = parse(["--robot", zenbot.MIXED_TASK, "--num_envs", "32", "--horizon", "2", "--imag_unroll", "1",
+                               "--motion_train_randomization", "0"])
     learner.sim = Sim(**simulation_options(vars(cfg)), physics=False, obs_noise=False)
     learner.B_im, learner.J = n, 23
     monkeypatch.setattr(nets, "wm_step", lambda wm, bounds, state, *args, **kwargs: state)

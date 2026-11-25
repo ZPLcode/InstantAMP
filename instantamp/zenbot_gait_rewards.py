@@ -82,10 +82,12 @@ def slip_cost(velocity_xy):
     return jnp.where(squared <= 1., squared, 2. * jnp.sqrt(jnp.maximum(squared, 1.)) - 1.)
 
 
-def predicted_foot_slip(pos, rotation, velocity, angular, local_corners):
-    """Approximate loaded material points on each sole box using their height above the plane."""
+def predicted_foot_slip(pos, rotation, velocity, angular, local_corners, ground_height=None):
+    """Approximate loaded material points using each sole corner's terrain clearance."""
     offsets = mv3(rotation[..., None, :, :], local_corners)
     heights = pos[..., 2:3] + offsets[..., 2]
+    if ground_height is not None:
+        heights -= ground_height(pos[..., None, :2] + offsets[..., :2])
     low = heights.min(axis=-1)
     contact = jnp.clip((env.FOOT_CONTACT_H - low) / env.FOOT_CONTACT_SOFT, 0., 1.)
     shares = jax.nn.softmax(-heights / env.FOOT_CONTACT_SOFT, axis=-1)

@@ -5,9 +5,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from instantamp import nets
+from instantamp import nets, optim
 from instantamp.train import (
     initialize_native_learner,
+    load_full,
     parse,
     save_full,
     save_policy,
@@ -41,6 +42,7 @@ def test_continue_archived_i_profile_with_full_directory_on_another_volume(tmp_p
     assert cfg.log_dir == str(output) and cfg.max_iterations == 12000
     assert cfg.gait_mirror_weight == 0
     assert cfg.imag_gait_mirror_weight == 0
+    assert cfg.wm_hidden == "512,512,512"
     ranged = parse(continuation_args(full, output, 12000, range_commands=True, num_envs=4096))
     assert ranged.num_envs == 4096 and ranged.wm_range_commands == 1
     assert ranged.init_full == cfg.init_full
@@ -53,7 +55,8 @@ def test_continue_archived_i_profile_with_full_directory_on_another_volume(tmp_p
     for settings, expected in (({}, 3), ({"wm_gait_frames": 10}, 10)):
         (run / "config.json").write_text(json.dumps({**config, **settings}))
         assert parse(continuation_args(full, output, 12000)).wm_gait_frames == expected
-    config.update(wm_initial_gait_stage=0, imag_gait_mirror_weight=.12)
+    config.update(wm_initial_gait_stage=0, imag_gait_mirror_weight=.12,
+                  imu_replay_path="old_bank.npz", imu_replay_share=.25, imu_replay_scale=.1)
     (run / "config.json").write_text(json.dumps(config))
     assert parse(continuation_args(full, output, 12000)).imag_gait_mirror_weight == .12
     assert parse(continuation_args(full, output, 12000, imag_gait_mirror_weight=.2)).imag_gait_mirror_weight == .2
@@ -73,6 +76,22 @@ def test_continue_archived_i_profile_with_full_directory_on_another_volume(tmp_p
     policy.unlink()
     with pytest.raises(FileNotFoundError, match="companion policy"):
         continuation_args(full, output, 12000)
+
+
+def test_full_checkpoint_round_trips_exploration_and_reads_fixed_noise_runs(tmp_path):
+    std = jnp.ones(23)
+    fresh = dict(it=jnp.array(0), action_std=std, opt_std=optim.init(std, False))
+    learned, state = optim.step(std, jnp.linspace(-1., 1., 23), fresh["opt_std"], False, .01)
+    saved = dict(it=jnp.array(17), action_std=learned, opt_std=state)
+    path = tmp_path / "snapshot"
+    save_full(str(path), saved)
+    restored = load_full(fresh, path.with_suffix(".npz"))
+    for got, want in zip(jax.tree.leaves(restored), jax.tree.leaves(saved), strict=True):
+        np.testing.assert_array_equal(got, want)
+    save_full(str(path), dict(it=saved["it"]))
+    restored = load_full(fresh, path.with_suffix(".npz"))
+    np.testing.assert_array_equal(restored["action_std"], std)
+    assert int(restored["it"]) == 17 and int(restored["opt_std"]["t"]) == 0
 
 
 @pytest.mark.parametrize("saved_version", [None, 1])

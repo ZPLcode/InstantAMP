@@ -19,6 +19,7 @@ def simulation_options(config):
         "floor_stop_command_share", "gait_source_commands", "wm_global_gait",
         "wm_side_share", "wm_initial_gait_stage", "wm_gait_rewards",
         "wm_posture_and_tracking", "wm_range_commands",
+        "motion_train_randomization",
     )
     options = {name: config[name] for name in shared if name in config}
     motion_train = bool(config.get("motion_train_wm"))

@@ -8,8 +8,8 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
-from . import amp, zenbot, zenbot_source_gait as source_gait
-from .rot import mat_to_quat, quat_to_mat
+from . import amp, env, zenbot, zenbot_source_gait as source_gait
+from .rot import mat_to_quat, mm3, quat_to_mat, so3_log, tr3
 
 # The four transitions contain steady forward walking between the start and stop.
 # Earlier motion_train banks use the two CMU walk takes instead.
@@ -131,6 +131,22 @@ def reference_command_index(commands, labels):
     return jnp.where(target[..., 0] == 0., 0, jnp.argmin(distance, axis=-1))
 
 
+def motion_train_reference_tier(commands, draw):
+    """Select a source pool and a single playback rate per expert window."""
+    vx, vy, yaw = commands.T
+    speed = jnp.linalg.norm(commands[:, :2], axis=-1)
+    # Pool indices follow zenbot.DIRECTIONAL_COMMANDS, plus the slow forward pool.
+    moving = jnp.where(vx < 0., 3, jnp.where(vx > 1.5, 2, 1))
+    moving = jnp.where(jnp.abs(vy) > jnp.abs(vx), jnp.where(vy > 0., 4, 5), moving)
+    pivot = jnp.where(yaw > .1, 6, jnp.where(yaw < -.1, 7, 0))
+    group = jnp.where(speed <= .1, pivot, moving)
+    def use_slow(value, low, high):
+        return (value <= low) | (draw < jnp.clip((high - value) / (high - low), 0., 1.))
+    walk = (group == 1) & use_slow(speed, .30, .45)
+    turn = (group >= 6) & use_slow(jnp.abs(yaw), .60, .90)
+    return jnp.where(walk, 8, group), jnp.where(walk, .35, jnp.where(turn, .5, 1.))
+
+
 class GlobalGaitDemos(amp.Demos):
     """Draw consecutive 50 Hz frames at fractional start times using Motion Train's clip weights."""
 
@@ -145,6 +161,23 @@ class GlobalGaitDemos(amp.Demos):
         super().__init__(directory, sim, frames, per_clip=True, frame_fn=world_frame)
         if self.clip_probabilities is None:
             raise ValueError(f"Missing Motion Train gait weights in {directory}/sampling.json")
+        sampling = json.loads((Path(directory) / "sampling.json").read_text())
+        self.command_logits = None
+        if sampling.get("reference_sampling") == "motion_train_command_speed":
+            names = sorted(sampling["weights"])
+            slow_walk = STRAIGHT_CLIPS["walk"][:4]
+            walk = (*slow_walk, "male_walk__Walk_B10_-_Walk_turn_left_45_stageii",
+                    "male_walk__Walk_B13_-_Walk_turn_right_45_stageii",
+                    "run__C4_-_run_to_walk_a_stageii", "run__C5_-_walk_to_run_stageii")
+            pools = [("stand_4s_120f",), walk, tuple(n for n in names if n.startswith("run__"))]
+            pools.extend(tuple(n for n in DIRECTION_CLIPS if gait_command_index(n) == group) for group in range(3, 8))
+            pools.append(slow_walk)
+            if any(not pool or not set(pool).issubset(names) for pool in pools):
+                raise ValueError("Missing gait clips for Motion Train command-speed sampling")
+            self.command_logits = jnp.array([
+                [np.log(sampling["weights"][name]) if name in pool else -np.inf for name in names]
+                for pool in pools
+            ])
 
     def sample(self, key, count):
         choose, time = jax.random.split(key)
@@ -153,12 +186,29 @@ class GlobalGaitDemos(amp.Demos):
         start = jax.random.uniform(time, (count,)) * jnp.maximum(self.clip_lengths[clip] - 2, 0)
         return self.at_time(clip, start)
 
-    def at_time(self, clip, start):
-        first = self.clip_offsets[clip]
-        index = first[:, None] + start.astype(jnp.int32)[:, None] + jnp.arange(self.window)
-        last = first + self.clip_lengths[clip] + self.window - 2
-        a, b = self.frames[index], self.frames[jnp.minimum(index + 1, last[:, None])]
-        t = (start % 1.)[:, None, None]
+    def sample_for_commands(self, key, commands):
+        tier_key, clip_key, time_key = jax.random.split(key, 3)
+        pool, rate = motion_train_reference_tier(commands, jax.random.uniform(tier_key, (len(commands),)))
+        clip = jax.random.categorical(clip_key, self.command_logits[pool])
+        last = self.clip_lengths[clip] + self.window - 2
+        # Sample uniformly on the retimed 50 Hz grid, including the last complete window.
+        ticks = jnp.floor(last / rate + 1.e-5).astype(jnp.int32) + 1
+        start = jax.random.randint(time_key, clip.shape, 0, ticks - self.window + 1) * rate
+        return self.at_time(clip, start, rate)
+
+    def at_time(self, clip, start, rate=None):
+        last = (self.clip_lengths[clip] + self.window - 2)[:, None]
+        step = 1. if rate is None else rate[:, None]
+        times = start[:, None] + jnp.arange(self.window) * step
+        if rate is not None:
+            # One neighbor for the final derivative. At the clip end use a backward difference.
+            sign = jnp.where(times[:, -1:] + step <= last, 1., -1.)
+            times = jnp.concatenate((times, times[:, -1:] + sign * step), axis=1)
+        times = jnp.clip(times, 0., last)
+        first = self.clip_offsets[clip, None]
+        index = first + times.astype(jnp.int32)
+        a, b = self.frames[index], self.frames[jnp.minimum(index + 1, first + last)]
+        t = (times % 1.)[..., None]
         qa, qb = a[..., :4], b[..., :4]
         dot = jnp.sum(qa * qb, axis=-1, keepdims=True)
         qb = jnp.where(dot < 0., -qb, qb)
@@ -168,7 +218,14 @@ class GlobalGaitDemos(amp.Demos):
                 + t * jnp.sinc(t * angle / jnp.pi) * qb)
         angular, joints, rates, points = jnp.split(a[..., 4:] + t * (b[..., 4:] - a[..., 4:]),
                                                   [3, 3 + self.joints, 3 + 2 * self.joints], axis=-1)
-        return source_gait.amp_frame(quat_to_mat(quat), angular, joints, rates,
+        rotation = quat_to_mat(quat)
+        if rate is not None:
+            dt = jnp.concatenate((jnp.ones_like(times[:, 1:-1]), sign), axis=1)[..., None] * env.DT
+            slowed = (rate != 1.)[:, None, None]
+            angular = jnp.where(slowed, so3_log(mm3(rotation[:, 1:], tr3(rotation[:, :-1]))) / dt, angular[:, :-1])
+            rates = jnp.where(slowed, jnp.diff(joints, axis=1) / dt, rates[:, :-1])
+            rotation, joints, points = rotation[:, :-1], joints[:, :-1], points[:, :-1]
+        return source_gait.amp_frame(rotation, angular, joints, rates,
                                      points.reshape(*points.shape[:-1], len(zenbot.KEY_BODIES), 3))
 
 

@@ -27,13 +27,15 @@ legged_lab=${LEGGED_LAB_CHECKOUT:-}
 sim_python=${SIM_PYTHON:-.venv/bin/python}
 manifest=$PWD/assets/zenbot_wm_reference.sha256
 data=data/zenbot23_walk_run_recovery
+gait=walk_run
+source_bank=zenbot_amp_frax_walk_sole8
 
 # The 26-DoF retarget consumes the verified 23-DoF clips, so both use this lock.
 exec 9<"$data"
 flock 9
 shopt -s nullglob
 needs=()
-for bank in walk_run recovery; do
+for bank in "$gait" recovery; do
     clips=("$data/$bank"/*.npz)
     expected=$(awk -v dir="$data/$bank/" 'index($2, dir) == 1 && /\.npz$/ {n++} END {print n+0}' "$manifest")
     if [[ ${#clips[@]} != "$expected" ]] || ! sha256sum --check --status \
@@ -71,7 +73,7 @@ if [[ -z $source_dir ]]; then
     source_dir=$stage/source
     git init --quiet "$source_dir"
     git -C "$source_dir" remote add origin "${MOTION_TRAIN_URL:-https://github.com/ZPLcode/h1_train.git}"
-    paths=('/robolab/data/motions/zenbot_amp_frax_walk_sole8/'
+    paths=("/robolab/data/motions/$source_bank/"
            '/robolab/robolab/tasks/manager_based/amp/zenbot_amp_env_cfg.py'
            '/robolab/data/robots/roboparty/zenbot/mjcf/zenbot.xml')
     if [[ $robot == zenbot26_walk_run_recovery ]]; then
@@ -83,8 +85,8 @@ if [[ -z $source_dir ]]; then
 fi
 
 for bank in "${needs[@]}"; do
-    if [[ $bank == walk_run ]]; then
-        "$sim_python" -m tools.prepare_zenbot "$source_dir" --locomotion-only --dest "$stage/$data"
+    if [[ $bank == "$gait" ]]; then
+        "$sim_python" -m tools.prepare_zenbot "$source_dir" --locomotion-only --locomotion-bank "$source_bank" --dest "$stage/$data"
     else
         "$sim_python" -m tools.prepare_zenbot "$source_dir" --legged-lab "$legged_lab" --dest "$stage/$data"
         cp -- "$data/recovery/sampling.json" "$stage/$data/recovery/"

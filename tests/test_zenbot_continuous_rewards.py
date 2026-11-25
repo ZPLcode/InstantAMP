@@ -134,7 +134,8 @@ def test_motor_costs_and_task_style_mix_do_not_change_during_recovery(joint_sim)
     task = jnp.array([-.3, -.3, -.3])
     styles = jnp.array([1., 2., 3.])
     reward, style_reward = xs.mix_amp_reward(task, styles)
-    np.testing.assert_allclose(style_reward, env.DT * cfg.amp_lerp * styles)
+    np.testing.assert_allclose(style_reward, env.DT * .7 * styles)
+    np.testing.assert_allclose(reward, .3 * task + env.DT * .7 * styles)
     increment = xs.mix_amp_reward(task + .2, styles)[0] - reward
     np.testing.assert_allclose(increment, (1. - cfg.amp_lerp) * .2, rtol=1e-6)
 
@@ -153,19 +154,19 @@ def test_two_motion_priors_share_reward_scale(joint_sim):
     np.testing.assert_allclose(recovery, .75 * cfg.gait_ls_scale)
 
 
-def test_discriminator_suitability_uses_current_pose_without_old_history(joint_sim):
+def test_gait_discriminator_weights_valid_windows_equally_across_poses(joint_sim):
     sim, cfg = joint_sim
     xs = learner(sim, cfg)
-    pos = jnp.zeros((4, 10, 3)).at[..., 2].set(.68)
-    # Identical current stances have different preceding poses and old timer values.
-    pos = pos.at[1, :5, 2].set(.20).at[2, -1, 2].set(.51)
-    rotation = jnp.broadcast_to(jnp.eye(3), (4, 10, 3, 3))
+    pos = jnp.zeros((5, 10, 3)).at[..., 2].set(.68)
+    # Include standing, rising and fallen poses as well as different histories.
+    pos = pos.at[1, :5, 2].set(.20).at[2, -1, 2].set(.51).at[3, -1, 2].set(.20)
+    rotation = jnp.broadcast_to(jnp.eye(3), (5, 10, 3, 3))
     window = {
-        "mask": jnp.ones((4, 10)).at[3, -1].set(0.),
-        "was_up": jnp.ones((4, 10), bool).at[1].set(False),
-        "recovery_left": jnp.zeros((4, 10)).at[1].set(200.),
+        "mask": jnp.ones((5, 10)).at[4, -1].set(0.),
+        "was_up": jnp.ones((5, 10), bool).at[1].set(False),
+        "recovery_left": jnp.zeros((5, 10)).at[1].set(200.),
     }
-    np.testing.assert_allclose(xs.gait_amp_eligible(window, (pos, rotation)), [1., 1., .5, 0.], atol=1e-6)
+    np.testing.assert_array_equal(xs.gait_amp_eligible(window, (pos, rotation)), [1, 1, 1, 1, 0])
 
 
 def test_existing_startup_curve_and_sampling_defaults_are_unchanged(joint_sim):

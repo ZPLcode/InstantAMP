@@ -35,9 +35,11 @@ python -m tools.render runs/g1_joint
 
 ## Zenbot
 
-The reference recipe uses the same 17 gait clips and 11 recovery clips for both robots. The 23-DoF preparation verifies converted clips against the checked-in SHA-256 manifest. The 26-DoF preparation retargets those clips using FRAX and records the source and output hashes. Both models use the same per-clip sampling weights. [Reference checksums](assets/zenbot_wm_reference.sha256) · [Recovery sampling weights](data/zenbot23_walk_run_recovery/recovery/sampling.json)
+The 23-DoF recipe uses the 17 corrected Motion Train `zenbot_amp_frax_walk_sole8` gait clips in `walk_run` and 11 recovery clips. Gait preparation adjusts narrow steps and levels settled walking stance while preserving heel strike and toe-off. The 26-DoF recipe retargets these gait and recovery clips with FRAX. [Reference checksums](assets/zenbot_wm_reference.sha256) · [Recovery sampling weights](data/zenbot23_walk_run_recovery/recovery/sampling.json)
 
-To reproduce these banks, supply a Motion Train checkout containing `zenbot_amp_frax_walk_sole8` and a licensed copy of the prepared LeggedLab `get_up_frax` bank. The latter must contain its manifest and motion pickles under `source/legged_lab/legged_lab/data/MotionData/zenbot_23dof_43kg/amp/get_up_frax`. Access to those source files is a prerequisite for the reference run. To generate the 26-DoF clips, set `FRAX_PYTHON` to an interpreter with `frax[ik]`, JAX, SciPy and MuJoCo. The retarget was tested with FRAX 0.2.0 and MuJoCo 4.0.1 in a separate environment. [Motion Train source revision](https://github.com/ZPLcode/h1_train/tree/4733fc9649dc3f2b99b2c3ba21fb2ec5e259e6ff)
+For new 23-DoF global gait AMP training, commanded velocity selects the motion class. Clips are sampled with their original weights within the class. Slow forward commands use the four start/stop walking references at 0.35× up to 0.30 m/s. From 0.30 to 0.45 m/s the probability of slow playback falls linearly to zero. Pure turns use 0.5× up to 0.60 rad/s and blend back to full speed at 0.90 rad/s. Planar and yaw commands within their 0.10 deadbands select standing. Other classes use full speed. Each window uses one rate on the 50 Hz control grid, with velocities derived from the retimed poses.
+
+To reproduce these banks, supply a Motion Train checkout containing the gait bank for the selected robot and a licensed copy of the prepared LeggedLab `get_up_frax` bank. The latter must contain its manifest and motion pickles under `source/legged_lab/legged_lab/data/MotionData/zenbot_23dof_43kg/amp/get_up_frax`. Access to those source files is a prerequisite for the reference run. To generate the 26-DoF clips, set `FRAX_PYTHON` to an interpreter with `frax[ik]`, JAX, SciPy and MuJoCo. The retarget was tested with FRAX 0.2.0 and MuJoCo 4.0.1 in a separate environment. [Motion Train source revision](https://github.com/ZPLcode/h1_train/tree/4733fc9649dc3f2b99b2c3ba21fb2ec5e259e6ff)
 
 ```bash
 export MOTION_TRAIN_CHECKOUT=/path/to/motion_train
@@ -50,18 +52,31 @@ run="runs/$robot"
 bash tools/recipes/train_zenbot_joint.sh "$run" --robot "$robot"
 ```
 
-The script prepares both motion banks for the selected robot, trains from scratch and evaluates the final checkpoint. By default both Zenbots use 2,048 environments, 40% floor resets, seed 42 and 20,000 updates.
+The script prepares both motion banks for the selected robot, trains from scratch and evaluates the final checkpoint. By default both Zenbots use 2,048 environments, 40% floor resets, seed 42 and 20,000 updates. The world model uses three hidden layers of 1,024 units each. The resume tool uses the widths saved with each checkpoint.
 
 | Shared Zenbot reward setting | Default |
 | --- | ---: |
 | Planar velocity tracking weight | 2.0 |
 | Yaw-rate tracking weight | 1.5 |
-| Shared recovery and gait AMP scale (`gait_ls_scale`) | 5.0 |
+| Shared recovery and gait AMP scale (`gait_ls_scale`) | 1.5 |
+| AMP mixture weight (`amp_lerp`) | 0.7 |
 | Action-rate penalty weight (`action_rate_l2_weight`) | -0.05 |
 
-A continuous weight blends recovery and gait using the current pelvis height and uprightness. Its height range is 0.44–0.58 m, and its uprightness range runs from a 60° tilt to 30°. The same weight controls the task terms, AMP styles and their training samples, and mirror consistency. The default `amp_lerp=0.5` keeps the task/AMP mixture fixed throughout recovery and locomotion. Both discriminators use the same least-squares score scale. Quiet-standing reward remains active at a zero command and fades as movement is requested. The lifting-progress reward still starts at 0.44 m with weight 0.5. [Training rewards](instantamp/sim.py) · [AMP mixing](instantamp/train.py)
+A continuous weight blends recovery and gait using the current pelvis height and uprightness. Its height range is 0.44–0.58 m, and its uprightness range runs from a 60° tilt to 30°. This weight controls the task terms, AMP styles, recovery-discriminator samples and mirror consistency. The global gait discriminator gives every valid sampled robot window equal weight and clips its loss gradient to norm 1.0 before Adam weight decay. The default `amp_lerp=0.7` gives task and AMP rewards coefficients of 0.3 and 0.7 throughout recovery and locomotion. Both discriminators use the same least-squares score scale. Quiet-standing reward remains active at a zero command and fades as movement is requested. The lifting-progress reward starts at 0.44 m with weight 0.5. [Training rewards](instantamp/sim.py) · [AMP mixing](instantamp/train.py)
 
 The 23-DoF recipe also applies a mirror consistency loss to imagined frames with an active motion command, weighted by the same current posture signal. Its weight is `--imag_gait_mirror_weight 0.2` (26-DoF default `0`). The log records the unweighted error in `imag_gait_mirror_mse` and the mean posture weight of eligible imagined frames in `imag_gait_mirror_fraction`. Resuming keeps the saved weight, with zero for checkpoints that predate this loss. To enable it on an older run, pass `--imag-gait-mirror-weight 0.2` to the resume tool.
+
+New Zenbot23 runs enable `--motion_train_randomization 1`, following the local Motion Train `ad923704` Zenbot AMP dynamics. Every episode samples 15–35 ms motor delays for all five groups. Startup samples PD gains and joint armature at 0.8–1.2 times nominal, calibrated paired leg friction at 0.5–1.5 times the pair mean with at most 10% left/right mismatch, pelvis mass ±3 kg, limb masses at 0.8–1.2 times nominal, and a shared torso/pelvis COM offset of ±3 cm per axis. Principal inertias and the physics engine's reference inverse weights are updated with these changes. These startup parameters remain fixed across episode resets.
+
+The same switch enables Motion Train's shoulder/hip force pulses (70% clean, 25% ordinary, 5% strong episodes; 5–10 s start intervals) and terrain generation weights of 40% flat, 35% mild roughness, 15% medium roughness and 10% slopes. Each world keeps its terrain origin across resets. Heights used by rewards, geometry and recovery AMP are measured relative to the local surface. The world model and critic receive the randomized dynamics as privileged context; the deployed actor remains 234-dimensional. The actor observations use per-step IMU noise and a per-episode IMU delay.
+
+Material sampling follows the active Newton backend: continuous robot sliding friction in [0.3, 1.6], ground friction 1, and equal contact priorities, giving effective ground friction `max(robot_mu, 1)`. The PhysX-only 64 buckets and separate dynamic-friction range are not applied, and no unsupported restitution mapping is invented. Contact uses MuJoCo heightfields rather than Newton's external triangle pipeline; the solver uses 100 iterations, 50 line-search iterations and 35 CCD iterations. Terrain generation does not reproduce Newton's steep-edge vertex displacement. Native playback/evaluation retains its existing fixed flat-ground model and is not an equivalent randomized-environment evaluation.
+
+Zenbot23 generates the reference terrain at 5 cm spacing, then samples it at 10 cm spacing for both physical collisions and reward height queries. This limits the number of triangle candidates per robot collider to MuJoCo Warp's 50-contact pair capacity, including when the robot lies on rough ground.
+
+Saved configurations without this field retain their historical simulation settings. Exact full-checkpoint continuation also retains the saved setting, because the new privileged context changes world-model and critic input sizes. To use the new randomization with an existing actor, start a fresh learner with `--init_policy RUN/ckpt/NAME.npz`; old full learners cannot be loaded into the new context. `--motion_train_randomization 0` selects the legacy recipe explicitly. The calibrated switch applies only to Zenbot23.
+
+Zenbot joint training learns one state-independent Gaussian exploration standard deviation per joint through PPO. Fresh runs start at `--action_noise 1.0` and use `--action_entropy_coef 0.01`. Half the collector environments sample actions and half execute the mean. The log records `action_std_by_joint` in physical joint order. Full checkpoints save the learned values and their Adam state. When continuing an older fixed-noise run, the resume tool initializes them from that run's `action_noise`. Exported actors execute the learned mean.
 
 To override these defaults, pass `--wm_tracking_scale`, `--gait_ls_scale` or `--action_rate_l2_weight` to the Python entry point. Prepare the data first and use a fresh run directory for each model.
 
@@ -69,6 +84,15 @@ To override these defaults, pass `--wm_tracking_scale`, `--gait_ls_scale` or `--
 bash tools/recipes/prepare_zenbot_wm_data.sh --robot "$robot"
 python -m instantamp.train --robot "$robot" --help
 python -m instantamp.train --robot "$robot" --log_dir "runs/${robot}_experiment"
+```
+
+The Zenbot23 100,000-iteration run uses 4,096 environments, ten consecutive gait AMP frames and 500 world-model warmup iterations. The policy starts updating after the warmup. The 100,000-iteration budget includes the warmup.
+
+```bash
+python -m instantamp.train --robot zenbot23_walk_run_recovery \
+    --num_envs 4096 --max_iterations 100000 --seed 42 \
+    --wm_gait_frames 10 --wm_hidden 1024,1024,1024 --wm_only_iters 500 \
+    --ckpt_iterations 1000 --log_dir runs/zenbot23_amp10f_wm1024_warm500_4096_100k
 ```
 
 To initialize from a compatible Motion Train gait export, install `onnx` and `onnxruntime` and run `python -m tools.import_zenbot_gait INPUT.onnx OUTPUT.npz`. Pass `--init_policy OUTPUT.npz` when starting the joint recipe. The importer verifies the converted actions against the ONNX network.

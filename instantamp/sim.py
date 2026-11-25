@@ -64,7 +64,7 @@ def motion_dirs(robot):
     return zenbot_models.for_task(robot).motion_dirs()
 
 
-def build_scene(iterations: int = 10, ls_iterations: int = 20, ccd_iterations: int = 50, robot_name: str = "g1") -> mujoco.MjModel:
+def build_scene(iterations: int = 10, ls_iterations: int = 20, ccd_iterations: int = 50, robot_name: str = "g1", *, terrain=None) -> mujoco.MjModel:
     """Compile the physical articulation and floor without visual meshes."""
     profile = robot_profile(robot_name)
     world = mujoco.MjSpec()
@@ -74,6 +74,8 @@ def build_scene(iterations: int = 10, ls_iterations: int = 20, ccd_iterations: i
     o.integrator = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
     o.cone = mujoco.mjtCone.mjCONE_PYRAMIDAL
     ground = world.worldbody.add_geom(name="floor", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[0, 0, 0.01])
+    if terrain is not None:
+        terrain.add_to_spec(world, ground)
     is_zenbot = profile in _ZENBOT_PROFILES.values()
     model_xml = str(profile.MODEL.xml_path) if is_zenbot else XML
     robot = mujoco.MjSpec.from_file(model_xml)
@@ -184,6 +186,8 @@ class World(NamedTuple):
     body_mass: jax.Array
     body_subtreemass: jax.Array
     floor: dict  # reset frames of the get-up clips in which the robot is not up
+    dynamics: dict | None = None  # startup-randomized physical model and PD gains
+    terrain_origin: jax.Array | None = None
 
 
 class State(NamedTuple):
@@ -208,6 +212,7 @@ class State(NamedTuple):
     motion_train_sensors: MotionTrainSensors | None = None
     gait_curriculum: source_gait.Curriculum | None = None
     step_history: gait_rewards.StepHistory | None = None
+    force_push: object = None  # finite-duration shoulder/hip force scheduler
 
 
 class Transition(NamedTuple):
@@ -270,6 +275,8 @@ def load_bank(directory: str, joints: int = env.J, *, sample_clip_times=False):
 
 
 class Sim:
+    motion_train_randomization = False
+    terrain = None
     zenbot_motion_train_wm = False
     wm_floor_amp = False
     wm_floor_locomotion = False
@@ -300,6 +307,7 @@ class Sim:
         wm_gait_rewards=False, wm_posture_and_tracking=False,
         wm_range_commands=False, wm_global_gait=False, wm_side_share=0.,
         wm_fixed_floor_envs=False, wm_tracking_scale=1., wm_initial_gait_stage=0,
+        motion_train_randomization=False,
     ):
         """physics=False: everything but MuJoCo Warp's model and data (no GPU): the scene, kinematics, reset banks and `_fresh`, for
         checks on the CPU."""
@@ -311,6 +319,9 @@ class Sim:
             raise ValueError("Initial gait curriculum stage must be 0, 1 or 2")
         self.wm_initial_gait_stage = wm_initial_gait_stage
         self.zenbot_motion_train_wm = bool(zenbot_motion_train_wm)
+        self.motion_train_randomization = bool(motion_train_randomization)
+        if self.motion_train_randomization and (not self.zenbot_motion_train_wm or profile is not zenbot):
+            raise ValueError("Motion Train randomization requires the Zenbot23 world-model task")
         self.wm_floor_amp = bool(wm_floor_amp)
         self.wm_floor_locomotion = self.wm_floor_amp
         self.wm_fixed_floor_envs = wm_fixed_floor_envs
@@ -335,10 +346,13 @@ class Sim:
         if self.wm_floor_amp and (not zenbot_motion_train_wm or not 0. < reset_floor < 1.):
             raise ValueError("Floor AMP requires both locomotion and floor starts")
         self.reset_floor, self.prob_shove, self.push = reset_floor, prob_shove, push
+        if self.motion_train_randomization:
+            # The source task uses finite forces, not root-velocity jumps.
+            self.prob_shove, self.push = 0., False
         if self.zenbot_motion_train_wm and not self.mixed:
             raise ValueError("Motion Train world-model control requires the mixed Zenbot task")
         if zero_motor_delay_probability is None:
-            zero_motor_delay_probability = .5 if self.zenbot_motion_train_wm else 0.
+            zero_motor_delay_probability = .5 if self.zenbot_motion_train_wm and not self.motion_train_randomization else 0.
         if recovery_amp_seconds is None:
             recovery_amp_seconds = 4. if self.zenbot_motion_train_wm else 0.
         self.motor_delay_groups = int(profile.GROUP.max()) + 1 if is_zenbot else 0
@@ -401,7 +415,20 @@ class Sim:
         self.amp_dim = 2 * len(self.amp_joints) + 6 + 3 * len(amp.KEY_BODIES)
         if self.mixed:
             self.amp_dim = 2 * len(self.amp_joints) + 6 + 3 * len(profile.KEY_BODIES) + 4
-        self.m = m = build_scene(robot_name=robot)
+        self.terrain = None
+        if self.motion_train_randomization and randomize_world:
+            from .zenbot_terrain import TerrainAtlas
+            self.terrain = TerrainAtlas.create(seed=0)
+        solver = {"iterations": 100, "ls_iterations": 50, "ccd_iterations": 35} if self.motion_train_randomization else {}
+        self.m = m = build_scene(robot_name=robot, terrain=self.terrain, **solver)
+        self.domain_randomization = self.force_push = None
+        if self.motion_train_randomization:
+            from .zenbot_domain_randomization import MODEL_FIELDS, DomainRandomization
+            from .zenbot_push import TimedPush
+            self.domain_randomization = DomainRandomization(m, profile)
+            self.world_fields = tuple(dict.fromkeys((*self.world_fields, *MODEL_FIELDS)))
+            if randomize_world:
+                self.force_push = TimedPush.from_model(m)
         assert m.nu == self.J and m.nq == 7 + self.J
         assert tuple(m.joint(m.actuator_trnid[i, 0]).name.removeprefix("robot_").removesuffix("_joint") for i in range(m.nu)) == profile.DOF
         joint_ids = m.actuator_trnid[:, 0]
@@ -459,9 +486,7 @@ class Sim:
             self.foot_side[g] = feet.index(int(m.geom_bodyid[g]))
         self.is_term = (source_gait.illegal_contact_geoms(m) if self.wm_global_gait
                         else np.isin(np.arange(m.ngeom), self.term_geoms))
-        supports = [m.body("robot_" + b).id for b in keys]
-        self.support_link = np.array([supports.index(b) if b in supports else -1 for b in m.geom_bodyid])
-        self.floor_id = m.geom("floor").id
+        self.ground_geom = m.geom_bodyid == 0
         self.robot_geom = np.asarray([m.body(int(m.geom_bodyid[g])).name.startswith("robot_") for g in range(m.ngeom)])
         walk_default, floor_default = motion_dirs(robot)
         if self.gait_source_commands:
@@ -537,6 +562,18 @@ class Sim:
         self.axes = jax.tree.map(lambda _: None, self.mx).tree_replace({k: 0 for k in self.world_fields})
 
     # ------------------------------------------------------------------ geometry shared with imagination
+    def ground_height(self, xy):
+        if self.terrain is None:
+            return jnp.zeros(xy.shape[:-1], dtype=xy.dtype)
+        return self.terrain.height_at(xy)
+
+    def ground_state(self, state):
+        """Keep velocities/orientation intact and express pelvis height above terrain."""
+        if self.terrain is None:
+            return state
+        p = state[0]
+        return (p.at[..., 2].add(-self.ground_height(p[..., :2])), *state[1:])
+
     def view_state(self, S) -> View:
         p, R, v, w, q, qd = S
         P, Rs, V, W = self.kin.forward_vel(p, R, v, w, q, qd)
@@ -544,7 +581,7 @@ class Sim:
 
         def clearance(local, frame, radius):
             pts = P[..., frame, :] + mv3(Rs[..., frame, :, :], local)
-            return pts[..., 2] - radius
+            return pts[..., 2] - radius - self.ground_height(pts[..., :2])
 
         feet = None
         if self.wm_gait_rewards:
@@ -554,11 +591,18 @@ class Sim:
             size = self.gait_geom_size
             extent = jnp.where(self.gait_boxes, (jnp.abs(up) * size).sum(-1), size[:, 0] + size[:, 1] * jnp.abs(up[..., 2]))
             foot_pos, foot_rot = P[..., 1:3, :], Rs[..., 1:3, :, :]
-            slip = gait_rewards.predicted_foot_slip(foot_pos, foot_rot, V[..., 1:3, :], W[..., 1:3, :], self.foot_corners)
+            slip = gait_rewards.predicted_foot_slip(foot_pos, foot_rot, V[..., 1:3, :], W[..., 1:3, :], self.foot_corners,
+                                                    self.ground_height if self.terrain is not None else None)
             com_velocity = V[..., 1:3, :] + jnp.cross(W[..., 1:3, :], mv3(foot_rot, self.foot_com))
-            feet = gait_rewards.FootGeometry(foot_pos, foot_rot, center - extent, slip, com_velocity[..., 2],
+            geom_xy = (P[..., self.gait_frames, :] + mv3(Rs[..., self.gait_frames, :, :], self.gait_geom_pos))[..., :2]
+            bottom = center - extent - self.ground_height(geom_xy)
+            if self.terrain is not None:
+                corners = foot_pos[..., None, :] + mv3(foot_rot[..., None, :, :], self.foot_corners)
+                sole_bottom = (corners[..., 2] - self.ground_height(corners[..., :2])).min(-1)
+                bottom = bottom.at[..., :2].set(sole_bottom)
+            feet = gait_rewards.FootGeometry(foot_pos, foot_rot, bottom, slip, com_velocity[..., 2],
                                              com_velocity[..., :2] if self.wm_global_gait else None)
-        return View(env.Kin(Rs[..., 0, :, :], V[..., 0, :], W[..., 0, :], foot_v), p[..., 2],
+        return View(env.Kin(Rs[..., 0, :, :], V[..., 0, :], W[..., 0, :], foot_v), p[..., 2] - self.ground_height(p[..., :2]),
                     clearance(self.sole_local, self.sole_frame, self.sole_radius), clearance(self.coll_local, self.coll_frame, self.coll_radius), feet)  # fmt: skip
 
     def soft_contact(self, soles):
@@ -630,8 +674,19 @@ class Sim:
             return jnp.tile(frame, (1, self.history))
         return env.push_frame(history, frame, fresh)
 
-    def estimated_torque(self, state, target):
-        return self.robot.actuator_ctrl(state[4], state[5], target[..., -self.J:])
+    def estimated_torque(self, state, target, context=None):
+        gains = {}
+        if self.motion_train_randomization and context is not None:
+            start = 3 + self.motor_delay_groups
+            gains = {"kp": context[..., start:start + self.J] * self.robot.KP,
+                     "kd": context[..., start + self.J:start + 2 * self.J] * self.robot.KD}
+        return self.robot.actuator_ctrl(state[4], state[5], target[..., -self.J:], **gains)
+
+    def context_root_com(self, context):
+        if not self.motion_train_randomization:
+            return self.root_com
+        start = 3 + self.motor_delay_groups + 4 * self.J + self.m.nbody - 1 + 3
+        return self.root_com + context[..., start:start + 3]
 
     def is_up(self, height, rotation):
         return env.is_up(height, rotation, self.robot.UP_HEIGHT)
@@ -658,7 +713,7 @@ class Sim:
 
     def gait_weight(self, state):
         """Shared pose weight for physical and imagined joint-task rewards."""
-        return zenbot.gait_weight(state[0][..., 2], state[1][..., 2, 2])
+        return zenbot.gait_weight(self.ground_state(state)[0][..., 2], state[1][..., 2, 2])
 
     def recovery_features(self, state, key_pos=None):
         pos, rot, _, ang, q, _ = state
@@ -671,11 +726,14 @@ class Sim:
         return {k: env.DT * self.weights[k] * terms[k] for k in self.terms}
 
     def reward_terms(self, *args, torque=None, joint_acc=None,
-                     recovery_active=False, recovery_deadline=False):
+                     recovery_active=False, recovery_deadline=False, root_com=None):
+        if self.terrain is not None:
+            args = (self.ground_state(args[0]), self.ground_state(args[1]), *args[2:])
+        root_com = self.root_com if root_com is None else root_com
         terms = env.reward_terms(*args, wrist_idx=self.robot.WRIST_IDX, default_q=self.robot.DEFAULT_Q,
                                  rise_height=self.robot.RISE_HEIGHT)
         if self.wm_floor_amp:
-            gait = self.gait_weight(args[1])
+            gait = zenbot.gait_weight(args[1][0][..., 2], args[1][1][..., 2, 2])
             floor_terms = {"stand": gait * zenbot.quiet_command_weight(args[5]) * zenbot.quiet_stand_score(args[1], args[8]),
                            "action_rate": terms["action_rate"]}
             if self.wm_lift_gate:
@@ -687,7 +745,7 @@ class Sim:
                 floor_terms["stand"] /= 1. + joint_error
             if self.wm_floor_locomotion:
                 cmd = args[5]
-                actual = gait_rewards.base_velocity(args[1], self.root_com)
+                actual = gait_rewards.base_velocity(args[1], root_com)
                 error_sq = (actual - cmd)**2
                 upright = gait * jnp.clip(args[1][1][..., 2, 2], 0., .7) / .7
                 floor_terms["track_lin_vel_xy_exp"] = upright * jnp.exp(-error_sq[..., :2].sum(-1) / .5**2)
@@ -697,7 +755,7 @@ class Sim:
                 if self.wm_global_gait:
                     _, rotation, velocity, angular = args[1][:4]
                     gyro = mv3(tr3(rotation), angular)
-                    body_vel = mv3(tr3(rotation), velocity) + jnp.cross(gyro, self.root_com)
+                    body_vel = mv3(tr3(rotation), velocity) + jnp.cross(gyro, root_com)
                     floor_terms.update(velocity_progress_tanh=upright * source_gait.velocity_progress(cmd, actual),
                                        alive=gait * (1. - args[7]), lin_vel_z_l2=gait * body_vel[..., 2]**2,
                                        ang_vel_xy_l2=gait * jnp.sum(gyro[..., :2]**2, -1))
@@ -725,7 +783,7 @@ class Sim:
                 terms[name] = jnp.where(recovery_active, 0., terms[name])
         if self.legged_support:
             native = zenbot.reward_terms(args[0], args[1], args[3], args[4], torque, self.q_soft, env.DT,
-                                         default_q=self.robot.DEFAULT_Q, joint_acc=joint_acc, com_offset=self.root_com)
+                                         default_q=self.robot.DEFAULT_Q, joint_acc=joint_acc, com_offset=root_com)
             for name in env.TERMS:
                 if name != "termination":
                     terms[name] = jnp.where(recovery_active, 0., terms[name])
@@ -738,7 +796,13 @@ class Sim:
     def _gait_amp_frame(self, state, points):
         frame = amp.frame(state, points, self.amp_joints)
         if self.mixed:
-            return jnp.concatenate((frame, state[0][..., 2:3], mv3(tr3(yaw_mat(state[1])), state[2])), -1)
+            if self.terrain is not None:
+                # Recovery ground_features later adds pelvis height. Preserve
+                # each landmark's own terrain clearance on non-flat ground.
+                first_z = 2 * len(self.amp_joints) + 8
+                correction = self.ground_height(state[0][..., :2])[..., None] - self.ground_height(points[..., :2])
+                frame = frame.at[..., first_z::3].add(correction)
+            return jnp.concatenate((frame, self.ground_state(state)[0][..., 2:3], mv3(tr3(yaw_mat(state[1])), state[2])), -1)
         return frame
 
     def control_targets(self, action, bias, history, context, *, elapsed=None):
@@ -757,13 +821,33 @@ class Sim:
         m, w = self.m, s.world
         base = jnp.concatenate((w.geom_friction[:, self.foot_geoms[0], :1], w.body_ipos[:, self.torso] - m.body_ipos[self.torso]), -1)
         if self.robot is not env:
-            return jnp.concatenate((base[:, :1], (w.body_mass[:, self.torso] - m.body_mass[self.torso])[:, None],
-                                    s.delay_steps, s.assist[:, None]), -1)
+            context = jnp.concatenate((base[:, :1], (w.body_mass[:, self.torso] - m.body_mass[self.torso])[:, None],
+                                       s.delay_steps, s.assist[:, None]), -1)
+            if w.dynamics is not None:
+                d = w.dynamics
+                # Privileged inputs to the world model/critic only; the deployed actor remains 234-D.
+                extra = (d["kp"] / self.robot.KP, d["kd"] / self.robot.KD,
+                         d["dof_armature"][:, self.va], d["dof_frictionloss"][:, self.va],
+                         w.body_mass[:, 1:], (w.body_ipos - m.body_ipos).reshape(self.N, -1),
+                         w.geom_friction[:, self.robot_geom, 0])
+                context = jnp.concatenate((context, *extra), -1)
+            return context
         return base
 
     # ------------------------------------------------------------------ setup
     def world(self, key) -> World:
         m, N = self.m, self.N
+        if self.domain_randomization is not None:
+            d = self.domain_randomization.sample(key, N, enabled=self.randomize_world)
+            origin = (self.terrain.sample_origins(jax.random.fold_in(key, 879), N)
+                      if self.terrain is not None else None)
+            # A collector donates its whole state. Store each physical array
+            # once, rather than aliasing it in both World and dynamics.
+            extra = {name: value for name, value in d.items()
+                     if name not in ("body_ipos", "geom_friction", "body_mass", "body_subtreemass")}
+            return World(d["body_ipos"], d["geom_friction"], jnp.zeros((N, self.J), jnp.float32),
+                         getattr(self, "mx", None), self.walk, d["body_mass"], d["body_subtreemass"], self.floor,
+                         extra, origin)
         k_mu, k_b, k_com = jax.random.split(key, 3)
         tile = lambda x: jnp.tile(jnp.asarray(x, jnp.float32)[None], (N,) + (1,) * np.ndim(x))  # noqa: E731
         mu = jax.random.uniform(k_mu, (N,), minval=env.FOOT_FRICTION[0], maxval=env.FOOT_FRICTION[1])
@@ -899,6 +983,9 @@ class Sim:
             qvel = qvel + jnp.where(shove[:, None], kick, 0.0)  # (the root's angular part is in the body frame, as MuJoCo's)
         if self.wm_range_commands and not self.wm_global_gait:
             qvel = jnp.where((cold_forward & ~floor)[:, None], 0., qvel)
+        if getattr(world, "terrain_origin", None) is not None:
+            qpos = qpos.at[:, :3].add(world.terrain_origin)
+            was_up = self.is_up(qpos[:, 2] - self.ground_height(qpos[:, :2]), quat_to_mat(qpos[:, 3:7]))
         if return_source:
             source = (jnp.where(floor, source_clip, -1), source_frame, source_yaw)
             return (qpos, qvel, was_up), source
@@ -931,6 +1018,8 @@ class Sim:
             s = s._replace(recovery_left=jnp.where(done, jnp.where(was_up, 0, self.recovery_amp_steps), s.recovery_left))
         if s.step_history is not None:
             s = s._replace(step_history=s.step_history.reset(done))
+        if self.force_push is not None:
+            s = s._replace(force_push=self.force_push.reset(s.force_push, done, jax.random.fold_in(key, 892)))
         cmd = env.where_cmd(done, sampled_cmd, s.cmd)
         if self.motor_delay_groups:
             delays = jax.random.randint(jax.random.fold_in(key, 9), s.delay_steps.shape, 3, 8)
@@ -962,6 +1051,8 @@ class Sim:
             s = s._replace(episode_limit=zi)
         if self.wm_gait_rewards:
             s = s._replace(step_history=gait_rewards.StepHistory.empty(N))
+        if self.force_push is not None:
+            s = s._replace(force_push=self.force_push.init(jax.random.fold_in(k_reset, 892), N))
         s = self._reset(s, jnp.ones((N,), bool), k_reset)
         if self.random_start and self.wm_floor_amp:
             # Every robot starts at t=0. Spread the first timeouts across control ticks.
@@ -988,7 +1079,8 @@ class Sim:
         normal = (im.efc__force[w[:, None], jnp.maximum(rows, 0)] * (rows >= 0)).sum(-1)  # the normal force: the sum of a contact's rows
         g0, g1 = im.contact__geom[:, 0], im.contact__geom[:, 1]
         robot, side, term = jnp.asarray(self.robot_geom), jnp.asarray(self.foot_side), jnp.asarray(self.is_term)
-        floor = (g0 == self.floor_id) | (g1 == self.floor_id)
+        ground = jnp.asarray(self.ground_geom)
+        floor = ground[g0] | ground[g1]
         fside = jnp.maximum(side[g0], side[g1])
         foot = valid & floor & (fside >= 0)
         found = jnp.zeros((N, 2)).at[w, jnp.maximum(fside, 0)].max(foot.astype(jnp.float32))
@@ -996,36 +1088,34 @@ class Sim:
         hit = jnp.zeros((N,)).at[w].max(selfc.astype(jnp.float32))
         tc = valid & floor & (term[g0] | term[g1]) & (jnp.abs(normal) > env.CONTACT_FORCE)
         touch = jnp.zeros((N,)).at[w].max(tc.astype(jnp.float32)) > 0
-        loads = None
-        if self.wm_floor_amp:
-            support = jnp.asarray(self.support_link)
-            link = jnp.maximum(support[g0], support[g1])
-            loads = jnp.zeros((N, len(self.robot.SUPPORT_BODIES))).at[w, jnp.maximum(link, 0)].add(
-                jnp.where(valid & floor & (link >= 0), normal, 0))
-        return found, hit, touch, loads
+        return found, hit, touch
 
-    def physics(self, world: World, data, target, assist, fresh, *, gait_forces=False):
+    def physics(self, world: World, data, target, assist, fresh, *, gait_forces=False, force_state=None):
         """4 substeps with the actuator's control recomputed before each; the feet's contact and the termination contact after the last
         substep, and the number of substeps with a self-collision."""
-        mx = world.model.tree_replace({k: getattr(world, k) for k in self.world_fields})
+        mx = world.model.tree_replace({k: getattr(world, k) if hasattr(world, k) else world.dynamics[k]
+                                      for k in self.world_fields})
         step = jax.vmap(lambda m_, d, c: mjx.step(m_, d.replace(ctrl=c)), in_axes=(self.axes, 0, 0))
 
         def sub(carry, i):
             d, hits = carry
             tgt = target.reshape(self.N, env.DECIMATION, self.J)[:, i] if self.motor_delay_groups else target
             qd0 = d.qvel[:, self.va]
-            d = step(mx, d, self.robot.actuator_ctrl(d.qpos[:, self.qa], d.qvel[:, self.va], tgt))
-            found, hit, touch, loads = self.contact_stats(d)
+            if force_state is not None:
+                d = d.replace(xfrc_applied=self.force_push.wrench(force_state, d.xmat))
+            gains = {} if world.dynamics is None else {k: world.dynamics[k] for k in ("kp", "kd")}
+            d = step(mx, d, self.robot.actuator_ctrl(d.qpos[:, self.qa], d.qvel[:, self.va], tgt, **gains))
+            found, hit, touch = self.contact_stats(d)
             acc = (d.qvel[:, self.va] - qd0) / env.SIM_DT if self.legged_support or gait_forces else None
             body_contacts = None
             if gait_forces:
                 body_contacts = gait_rewards.measured_contacts(d, jnp.asarray(self.m.geom_bodyid),
                     self.gait_bodies[:2], self.gait_bodies[2:], self.foot_dofs, world.body_mass.sum(-1) * abs(self.m.opt.gravity[2]))
-            return (d, hits + hit), (found, touch, loads, acc, body_contacts)
+            return (d, hits + hit), (found, touch, acc, body_contacts)
 
-        (data, hits), (found, touch, loads, acc, body_contacts) = jax.lax.scan(sub, (data, jnp.zeros((self.N,))), jnp.arange(env.DECIMATION))
+        (data, hits), (found, touch, acc, body_contacts) = jax.lax.scan(sub, (data, jnp.zeros((self.N,))), jnp.arange(env.DECIMATION))
         illegal = (touch.any(axis=0) if self.wm_global_gait else touch[-1])
-        result = data, found[-1], hits, illegal, loads[-1] if loads is not None else None, acc[-1] if acc is not None else None
+        result = data, found[-1], hits, illegal, acc[-1] if acc is not None else None
         if gait_forces:
             feet, other, foot_slip = body_contacts
             return (*result, feet[-1], other[-3:].any(0).sum(-1), foot_slip.mean(0))
@@ -1041,7 +1131,11 @@ class Sim:
                                       elapsed=s.t if self.wm_floor_amp else None)
         assist = s.assist
         sensors = {"gait_forces": True} if self.wm_gait_rewards else {}
-        data, contact, hits, touch, loads, joint_acc, *body_contacts = self.physics(s.world, s.data, target, assist, s.t == 0, **sensors)
+        force_state = s.force_push
+        if self.force_push is not None:
+            force_state = self.force_push.advance(force_state, jax.random.fold_in(k_push, 892))
+            sensors["force_state"] = force_state
+        data, contact, hits, touch, joint_acc, *body_contacts = self.physics(s.world, s.data, target, assist, s.t == 0, **sensors)
         S0, S1 = unflatten(s.data.qpos, s.data.qvel), unflatten(data.qpos, data.qvel)
         t = s.t + 1
         v = self.view_state(S1)
@@ -1051,6 +1145,8 @@ class Sim:
         was_up1 = self.next_upright(s.was_up, v.height, S1[1])
         if self.mixed:
             terminated = diverged
+        if self.terrain is not None:
+            terminated |= ~self.terrain.contains(data.qpos[:, :2])
         limit = self.episode_steps if s.episode_limit is None else s.episode_limit
         timeout = t >= limit
         if self.wm_global_gait:
@@ -1066,7 +1162,7 @@ class Sim:
         terms = self.reward_terms(S0, S1, v.kin, a, s.a_last, s.c_obs, ~was_up1, fall.astype(jnp.float32), contact, hits, self.q_soft,
                                   torque=data.actuator_force if self.legged_support else data.ctrl,
                                   joint_acc=joint_acc, recovery_active=active,
-                                  recovery_deadline=deadline)
+                                  recovery_deadline=deadline, root_com=s.world.body_ipos[:, 1])
         step_history = s.step_history
         if self.wm_gait_rewards:
             foot_acc_z = gait_rewards.measured_foot_acc_z(data, self.gait_bodies[:2], v.feet.com_velocity_z)
@@ -1088,16 +1184,16 @@ class Sim:
                  "self_hits": hits.mean(), "foot_contact": contact.mean()}  # fmt: skip
         s1 = s._replace(data=data, a_last=a, a_ode=clean_action, t=t,
                         was_up=was_up1, ep_sums=ep_sums, recovery_left=remaining,
-                        step_history=step_history)
+                        step_history=step_history, force_push=force_state)
         if self.wm_posture_and_tracking:
             moving = (gait > 0.) & ~diverged & jnp.any(s.c_obs != 0., axis=-1)
-            error = gait_rewards.base_velocity(S1, self.root_com) - s.c_obs
+            error = gait_rewards.base_velocity(S1, s.world.body_ipos[:, 1]) - s.c_obs
             stats["velocity_errors"] = jnp.stack((jnp.where(moving, jnp.linalg.norm(error[:, :2], axis=-1), 0.).sum(),
                                                  jnp.where(moving, jnp.abs(error[:, 2]), 0.).sum(), moving.sum()))
         if self.wm_floor_amp:
             stats["gait_weight"] = gait
         if self.wm_global_gait:
-            error = gait_rewards.base_velocity(S1, self.root_com)[..., :2] - s.c_obs[..., :2]
+            error = gait_rewards.base_velocity(S1, s.world.body_ipos[:, 1])[..., :2] - s.c_obs[..., :2]
             worlds = self.wm_gait_worlds
             curriculum = s.gait_curriculum.advance(s.c_obs[:, 0], jnp.linalg.norm(error, axis=-1), worlds,
                                                    worlds & terminated, worlds & timeout)
@@ -1133,6 +1229,8 @@ class Sim:
         qvel = qvel.at[:, :2].set(jnp.where(push[:, None], next_xy, qvel[:, :2]))
         s1 = s1._replace(data=s1.data.replace(qvel=qvel), push_t=jnp.where(push_due, 0, push_t), push_at=jnp.where(push_due, self._push_interval(k_push_at), s1.push_at))
         stats["pushes"] = push.sum().astype(jnp.float32)
+        if force_state is not None:
+            stats["pushes"] += (force_state.count - s.force_push.count).sum().astype(jnp.float32)
         S2 = unflatten(s1.data.qpos, s1.data.qvel)
         c_obs = self.wm_velocity_command(cmd, S2[1], s1.was_up, s1.recovery_left)
         obs = self.push_actor(s.obs, self.obs_frame(S2, s1.a_last, c_obs, k_obs), reset_history)
