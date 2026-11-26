@@ -1,0 +1,333 @@
+{
+  "engine": "frax.ik.DiffIKSolver",
+  "frax_version": "0.2.0",
+  "mujoco_version": "4.0.1",
+  "source_directory": "/home/admin1/InstantAMP/data/zenbot23_walk_run_recovery",
+  "source_mjcf_sha256": "7e97527f38b2573825a7a2ed5fdb95cae6245be89663226902185305081416db",
+  "target_mjcf": "/home/admin1/Workspace/motion_train/robolab/data/robots/roboparty/zenbot_26dof_43kg/mjcf/zenbot_26dof_43kg.xml",
+  "target_mjcf_sha256": "83af7b1e7efd69532ec240d6e53bfab61e659dd069b57411429348f00cd7b5a9",
+  "target_urdf": "/home/admin1/Workspace/motion_train/robolab/data/robots/roboparty/zenbot_26dof_43kg/urdf/zenbot_26dof_43kg.urdf",
+  "target_urdf_sha256": "be73c0aed21c36e6da738c40af43b5e9723b6eae77297c862c18393eca2a7372",
+  "joint_names": [
+    "left_hip_pitch_joint",
+    "left_hip_roll_joint",
+    "left_hip_yaw_joint",
+    "left_knee_joint",
+    "left_ankle_pitch_joint",
+    "left_ankle_roll_joint",
+    "right_hip_pitch_joint",
+    "right_hip_roll_joint",
+    "right_hip_yaw_joint",
+    "right_knee_joint",
+    "right_ankle_pitch_joint",
+    "right_ankle_roll_joint",
+    "waist_yaw_joint",
+    "waist_roll_joint",
+    "waist_pitch_joint",
+    "head_yaw_joint",
+    "left_shoulder_pitch_joint",
+    "left_shoulder_roll_joint",
+    "left_shoulder_yaw_joint",
+    "left_elbow_joint",
+    "left_wrist_roll_joint",
+    "right_shoulder_pitch_joint",
+    "right_shoulder_roll_joint",
+    "right_shoulder_yaw_joint",
+    "right_elbow_joint",
+    "right_wrist_roll_joint"
+  ],
+  "key_body_names": [
+    "left_ankle_roll_Link",
+    "right_ankle_roll_Link",
+    "left_knee_Link",
+    "right_knee_Link",
+    "left_wrist_roll_rubber_hand",
+    "right_wrist_roll_rubber_hand"
+  ],
+  "fps": 50,
+  "root_quaternion_order": "xyzw",
+  "root_velocity_frame": "world",
+  "key_body_position_frame": "world",
+  "clips": {
+    "walk_run/Male1_B1_StandToWalk.npz": {
+      "frames": 476,
+      "source_sha256": "baf11067053033bb0a6f09ed8ba56b7d300ebe85fddec52b5859f623dcd2fa0c",
+      "output_sha256": "05b31de8a2373bde860214defa6d07c79af27b763a164de939482df73124ac38",
+      "max_root_height_change_m": 2.2023301998186362e-05,
+      "lowest_collision_height_m": 0.0004994179482014638,
+      "key_body_rms_error_m": 5.301868327506775e-06,
+      "key_body_max_error_m": 0.00011535134572222682,
+      "max_joint_speed_rad_s": 6.908300146460533
+    },
+    "walk_run/Male1_B2_WalkToStand.npz": {
+      "frames": 377,
+      "source_sha256": "b1b20f2ba773f3679aab191ae636c3b1e611072cf6d5183157fb2818796a67bb",
+      "output_sha256": "9d890459f888d05a5ea19d347b20d060c72d6f88faf8fb32cceef682a61da822",
+      "max_root_height_change_m": 1.2965922744245795e-05,
+      "lowest_collision_height_m": 0.0004995839519675999,
+      "key_body_rms_error_m": 2.3698388999051275e-06,
+      "key_body_max_error_m": 5.8350610668716924e-05,
+      "max_joint_speed_rad_s": 5.934152007102966
+    },
+    "walk_run/Male2_B1_StandToWalk.npz": {
+      "frames": 181,
+      "source_sha256": "ad9d1b2f2c5434f48a8680c21319ae2d03f23f42dd8aed273925fadce4b3bf0e",
+      "output_sha256": "1c226e8b178d9ff64ce3a3ea2978d2a447cda843bbeaac7ca3099a3e1d90e569",
+      "max_root_height_change_m": 1.2699686684491951e-05,
+      "lowest_collision_height_m": 0.0004994840907384945,
+      "key_body_rms_error_m": 3.155278981969581e-06,
+      "key_body_max_error_m": 6.150415894265888e-05,
+      "max_joint_speed_rad_s": 6.585398316383362
+    },
+    "walk_run/Male2_B2_WalkToStand.npz": {
+      "frames": 182,
+      "source_sha256": "88dafc13f0935427553ca425ef47ebb66a83bef31a7a1c5f45fdbcf8edaba6af",
+      "output_sha256": "1f73283cf3aa10636ab7d251aabdd30882d987572d1a2270bf66c3028836fde4",
+      "max_root_height_change_m": 1.8410133005852813e-06,
+      "lowest_collision_height_m": 0.0004994790157502038,
+      "key_body_rms_error_m": 4.279776963477991e-07,
+      "key_body_max_error_m": 8.780857046280708e-06,
+      "max_joint_speed_rad_s": 5.934152007102966
+    },
+    "walk_run/droidupe1_side_left.npz": {
+      "frames": 1022,
+      "source_sha256": "9be65f2542e8528158aa8852d4a3c7fc6a57016086953b08c5499f3556da2bd2",
+      "output_sha256": "72b142ecb28a81bffd17f6498c2de9a817934cddfd48254c52d7f076947fc5dc",
+      "max_root_height_change_m": 0.0,
+      "lowest_collision_height_m": 0.0004997579704691321,
+      "key_body_rms_error_m": 1.0611522044751793e-16,
+      "key_body_max_error_m": 9.155133597044475e-16,
+      "max_joint_speed_rad_s": 5.015000171260908
+    },
+    "walk_run/droidupe1_side_right.npz": {
+      "frames": 877,
+      "source_sha256": "629a2489a8166ccfec595cfe66c9cf2ddbe4edefc8d4a187492199686adc9de7",
+      "output_sha256": "abdd478cc9cb4351862c047be7eade16a908da0b41dc334c4fb7bc7c2a136069",
+      "max_root_height_change_m": 0.0,
+      "lowest_collision_height_m": 0.0004999253045638238,
+      "key_body_rms_error_m": 9.272556792565622e-17,
+      "key_body_max_error_m": 9.155133597044475e-16,
+      "max_joint_speed_rad_s": 4.169848561286926
+    },
+    "walk_run/droidupe1_turn_left.npz": {
+      "frames": 974,
+      "source_sha256": "017a0b2f4871b9963b2962a30723071e6bb89265541682ad668f88fc79ff1db7",
+      "output_sha256": "7093ebd9186421f42e8f1e8f0012d5df537cfed4a3705305fe1d9bf00621357b",
+      "max_root_height_change_m": 0.0,
+      "lowest_collision_height_m": 0.0004997797022325626,
+      "key_body_rms_error_m": 5.466036281186415e-17,
+      "key_body_max_error_m": 4.578092683617719e-16,
+      "max_joint_speed_rad_s": 4.862350225448608
+    },
+    "walk_run/droidupe1_turn_right.npz": {
+      "frames": 867,
+      "source_sha256": "a3cf5bb5b5a41e16fa0fa582090032298c4d9bcfb329b0c7d57dff44ce1f8670",
+      "output_sha256": "498d3b019c5ced18e83240bad0986b4c9fb6bb73e918aca35efde8f659a3917c",
+      "max_root_height_change_m": 0.0,
+      "lowest_collision_height_m": 0.0007924322661355919,
+      "key_body_rms_error_m": 5.025869612445387e-17,
+      "key_body_max_error_m": 4.451720917549152e-16,
+      "max_joint_speed_rad_s": 5.821448564529419
+    },
+    "walk_run/male_walk__Walk_B10_-_Walk_turn_left_45_stageii.npz": {
+      "frames": 420,
+      "source_sha256": "cee82edd6e85dceeda69b48af942e77137a3129f949dd4bec71cf600d3f86adb",
+      "output_sha256": "4aa111de2c54ef0a9f259f520c0fe311a2e66ef84387b927a0c188c9d4c2776e",
+      "max_root_height_change_m": 0.0,
+      "lowest_collision_height_m": 0.0004994893522111479,
+      "key_body_rms_error_m": 1.7128957724384135e-16,
+      "key_body_max_error_m": 1.790180836524724e-15,
+      "max_joint_speed_rad_s": 5.934152007102966
+    },
+    "walk_run/male_walk__Walk_B13_-_Walk_turn_right_45_stageii.npz": {
+      "frames": 397,
+      "source_sha256": "9d66166704ee81a68459d88905b2db42d5fcdb1f68e4f283d83cfa7e105dd0af",
+      "output_sha256": "2d65689984f58b1b1533173c2ef29a6d0d9316a099f5188ae9b5ee3a2b8af4ca",
+      "max_root_height_change_m": 0.0,
+      "lowest_collision_height_m": 0.0004994911348441128,
+      "key_body_rms_error_m": 1.8472433566023137e-16,
+      "key_body_max_error_m": 1.0175362097255202e-15,
+      "max_joint_speed_rad_s": 5.934152007102966
+    },
+    "walk_run/male_walk__Walk_B4_-_Stand_to_Walk_Back_stageii.npz": {
+      "frames": 563,
+      "source_sha256": "a5be87a5a17e2da2dc86e1be480b7cbd2253524b5347537cf2763b55c1405aae",
+      "output_sha256": "879b4a5eb1a2a05c87eafb54dbdde278a686379e97ee1245884761eb27142370",
+      "max_root_height_change_m": 1.23383969707902e-10,
+      "lowest_collision_height_m": 0.0004994103649821197,
+      "key_body_rms_error_m": 1.4071476111406797e-10,
+      "key_body_max_error_m": 1.2990383735404952e-09,
+      "max_joint_speed_rad_s": 5.934152007102966
+    },
+    "walk_run/run__C12_-_run_turn_left_45_stageii.npz": {
+      "frames": 109,
+      "source_sha256": "50656a9d7f119b6d7503eef8bcaffc5911877e2a2061e3f4aa9dbc8fac83e43d",
+      "output_sha256": "2a96cdd72f224a03c2b7526841c1cd55bcd58b782d39af0ea8636939df5267df",
+      "max_root_height_change_m": 0.00022995301822159586,
+      "lowest_collision_height_m": 0.0004995461712308386,
+      "key_body_rms_error_m": 3.363147496856069e-05,
+      "key_body_max_error_m": 0.00037381446601987653,
+      "max_joint_speed_rad_s": 10.44660210609436
+    },
+    "walk_run/run__C15_-_run_turn_right_45_stageii.npz": {
+      "frames": 147,
+      "source_sha256": "45924dac5785b841e08e9ceec79ad9a9ab47df9ddc8c8fc4878fa568bd262681",
+      "output_sha256": "6fcd5fef5dff17f6c74c985df661a379ace026ee0a6513bade63d4fd350d00ac",
+      "max_root_height_change_m": 4.5553039403567475e-05,
+      "lowest_collision_height_m": 0.0005280748507342573,
+      "key_body_rms_error_m": 7.3099996042145985e-06,
+      "key_body_max_error_m": 0.00014749897846736234,
+      "max_joint_speed_rad_s": 9.989500045776367
+    },
+    "walk_run/run__C3_-_run_stageii.npz": {
+      "frames": 110,
+      "source_sha256": "26df936ac15787ba259710d80fda42457853b6813ff35209df8acd74f7fbbe1a",
+      "output_sha256": "039e38d973cc689263514428d29f4043d3d1688cb3461a6643edcf0efd342e3f",
+      "max_root_height_change_m": 0.00016738190950027487,
+      "lowest_collision_height_m": 0.0004995221827541751,
+      "key_body_rms_error_m": 2.5205763895955928e-05,
+      "key_body_max_error_m": 0.0002929782394192317,
+      "max_joint_speed_rad_s": 10.471999645233154
+    },
+    "walk_run/run__C4_-_run_to_walk_a_stageii.npz": {
+      "frames": 166,
+      "source_sha256": "ff355cde677cf42b22ae8585edd12fc44a30037d2b2f216672f90a7b18d9ab62",
+      "output_sha256": "14a0f9e25d70aa2af8b30c99aa5b0ded063620f08269d7d2d2fd4ba0341df95a",
+      "max_root_height_change_m": 0.00018701801563481002,
+      "lowest_collision_height_m": 0.0004994658849388003,
+      "key_body_rms_error_m": 2.664405114111414e-05,
+      "key_body_max_error_m": 0.00028400721312916684,
+      "max_joint_speed_rad_s": 8.059650659561157
+    },
+    "walk_run/run__C5_-_walk_to_run_stageii.npz": {
+      "frames": 177,
+      "source_sha256": "462c28a60a773d02e73a65fa23fdf6fc7c48d93a37db0499bf4950d777140be4",
+      "output_sha256": "16ac4cf0c5f05fee04a8be88de3d22a421798a8f482118947bbe12fc368f6bbc",
+      "max_root_height_change_m": 0.0,
+      "lowest_collision_height_m": 0.0004994738300971441,
+      "key_body_rms_error_m": 1.889207383638456e-16,
+      "key_body_max_error_m": 1.2755491433176288e-15,
+      "max_joint_speed_rad_s": 10.471999645233154
+    },
+    "walk_run/stand_4s_120f.npz": {
+      "frames": 199,
+      "source_sha256": "3b25804dee003c945147e5488b6a258baf9acaa45b041fd103f36ca283633dbc",
+      "output_sha256": "be75dedf31636d239ef27fc920b6f9bc86a1f6b50823b0adea9464bfc52dab03",
+      "max_root_height_change_m": 0.0,
+      "lowest_collision_height_m": 0.0019866342785508258,
+      "key_body_rms_error_m": 4.006172263299091e-18,
+      "key_body_max_error_m": 6.938893903907228e-18,
+      "max_joint_speed_rad_s": 0.0
+    },
+    "recovery/fallAndGetUp1_subject1_1058_1140.npz": {
+      "frames": 136,
+      "source_sha256": "eacdf7dd961fb0b6465592e191039fc6e64d39d0e5e2b3f162e04dbe3c6c501b",
+      "output_sha256": "698959f05781b8bdf93ccdc7d80f8d20a9ff3340f353c09516919485fb85d3b1",
+      "max_root_height_change_m": 0.012049770225250389,
+      "lowest_collision_height_m": 0.001294574156156747,
+      "key_body_rms_error_m": 0.005753417774774875,
+      "key_body_max_error_m": 0.02105601521110145,
+      "max_joint_speed_rad_s": 4.078597019990865
+    },
+    "recovery/fallAndGetUp1_subject1_1262_1320.npz": {
+      "frames": 96,
+      "source_sha256": "4094fb5de988b11d6318f54912c3e9c077b8c0e1dce230b4be771e734cb6fb70",
+      "output_sha256": "2d1bd88e9a5505fd3c936056be49498157c081a34bd1ce1118a187cbafa3d1bf",
+      "max_root_height_change_m": 0.010498628602413518,
+      "lowest_collision_height_m": 0.0014772450414774346,
+      "key_body_rms_error_m": 0.004884371187425122,
+      "key_body_max_error_m": 0.010498628602413657,
+      "max_joint_speed_rad_s": 5.498886387006552
+    },
+    "recovery/fallAndGetUp1_subject1_1395_1461.npz": {
+      "frames": 109,
+      "source_sha256": "8edf2d1292b50990cdbdda1cb22a03b5e6ae9d8a09577c9980da356ef9a1e103",
+      "output_sha256": "d4b0c3c94f54e97b6c5b704be5bf6997308092ed55d888a2d085f947dc14190e",
+      "max_root_height_change_m": 0.009798734236280027,
+      "lowest_collision_height_m": 0.0010843742994569583,
+      "key_body_rms_error_m": 0.00563198888157363,
+      "key_body_max_error_m": 0.01800498234140015,
+      "max_joint_speed_rad_s": 4.720404744148254
+    },
+    "recovery/fallAndGetUp1_subject1_1584_1684.npz": {
+      "frames": 166,
+      "source_sha256": "c65162e888297de92261a44b4912dc04537bd257340c15d9bbea01da8d3daa72",
+      "output_sha256": "bc2ccfb1d1d6fe7e8b59f2af362fa347811712e2db382c969d7a982e64e59c7f",
+      "max_root_height_change_m": 0.012121277678818543,
+      "lowest_collision_height_m": 0.0017240408031222593,
+      "key_body_rms_error_m": 0.0057313786195739855,
+      "key_body_max_error_m": 0.02156711750044089,
+      "max_joint_speed_rad_s": 4.328113794326782
+    },
+    "recovery/fallAndGetUp1_subject1_1808_1916.npz": {
+      "frames": 179,
+      "source_sha256": "dd88c8978b978e07571e96808302bb6ba8a7356c4bbe9787c740d724fbfde724",
+      "output_sha256": "ee6185c432db5826cbc4d53c865000a1433b7d5c353cc38d3c45437a6288a927",
+      "max_root_height_change_m": 0.011521409346620048,
+      "lowest_collision_height_m": 0.001083264547540791,
+      "key_body_rms_error_m": 0.005803153608854479,
+      "key_body_max_error_m": 0.017505339871526544,
+      "max_joint_speed_rad_s": 4.501749463046321
+    },
+    "recovery/fallAndGetUp1_subject1_2088_2210.npz": {
+      "frames": 202,
+      "source_sha256": "39e71a1cf7574616cef2730c76afbfa9077a87aa5d59f77c583892ae62f99546",
+      "output_sha256": "e7ee296d4542976bd1f8a19df47d454e9f7144214d06f758118b3ed82068a2b1",
+      "max_root_height_change_m": 0.014539939394276863,
+      "lowest_collision_height_m": 0.0016179822422578982,
+      "key_body_rms_error_m": 0.00456497456905555,
+      "key_body_max_error_m": 0.018852740206775208,
+      "max_joint_speed_rad_s": 5.944517244958791
+    },
+    "recovery/fallAndGetUp1_subject1_2301_2391.npz": {
+      "frames": 149,
+      "source_sha256": "6f760324b59661433c719ff66bb7a378a3920ff89c63dd213c91de0cb07622c9",
+      "output_sha256": "6e529f9fd911634c411c42450b529af92985f62e649844a4bfc94d09aebfe67b",
+      "max_root_height_change_m": 0.01245806839289168,
+      "lowest_collision_height_m": 0.0011062811544863271,
+      "key_body_rms_error_m": 0.004181616624329978,
+      "key_body_max_error_m": 0.012095749706443053,
+      "max_joint_speed_rad_s": 5.9116538372663365
+    },
+    "recovery/fallAndGetUp1_subject1_458_565.npz": {
+      "frames": 177,
+      "source_sha256": "fddd55990dc21f4bc96e25384a878e4c1beac3fb30cab5e18d3b753cd23fb28e",
+      "output_sha256": "b841b4db7fbc6bf357b04227537de26b9a51eb4f7d2be57655fe5b095fecf61d",
+      "max_root_height_change_m": 0.014574268639646087,
+      "lowest_collision_height_m": 0.001490538042702244,
+      "key_body_rms_error_m": 0.005651921895346057,
+      "key_body_max_error_m": 0.017934965855445063,
+      "max_joint_speed_rad_s": 4.166806088280883
+    },
+    "recovery/fallAndGetUp1_subject1_4873_4962.npz": {
+      "frames": 147,
+      "source_sha256": "b7c6869c93117224e6c1b00ccafbab190d9eaec56b6444caa1356215c5e2e7ce",
+      "output_sha256": "243674700ae2cf67d816dc355ba067c806297402093dbfc35e27405913ef8602",
+      "max_root_height_change_m": 0.008966970023787879,
+      "lowest_collision_height_m": 0.0010342282106084316,
+      "key_body_rms_error_m": 0.006538805004866266,
+      "key_body_max_error_m": 0.01964665135739063,
+      "max_joint_speed_rad_s": 5.511564016342119
+    },
+    "recovery/fallAndGetUp1_subject1_670_785.npz": {
+      "frames": 191,
+      "source_sha256": "7c5f4625c3816a72419e947ab7df841d5c8b72742e2eafe251d5c2e6e7f7716c",
+      "output_sha256": "605d426696517cfcf37995da9d4228ff833b79ca36388fef48f7b452b63299f6",
+      "max_root_height_change_m": 0.008719522473510488,
+      "lowest_collision_height_m": 0.0015315269463201456,
+      "key_body_rms_error_m": 0.006692687690743643,
+      "key_body_max_error_m": 0.022328584067347165,
+      "max_joint_speed_rad_s": 6.525607286984876
+    },
+    "recovery/fallAndGetUp1_subject1_845_936.npz": {
+      "frames": 151,
+      "source_sha256": "57a510e722353850694603396b6619fcc772cc19de67edf5a348b68c75619865",
+      "output_sha256": "3ca4f5c34d7cb3de7aff7734638e5b7469eead92e0da21e60f30221c8252354d",
+      "max_root_height_change_m": 0.0244236059750072,
+      "lowest_collision_height_m": 0.0009559587533646274,
+      "key_body_rms_error_m": 0.009580942466890192,
+      "key_body_max_error_m": 0.034831651605525774,
+      "max_joint_speed_rad_s": 5.884609250989284
+    }
+  }
+}

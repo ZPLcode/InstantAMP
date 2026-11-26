@@ -1,0 +1,21 @@
+{
+  "weights": {
+    "Male1_B1_StandToWalk": 3.75,
+    "Male1_B2_WalkToStand": 3.75,
+    "Male2_B1_StandToWalk": 3.75,
+    "Male2_B2_WalkToStand": 3.75,
+    "male_walk__Walk_B4_-_Stand_to_Walk_Back_stageii": 8.0,
+    "droidupe1_side_left": 4.0,
+    "droidupe1_side_right": 4.0,
+    "male_walk__Walk_B10_-_Walk_turn_left_45_stageii": 5.0,
+    "male_walk__Walk_B13_-_Walk_turn_right_45_stageii": 5.0,
+    "droidupe1_turn_left": 7.5,
+    "droidupe1_turn_right": 7.5,
+    "run__C3_-_run_stageii": 10.0,
+    "run__C12_-_run_turn_left_45_stageii": 4.0,
+    "run__C15_-_run_turn_right_45_stageii": 4.0,
+    "run__C4_-_run_to_walk_a_stageii": 4.0,
+    "run__C5_-_walk_to_run_stageii": 4.0,
+    "stand_4s_120f": 10.0
+  }
+}
