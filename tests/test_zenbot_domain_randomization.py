@@ -5,27 +5,29 @@ import mujoco
 import numpy as np
 import pytest
 
-from instantamp import zenbot
+from instantamp import zenbot, zenbot26
 from instantamp.sim import build_scene
 from instantamp.zenbot_domain_randomization import DomainRandomization, MODEL_FIELDS
 
 
-@pytest.fixture(scope="module")
-def dynamics():
-    model = build_scene(robot_name=zenbot.MIXED_TASK)
-    return model, DomainRandomization(model, zenbot)
+@pytest.fixture(scope="module", params=[zenbot, zenbot26], ids=["zenbot23", "zenbot26"])
+def dynamics(request):
+    profile = request.param
+    model = build_scene(robot_name=profile.MIXED_TASK)
+    return model, DomainRandomization(model, profile), profile
 
 
 def test_startup_ranges_and_cross_body_relationships(dynamics):
-    model, randomization = dynamics
+    model, randomization, profile = dynamics
     values = jax.jit(lambda key: randomization.sample(key, 2048))(jax.random.key(519))
     values = jax.tree.map(np.asarray, values)
-    for key, base in (("kp", zenbot.KP), ("kd", zenbot.KD)):
+    for key, base in (("kp", profile.KP), ("kd", profile.KD)):
         ratio = values[key] / base
         assert np.all((ratio >= .8) & (ratio <= 1.2))
-        assert ratio.min() < .81 and ratio.max() > 1.19
+        assert (ratio.min(axis=0) < .81).all() and (ratio.max(axis=0) > 1.19).all()
     ratio = values["dof_armature"][:, 6:] / model.dof_armature[6:]
     assert np.all((ratio >= .8 - 1e-7) & (ratio <= 1.2 + 1e-7))
+    assert (ratio.min(axis=0) < .81).all() and (ratio.max(axis=0) > 1.19).all()
     friction = values["dof_frictionloss"][:, randomization.pair_dofs]
     means = friction.mean(-1)
     reference_means = np.array([.3975, .375, .2975, .4125, .55, .35])
@@ -57,7 +59,7 @@ def test_startup_ranges_and_cross_body_relationships(dynamics):
 
 
 def test_reference_constants_match_mujoco_set_const(dynamics):
-    model, randomization = dynamics
+    model, randomization, _ = dynamics
     values = randomization.sample(jax.random.key(125), 5)
     # Independent engine oracle: changed COM, armature and body masses must
     # reach contact/friction inverse weights, not just the forward dynamics.
@@ -73,7 +75,7 @@ def test_reference_constants_match_mujoco_set_const(dynamics):
 
 
 def test_nominal_disabled_sampling_preserves_motion_train_friction(dynamics):
-    model, randomization = dynamics
+    model, randomization, profile = dynamics
     first = randomization.sample(jax.random.key(0), 3, enabled=False)
     other = randomization.sample(jax.random.key(1), 3, enabled=False)
     assert set(first) == {*MODEL_FIELDS, "kp", "kd"}
@@ -90,11 +92,20 @@ def test_nominal_disabled_sampling_preserves_motion_train_friction(dynamics):
     for name in a:
         np.testing.assert_array_equal(a[name], b[name])
     assert not np.array_equal(a["body_mass"], c["body_mass"])
+    if profile is zenbot26:
+        # These joints use fixed calibrated friction, independent of the leg pairs.
+        for joint, expected in (("waist_yaw", .986), ("waist_roll", .350), ("waist_pitch", .550)):
+            dof = model.jnt_dofadr[model.joint("robot_" + joint + "_joint").id]
+            np.testing.assert_allclose(a["dof_frictionloss"][:, dof], expected)
+            np.testing.assert_allclose(first["dof_frictionloss"][:, dof], expected)
+        for name in ("waist_yaw_Link", "waist_roll_Link", "head_yaw_Link"):
+            body = model.body("robot_" + name).id
+            np.testing.assert_allclose(a["body_mass"][:, body], model.body_mass[body])
 
 
 @pytest.mark.parametrize("robot_mu", [.4, 1.5])
 def test_ground_contact_uses_motion_train_maximum_rule(dynamics, robot_mu):
-    model, randomization = dynamics
+    model, randomization, _ = dynamics
     native = copy.copy(model)
     native.geom_friction[randomization.robot_geoms, 0] = robot_mu
     data = mujoco.MjData(native)

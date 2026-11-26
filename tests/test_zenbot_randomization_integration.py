@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import asdict
+from pathlib import Path
 from types import SimpleNamespace
 from typing import NamedTuple
 
@@ -10,12 +11,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from instantamp import env, nets, zenbot, zenbot_gait_rewards
+from instantamp import env, nets, zenbot, zenbot26, zenbot_gait_rewards
 from instantamp.sim import Sim, unflatten
 from instantamp.train import InstantAMP, Zenbot23JointConfig, ZenbotMotionTrainWMConfig, parse
 from instantamp.training_sim import simulation_options
-
-pytestmark = pytest.mark.usefixtures("zenbot23_motion_banks")
 
 
 class CpuData(NamedTuple):
@@ -27,22 +26,29 @@ class CpuData(NamedTuple):
         return self._replace(**values)
 
 
-def simulator(n=8, *, aligned=True, randomize=False):
+def simulator(n=8, *, aligned=True, randomize=False, profile=zenbot, **options):
+    if not all(any(Path(bank).glob("*.npz")) for bank in profile.MODEL.motion_dirs()):
+        pytest.skip(f"Prepare the {profile.MIXED_TASK} motion banks to run native replay tests")
     sim = Sim(
-        n, physics=False, robot=zenbot.MIXED_TASK, zenbot_motion_train_wm=True,
+        n, physics=False, robot=profile.MIXED_TASK, zenbot_motion_train_wm=True,
         motion_train_randomization=aligned, randomize_world=randomize, obs_noise=False,
         random_start=False, reset_floor=.4, wm_floor_amp=True, wm_fixed_floor_envs=True,
         wm_global_gait=True, wm_gait_rewards=True, wm_posture_and_tracking=True,
-        wm_lift_gate=.44,
+        wm_lift_gate=.44, **options,
     )
-    sim.dx = CpuData(jnp.zeros(30), jnp.zeros(29), jnp.zeros(29))
+    sim.dx = CpuData(jnp.zeros(sim.m.nq), jnp.zeros(sim.m.nv), jnp.zeros(sim.m.nv))
     return sim
 
 
-def test_new_recipe_enables_alignment_but_saved_legacy_config_remains_legacy():
-    recipe = asdict(Zenbot23JointConfig())
+@pytest.mark.parametrize("robot", [zenbot.MIXED_TASK, zenbot26.MIXED_TASK])
+def test_new_recipe_enables_alignment_but_saved_legacy_config_remains_legacy(robot):
+    recipe = asdict(parse(["--robot", robot]))
     assert recipe["motion_train_randomization"] == 1
     assert simulation_options(recipe)["motion_train_randomization"] == 1
+    assert recipe["external_pushes"] == 0
+    assert simulation_options(recipe)["external_pushes"] == 0
+    archived = {key: value for key, value in recipe.items() if key != "external_pushes"}
+    assert simulation_options(archived)["external_pushes"] == 1
     assert ZenbotMotionTrainWMConfig().motion_train_randomization == 0
     legacy = {key: value for key, value in recipe.items() if key != "motion_train_randomization"}
     assert "motion_train_randomization" not in simulation_options(legacy)
@@ -97,35 +103,60 @@ def test_old_simulator_context_and_zero_delay_mixture_are_unchanged():
     np.testing.assert_array_equal(sim.m.dof_frictionloss[sim.va[:4]], .986)
 
 
-def test_episode_reset_keeps_startup_dynamics_and_terrain_but_resets_push_timer():
-    sim = simulator(randomize=True)
+@pytest.mark.parametrize(("profile", "actor_dim", "context_dim", "delay_groups"), [
+    (zenbot, 234, 219, 5), (zenbot26, 261, 241, 7),
+], ids=["23dof", "26dof"])
+def test_push_free_episode_reset_preserves_startup_dynamics_and_terrain(
+    profile, actor_dim, context_dim, delay_groups,
+):
+    sim = simulator(randomize=True, profile=profile, push=True, prob_shove=1., fall_push_speed=1.)
     state = sim.init(jax.random.key(123))
-    assert sim.terrain is not None and sim.force_push is not None
-    assert state.force_push is not None
+    assert sim.terrain is not None
+    assert not sim.push and sim.prob_shove == sim.fall_push_speed == 0.
+    assert sim.force_push is None and state.force_push is None
+    assert np.any(sim.wm_gait_worlds) and np.any(~sim.wm_gait_worlds)
+    np.testing.assert_array_equal(state.assist, 0.)
     assert np.asarray(sim.terrain.contains(state.data.qpos[:, :2])).all()
-    assert np.any(np.asarray(state.world.dynamics["kp"]) != zenbot.KP)
-    # Establish an active pulse to ensure reset cannot carry its force onward.
-    old_push = state.force_push._replace(
-        remaining=jnp.full(sim.N, .10), force_w=jnp.ones((sim.N, 3)),
-        wait=jnp.full(sim.N, 2.),
-    )
-    state = state._replace(force_push=old_push)
+    assert np.any(np.asarray(state.world.dynamics["kp"]) != profile.KP)
+    assert np.any(np.asarray(state.world.dynamics["kd"]) != profile.KD)
+    assert state.motion_train_sensors.observation().shape == (sim.N, actor_dim)
     mask = jnp.arange(sim.N) % 2 == 0
     reset = sim._reset(state, mask, jax.random.key(456))
+    assert reset.force_push is None
+    delays = np.asarray(reset.delay_steps)
+    assert delays.shape == (sim.N, delay_groups)
+    assert np.all((delays >= 3) & (delays <= 7))
+    np.testing.assert_array_equal(delays[~mask], np.asarray(state.delay_steps)[~mask])
     for name, before in state.world.dynamics.items():
         np.testing.assert_array_equal(reset.world.dynamics[name], before)
     np.testing.assert_array_equal(reset.world.terrain_origin, state.world.terrain_origin)
+    # Startup privileged parameters round-trip through the actual model input.
+    xi = sim.context(reset)
+    assert xi.shape == (sim.N, context_dim)
+    assert np.isfinite(xi).all()
+    np.testing.assert_allclose(sim.context_root_com(xi), reset.world.body_ipos[:, 1], atol=1e-7)
+    # Exercise both stiffness and damping away from the motor effort limits.
+    pose = unflatten(reset.data.qpos, reset.data.qvel.at[:, 6:].set(.1))
+    target = pose[4] + .01
+    expected = profile.actuator_ctrl(
+        pose[4], pose[5], target, kp=reset.world.dynamics["kp"], kd=reset.world.dynamics["kd"],
+    )
+    np.testing.assert_allclose(sim.estimated_torque(pose, target, xi), expected, atol=1e-5)
+
+
+def test_archived_aligned_recipe_resets_active_pushes_only_in_reset_worlds():
+    sim = simulator(randomize=True, external_pushes=True)
+    state = sim.init(jax.random.key(123))
+    active = state.force_push._replace(
+        remaining=jnp.full(sim.N, .10), force_w=jnp.ones((sim.N, 3)), wait=jnp.full(sim.N, 2.),
+    )
+    mask = np.arange(sim.N) % 2 == 0
+    reset = sim._reset(state._replace(force_push=active), mask, jax.random.key(456))
+    np.testing.assert_array_equal(np.asarray(reset.force_push.remaining)[mask], 0.)
+    np.testing.assert_array_equal(np.asarray(reset.force_push.wait)[~mask], 2.)
     np.testing.assert_array_equal(np.asarray(reset.force_push.force_w)[mask], 0.)
     np.testing.assert_array_equal(np.asarray(reset.force_push.force_w)[~mask], 1.)
     assert np.all(np.asarray(reset.force_push.wait)[mask] >= 5.)
-    # Startup privileged parameters round-trip through the actual model input.
-    xi = sim.context(reset)
-    assert np.isfinite(xi).all()
-    np.testing.assert_allclose(sim.context_root_com(xi), reset.world.body_ipos[:, 1], atol=1e-7)
-    pose = unflatten(reset.data.qpos, reset.data.qvel)
-    target = pose[4] + .01
-    expected = zenbot.actuator_ctrl(pose[4], pose[5], target, kp=state.world.dynamics["kp"], kd=state.world.dynamics["kd"])
-    np.testing.assert_allclose(sim.estimated_torque(pose, target, xi), expected, atol=1e-5)
 
 
 def test_raising_ground_and_robot_preserves_geometry_rewards_and_amp_height():

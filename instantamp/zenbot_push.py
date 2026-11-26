@@ -12,7 +12,6 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 CLEAN, NORMAL, STRONG = 0, 1, 2
 SHOULDER, HIP = 0, 1
@@ -21,9 +20,6 @@ _BODIES = (
     "torso_Link",
     "left_hip_pitch_Link", "left_hip_roll_Link", "left_hip_yaw_Link",
     "right_hip_pitch_link", "right_hip_roll_Link", "right_hip_yaw_Link",
-)
-_SHOULDER_POINTS = np.array(
-    [[.008, .13787, .29817], [.008, -.13787, .29817]], dtype=np.float32,
 )
 
 
@@ -42,13 +38,20 @@ class PushState(NamedTuple):
 class TimedPush:
     nbody: int
     bodies: tuple[int, ...]  # torso followed by six hip links
+    shoulder_points: tuple[tuple[float, float, float], ...] = (
+        (.008, .13787, .29817), (.008, -.13787, .29817),
+    )
 
     @classmethod
     def from_model(cls, model):
         bodies = tuple(model.body("robot_" + name).id for name in _BODIES)
         if len(set(bodies)) != 7 or min(bodies) <= 0:
             raise ValueError("Shoulder/hip pushes require seven distinct robot bodies")
-        return cls(model.nbody, bodies)
+        # Both source tasks apply the force at the shoulder pitch origins in the torso frame.
+        shoulders = [model.body(f"robot_{side}_shoulder_pitch_Link").id for side in ("left", "right")]
+        if any(model.body_parentid[body] != bodies[0] for body in shoulders):
+            raise ValueError("Shoulder pitch origins must be expressed in the torso frame")
+        return cls(model.nbody, bodies, tuple(tuple(model.body_pos[body]) for body in shoulders))
 
     def init(self, key, num_envs):
         draws = jax.random.uniform(key, (num_envs, 2))
@@ -118,7 +121,7 @@ class TimedPush:
         active = (state.remaining > _EPS) & (state.profile != CLEAN)
         force = jnp.where(active[:, None], state.force_w, 0.)
         lever = jnp.where((state.kind == SHOULDER)[:, None],
-                          jnp.asarray(_SHOULDER_POINTS)[state.point], 0.)
+                          jnp.asarray(self.shoulder_points, dtype=jnp.float32)[state.point], 0.)
         lever_w = jnp.einsum("nij,nj->ni", rotations[rows, body], lever)
         wrench = jnp.concatenate((force, jnp.cross(lever_w, force)), -1)
         return jnp.zeros((n, self.nbody, 6), jnp.float32).at[rows, body].set(wrench)

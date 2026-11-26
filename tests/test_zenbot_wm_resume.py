@@ -86,7 +86,13 @@ def test_continue_archived_i_profile_with_full_directory_on_another_volume(tmp_p
     (run / "config.json").write_text(json.dumps(config))
     cfg = parse(continuation_args(full, output, 12000))
     assert cfg.robot == config["robot"] and cfg.wm_initial_gait_stage == 2
+    assert cfg.motion_train_randomization == 0
+    assert cfg.external_pushes == 1
     assert (cfg.wm_tracking_scale, cfg.gait_ls_scale, cfg.action_rate_l2_weight) == (2., 10., -.03)
+    config.update(motion_train_randomization=1, external_pushes=0)
+    (run / "config.json").write_text(json.dumps(config))
+    cfg = parse(continuation_args(full, output, 12000))
+    assert (cfg.motion_train_randomization, cfg.external_pushes) == (1, 0)
     del config["gait_ls_scale"]
     (run / "config.json").write_text(json.dumps(config))
     assert parse(continuation_args(full, output, 12000)).gait_ls_scale == 1.5

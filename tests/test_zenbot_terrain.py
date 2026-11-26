@@ -104,14 +104,14 @@ def test_heightfield_physically_supports_a_falling_body():
     assert abs(data.qpos[2] - float(atlas.height_at(data.qpos[:2])) - .04) < .01
 
 
-def test_robot_cannot_overflow_warp_heightfield_pair_search():
+@pytest.mark.parametrize("dof", [23, 26])
+def test_robot_cannot_overflow_warp_heightfield_pair_search(dof):
     from mujoco_warp._src.types import MJ_MAXCONPAIR
 
-    from instantamp import zenbot
     from instantamp.sim import build_scene
 
     atlas = TerrainAtlas.create(seed=3, rows=1, cols=2)
-    model = build_scene(robot_name=zenbot.MIXED_TASK, terrain=atlas)
+    model = build_scene(robot_name=f"zenbot{dof}_walk_run_recovery", terrain=atlas)
     diameter = 2 * model.geom_rbound[model.geom_bodyid != 0].max()
     pitch_x = 2 * model.hfield_size[:, 0] / (model.hfield_ncol - 1)
     pitch_y = 2 * model.hfield_size[:, 1] / (model.hfield_nrow - 1)

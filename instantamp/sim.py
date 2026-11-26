@@ -307,7 +307,7 @@ class Sim:
         wm_gait_rewards=False, wm_posture_and_tracking=False,
         wm_range_commands=False, wm_global_gait=False, wm_side_share=0.,
         wm_fixed_floor_envs=False, wm_tracking_scale=1., wm_initial_gait_stage=0,
-        motion_train_randomization=False,
+        motion_train_randomization=False, external_pushes=None,
     ):
         """physics=False: everything but MuJoCo Warp's model and data (no GPU): the scene, kinematics, reset banks and `_fresh`, for
         checks on the CPU."""
@@ -320,8 +320,8 @@ class Sim:
         self.wm_initial_gait_stage = wm_initial_gait_stage
         self.zenbot_motion_train_wm = bool(zenbot_motion_train_wm)
         self.motion_train_randomization = bool(motion_train_randomization)
-        if self.motion_train_randomization and (not self.zenbot_motion_train_wm or profile is not zenbot):
-            raise ValueError("Motion Train randomization requires the Zenbot23 world-model task")
+        if self.motion_train_randomization and not (self.zenbot_motion_train_wm and self.mixed):
+            raise ValueError("Motion Train randomization requires a Zenbot world-model task")
         self.wm_floor_amp = bool(wm_floor_amp)
         self.wm_floor_locomotion = self.wm_floor_amp
         self.wm_fixed_floor_envs = wm_fixed_floor_envs
@@ -346,8 +346,10 @@ class Sim:
         if self.wm_floor_amp and (not zenbot_motion_train_wm or not 0. < reset_floor < 1.):
             raise ValueError("Floor AMP requires both locomotion and floor starts")
         self.reset_floor, self.prob_shove, self.push = reset_floor, prob_shove, push
-        if self.motion_train_randomization:
-            # The source task uses finite forces, not root-velocity jumps.
+        if external_pushes is None:
+            external_pushes = not self.zenbot_motion_train_wm
+        if not external_pushes or self.motion_train_randomization:
+            # Motion Train uses its own force scheduler when pushes are enabled.
             self.prob_shove, self.push = 0., False
         if self.zenbot_motion_train_wm and not self.mixed:
             raise ValueError("Motion Train world-model control requires the mixed Zenbot task")
@@ -372,7 +374,7 @@ class Sim:
         self.support_rsi = float(support_rsi)
         if not np.isfinite(fall_push_speed) or fall_push_speed < 0 or (fall_push_speed and not self.recovery_amp_steps):
             raise ValueError("Fall perturbations require the mixed recovery AMP interval")
-        self.fall_push_speed = fall_push_speed
+        self.fall_push_speed = fall_push_speed if external_pushes else 0.
         self.cmd_ranges = zenbot.GAIT_COMMANDS if self.mixed else env.CMD_RANGE
         self.history = profile.HIST
         self.assist_newtons = 0.
@@ -424,10 +426,10 @@ class Sim:
         self.domain_randomization = self.force_push = None
         if self.motion_train_randomization:
             from .zenbot_domain_randomization import MODEL_FIELDS, DomainRandomization
-            from .zenbot_push import TimedPush
             self.domain_randomization = DomainRandomization(m, profile)
             self.world_fields = tuple(dict.fromkeys((*self.world_fields, *MODEL_FIELDS)))
-            if randomize_world:
+            if external_pushes and randomize_world:
+                from .zenbot_push import TimedPush
                 self.force_push = TimedPush.from_model(m)
         assert m.nu == self.J and m.nq == 7 + self.J
         assert tuple(m.joint(m.actuator_trnid[i, 0]).name.removeprefix("robot_").removesuffix("_joint") for i in range(m.nu)) == profile.DOF
@@ -825,7 +827,7 @@ class Sim:
                                        s.delay_steps, s.assist[:, None]), -1)
             if w.dynamics is not None:
                 d = w.dynamics
-                # Privileged inputs to the world model/critic only; the deployed actor remains 234-D.
+                # Only the world model and critic receive the randomized physical parameters.
                 extra = (d["kp"] / self.robot.KP, d["kd"] / self.robot.KD,
                          d["dof_armature"][:, self.va], d["dof_frictionloss"][:, self.va],
                          w.body_mass[:, 1:], (w.body_ipos - m.body_ipos).reshape(self.N, -1),

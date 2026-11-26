@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from instantamp import buffer, env, nets, zenbot, zenbot_gait_rewards
+from instantamp import buffer, env, nets, zenbot, zenbot26, zenbot_gait_rewards
 from instantamp.sim import Sim, unflatten
 from instantamp.train import InstantAMP, parse
 from instantamp.training_sim import simulation_options
@@ -21,10 +21,10 @@ from instantamp.zenbot_wm_sensors import (
 )
 
 
-def sensor_history(n):
+def sensor_history(n, joints=23):
     imu = jnp.tile(jnp.array([.4, -.2, .15, 0., 0., -1.]), (n, 1))
     command = jnp.zeros((n, 3))
-    raw = jnp.arange(n * 23, dtype=jnp.float32).reshape(n, 23) / 32
+    raw = jnp.arange(n * joints, dtype=jnp.float32).reshape(n, joints) / 32
     history = None
     for t in range(3):
         history = advance_sensors(history, imu + .002*t, command, raw, raw, raw+t,
@@ -32,21 +32,24 @@ def sensor_history(n):
     return history
 
 
-def poses(n):
-    q = jnp.tile(jnp.r_[0., 0., .7, .5, .5, .5, .5, zenbot.DEFAULT_Q], (n, 1))
-    v = jnp.arange(n * 29, dtype=jnp.float32).reshape(n, 29)/80
+def poses(n, profile=zenbot):
+    q = jnp.tile(jnp.r_[0., 0., .7, .5, .5, .5, .5, profile.DEFAULT_Q], (n, 1))
+    nv = 6 + len(profile.DOF)
+    v = jnp.arange(n * nv, dtype=jnp.float32).reshape(n, nv)/80
     return q, v
 
 
 @pytest.mark.parametrize("noisy", [True, False])
-def test_restore_physical_sensor_frames_and_predict_like_sim(noisy):
+@pytest.mark.parametrize("profile", [zenbot, zenbot26])
+def test_restore_physical_sensor_frames_and_predict_like_sim(noisy, profile):
     seed = jax.random.key(432)
-    original = sensor_history(2)
+    joints = len(profile.DOF)
+    original = sensor_history(2, joints)
     restored = restore_sensors(original.observation(), *original[:3])
     for a, b in zip(restored, original):
         np.testing.assert_array_equal(a, b)
-    q, v = poses(2)
-    action = original.frames[:, -1, 55:] + .25
+    q, v = poses(2, profile)
+    action = original.frames[:, -1, -joints:] + .25
     cmd = jnp.array([[0., 0., 0.], [-.5, 0., 0.]])
     sim = Sim.__new__(Sim)
     sim.noisy_obs = noisy
@@ -58,27 +61,31 @@ def test_restore_physical_sensor_frames_and_predict_like_sim(noisy):
         np.testing.assert_array_equal(a, b)
 
 
-def test_zero_and_grouped_delay_targets_and_gradients_equal_four_native_substeps():
+@pytest.mark.parametrize("profile", [zenbot, zenbot26])
+def test_zero_and_grouped_delay_targets_and_gradients_equal_four_native_substeps(profile):
     n = 2
-    history = sensor_history(n)
-    previous, older = history.frames[:, -1, 55:], history.frames[:, -2, 55:]
+    joints = len(profile.DOF)
+    frame_dim = 9 + 3 * joints
+    history = sensor_history(n, joints)
+    previous, older = history.frames[:, -1, -joints:], history.frames[:, -2, -joints:]
     act = jnp.flip(previous, -1) + .3
     bias = previous / 128
-    delays = jnp.array([[0, 0, 0, 0, 0], [7, 6, 5, 4, 3]])
+    groups = int(profile.GROUP.max()) + 1
+    delays = jnp.stack((jnp.zeros(groups, jnp.int32), 7 - jnp.arange(groups) % 5))
     context = jnp.pad(delays, ((0, 0), (2, 1)))
     physical = Sim.__new__(Sim)
-    physical.robot, physical.history, physical.frame_dim, physical.J = zenbot, 5, 78, 23
-    raw_frames = jnp.zeros((n, 5, 78)).at[:, -2, 55:].set(older).at[:, -1, 55:].set(previous)
+    physical.robot, physical.history, physical.frame_dim, physical.J = profile, 5, frame_dim, joints
+    raw_frames = jnp.zeros((n, 5, frame_dim)).at[:, -2, -joints:].set(older).at[:, -1, -joints:].set(previous)
     actual = physical.control_targets(act, bias, raw_frames.reshape(n, -1), context)
     def expected(a, p, o):
-        group_delay = delays[:, zenbot.GROUP]
+        group_delay = delays[:, profile.GROUP]
         pieces = []
         for j in range(4):
             raw = jnp.where(group_delay <= j, a, jnp.where(group_delay <= j+4, p, o))
-            pieces.append(zenbot.DEFAULT_Q + zenbot.ACTION_SCALE*raw-bias)
+            pieces.append(profile.DEFAULT_Q + profile.ACTION_SCALE*raw-bias)
         return jnp.concatenate(pieces, axis=1)
     def modeled(a, p, o):
-        return pd_targets(a, p, o, bias, context)
+        return pd_targets(a, p, o, bias, context, profile=profile)
     np.testing.assert_array_equal(actual, expected(act, previous, older))
     np.testing.assert_array_equal(actual, modeled(act, previous, older))
     for variable in (0, 1, 2):
@@ -87,20 +94,28 @@ def test_zero_and_grouped_delay_targets_and_gradients_equal_four_native_substeps
         np.testing.assert_array_equal(got, true)
 
 
-def test_cold_motor_queue_clamps_the_lag_to_commands_received_since_each_reset():
-    actions = np.arange(3 * 23, dtype=np.float32).reshape(3, 23) / 16.
-    delay_groups = np.array([3, 4, 5, 6, 7], dtype=np.int32)
-    context = jnp.broadcast_to(jnp.pad(delay_groups, (2, 1)), (3, 8))
+@pytest.mark.parametrize("profile,delays", [(zenbot, [3, 4, 5, 6, 7]),
+                                           (zenbot26, [3, 4, 5, 6, 7, 7, 4])])
+def test_cold_motor_queue_clamps_the_lag_to_commands_received_since_each_reset(profile, delays):
+    joints = len(profile.DOF)
+    actions = np.arange(3 * joints, dtype=np.float32).reshape(3, joints) / 16.
+    delay_groups = np.asarray(delays, dtype=np.int32)
+    if profile is zenbot26:
+        # The waist yaw shares the hip delay. Roll/pitch share a separate
+        # delay and the head has its own delayed PD group in Motion Train.
+        indices = [profile.DOF.index(j) for j in ("waist_yaw", "waist_roll", "waist_pitch", "head_yaw")]
+        np.testing.assert_array_equal(profile.GROUP[indices], [0, 5, 5, 6])
+    context = jnp.broadcast_to(jnp.pad(delay_groups, (2, 1)), (3, len(delays) + 3))
     # Three worlds have received different numbers of control commands since their own resets.
     elapsed = np.arange(3)
-    previous = np.vstack((np.zeros(23), actions[:2])).astype(np.float32)
-    older = np.vstack((np.zeros((2, 23)), actions[0])).astype(np.float32)
-    targets = pd_targets(actions, previous, older, jnp.zeros_like(actions), context, elapsed=elapsed)
+    previous = np.vstack((np.zeros(joints), actions[:2])).astype(np.float32)
+    older = np.vstack((np.zeros((2, joints)), actions[0])).astype(np.float32)
+    targets = pd_targets(actions, previous, older, jnp.zeros_like(actions), context, elapsed=elapsed, profile=profile)
     for world, t in enumerate(elapsed):
         for sub in range(4):
-            source = np.maximum(0, 4*t + sub - delay_groups[zenbot.GROUP]) // 4
-            expected = zenbot.DEFAULT_Q + .25 * actions[source, np.arange(23)]
-            np.testing.assert_array_equal(targets.reshape(3, 4, 23)[world, sub], expected)
+            source = np.maximum(0, 4*t + sub - delay_groups[profile.GROUP]) // 4
+            expected = profile.DEFAULT_Q + .25 * actions[source, np.arange(joints)]
+            np.testing.assert_array_equal(targets.reshape(3, 4, joints)[world, sub], expected)
 
 
 def test_real_record_resamples_only_newest_command_and_backpropagates_through_wm():

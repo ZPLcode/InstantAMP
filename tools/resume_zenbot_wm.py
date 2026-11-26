@@ -55,6 +55,7 @@ def continuation_args(
     # Archived world models/critics lack the randomized-dynamics context.
     # Keep their original physical recipe when doing an exact continuation.
     config.setdefault("motion_train_randomization", 0)
+    config.setdefault("external_pushes", 1)
     inactive = {
         "g1_style": 0,
         "init_g1_full": "",

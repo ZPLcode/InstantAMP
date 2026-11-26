@@ -1,4 +1,4 @@
-"""Startup dynamics for Motion Train's Zenbot23 AMP task.
+"""Startup dynamics for Motion Train's Zenbot AMP tasks.
 
 Ranges and paired Coulomb friction follow Motion Train ad923704. Its active
 Newton material backend samples one continuous sliding coefficient per shape;
@@ -19,7 +19,7 @@ import jax.numpy as jnp
 import mujoco
 import numpy as np
 
-from .zenbot_models import ZENBOT23
+from .zenbot_models import ZENBOT26, for_joint_count
 
 
 MODEL_FIELDS = (
@@ -44,19 +44,19 @@ matrix at qpos0. This refreshes the same inverse weights used by mj_setConst,
 without host callbacks or a different startup random seed.
     """
 
-    def __init__(self, model, profile=ZENBOT23):
-        profile = getattr(profile, "MODEL", profile)
-        if profile is not ZENBOT23:
-            raise ValueError("Motion Train dynamics are defined only for Zenbot23")
-        if model.nv != 29 or model.nu != 23 or model.ntendon or model.neq:
-            raise ValueError("Expected a free-root Zenbot23 without tendons/equalities")
+    def __init__(self, model, profile=None):
+        articulation = for_joint_count(model.nu)
+        if profile is not None and getattr(profile, "MODEL", profile) is not articulation:
+            raise ValueError("Zenbot actuator count does not match its dynamics profile")
+        if model.nv != model.nu + 6 or model.ntendon or model.neq:
+            raise ValueError("Expected a free-root Zenbot without tendons/equalities")
         self.nv = model.nv
         self.joint_dofs = np.asarray([
             model.jnt_dofadr[model.joint("robot_" + name + "_joint").id]
-            for name in profile.dof
+            for name in articulation.dof
         ])
         self.pair_dofs = np.asarray([
-            [self.joint_dofs[profile.dof.index(side + "_" + name)] for side in ("left", "right")]
+            [self.joint_dofs[articulation.dof.index(side + "_" + name)] for side in ("left", "right")]
             for name in PAIR_NAMES
         ])
         names = [model.body(i).name.removeprefix("robot_") for i in range(model.nbody)]
@@ -72,13 +72,16 @@ without host callbacks or a different startup random seed.
         # The caller creates mjx.Model after this constructor, so static contact
         # priorities and nominal friction agree with the sampled model fields.
         model.dof_frictionloss[self.pair_dofs] = NOMINAL_PAIRED_FRICTION
+        if articulation is ZENBOT26:
+            for joint, friction in (("waist_roll", .350), ("waist_pitch", .550)):
+                model.dof_frictionloss[self.joint_dofs[articulation.dof.index(joint)]] = friction
         model.geom_friction[:, 0] = 1.
         model.geom_priority[:] = 0
         data = mujoco.MjData(model)
         mujoco.mj_setConst(model, data)
         self.nominal = {name: jnp.asarray(getattr(model, name), dtype=jnp.float32) for name in MODEL_FIELDS}
-        self.nominal["kp"] = jnp.asarray(profile.kp)
-        self.nominal["kd"] = jnp.asarray(profile.kd)
+        self.nominal["kp"] = jnp.asarray(articulation.kp)
+        self.nominal["kd"] = jnp.asarray(articulation.kd)
 
         descendants = np.zeros((model.nbody, model.nbody), dtype=np.float32)
         for child in range(model.nbody):
@@ -119,10 +122,11 @@ without host callbacks or a different startup random seed.
             return values
         keys = jax.random.split(key, 9)
         uniform = lambda k, shape, lo, hi: jax.random.uniform(k, shape, minval=lo, maxval=hi)
-        values["kp"] *= uniform(keys[0], (num_envs, 23), .8, 1.2)
-        values["kd"] *= uniform(keys[1], (num_envs, 23), .8, 1.2)
+        joint_shape = values["kp"].shape
+        values["kp"] *= uniform(keys[0], joint_shape, .8, 1.2)
+        values["kd"] *= uniform(keys[1], joint_shape, .8, 1.2)
         values["dof_armature"] = values["dof_armature"].at[:, self.joint_dofs].multiply(
-            uniform(keys[2], (num_envs, 23), .8, 1.2)
+            uniform(keys[2], joint_shape, .8, 1.2)
         )
         pair_mean = jnp.asarray(NOMINAL_PAIRED_FRICTION.mean(axis=1)) * uniform(keys[3], (num_envs, 6), .5, 1.5)
         half_mismatch = .5 * uniform(keys[4], (num_envs, 6), -.1, .1)

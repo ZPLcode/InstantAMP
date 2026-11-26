@@ -189,7 +189,8 @@ class ZenbotMotionTrainWMConfig(Config):
     """Shared world-model configuration for Zenbot locomotion and recovery."""
     robot: str = zenbot.MIXED_TASK
     motion_train_wm: int = 1
-    motion_train_randomization: int = 0  # 1: current Zenbot23 Motion Train dynamics, terrain and force events
+    motion_train_randomization: int = 0  # 1: articulation-specific Motion Train dynamics and terrain
+    external_pushes: int = 0  # enable shoulder/hip force pulses or the legacy velocity perturbations
     reset_floor: float = .35
     zenbot_episode_steps: int = 400
     amp_delay: int = 100
@@ -239,8 +240,10 @@ class ZenbotMotionTrainWMConfig(Config):
         super().__post_init__()
         if self.motion_train_randomization not in (0, 1):
             raise ValueError("motion_train_randomization must be 0 or 1")
-        if self.motion_train_randomization and self.robot != zenbot_models.ZENBOT23.mixed_task:
-            raise ValueError("Motion Train randomization calibration requires Zenbot23")
+        if self.external_pushes not in (0, 1):
+            raise ValueError("external_pushes must be 0 or 1")
+        if self.motion_train_randomization and self.robot not in zenbot_models.MIXED_TASKS:
+            raise ValueError("Motion Train randomization requires a Zenbot joint task")
         if self.init_full:
             source_config = Path(self.init_full).parent.parent.parent / "config.json"
             if source_config.is_file():
@@ -320,6 +323,7 @@ class ZenbotMotionTrainWMConfig(Config):
 @dataclasses.dataclass
 class ZenbotJointConfig(ZenbotMotionTrainWMConfig):
     """One command-conditioned actor for locomotion and floor recovery, with two AMP priors."""
+    motion_train_randomization: int = 1
     num_envs: int = 2048
     max_iterations: int = 20_000
     ckpt_iterations: int = 500
@@ -382,7 +386,6 @@ class Zenbot23JointConfig(ZenbotJointConfig):
     """Shared joint training recipe with the 23-DoF articulation selected."""
 
     robot: str = zenbot_models.ZENBOT23.mixed_task
-    motion_train_randomization: int = 1
     imag_gait_mirror_weight: float = .2
 
 

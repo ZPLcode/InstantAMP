@@ -31,10 +31,10 @@ class CpuState(NamedTuple):
         return SimpleNamespace(nacon=jnp.zeros(1), contact__dist=jnp.zeros(1))
 
 
-def simulator(wm=True, n=16, **options):
+def simulator(wm=True, n=16, push=False, **options):
     data=Path('data/zenbot23_walk_run_recovery')
     sim=Sim(n,physics=False,robot=zenbot.MIXED_TASK,walk_dir=str(data/'walk_run'),floor_dir=str(data/'recovery'),
-            zenbot_motion_train_wm=wm,reset_floor=.5,obs_noise=False,push=False,randomize_world=False,
+            zenbot_motion_train_wm=wm,reset_floor=.5,obs_noise=False,push=push,randomize_world=False,
             random_start=False,**options)
     sim.dx=CpuState(jnp.zeros(30),jnp.zeros(29),jnp.zeros(29))
     return sim
@@ -56,6 +56,18 @@ def native_substeps(sim, world, state, targets, assist, fresh):
     # Contacts do not enter these six terms; termination and timeout use the real post-step pelvis state.
     zeros=jnp.zeros(sim.N)
     return state.replace(qpos=jnp.asarray(pos),qvel=jnp.asarray(vel)),jnp.zeros((sim.N,2)),zeros,zeros.astype(bool),None
+
+
+def test_disabled_pushes_ignore_a_due_legacy_velocity_kick():
+    sim = simulator(n=4, push=True, prob_shove=1., fall_push_speed=1.)
+    assert not sim.push and sim.prob_shove == sim.fall_push_speed == 0.
+    assert sim.force_push is None
+    state = sim.init(jax.random.key(90))
+    state = state._replace(push_at=state.push_t + 1)
+    sim.physics = lambda *args: native_substeps(sim, *args)
+    result, transition = sim.step(state, jnp.zeros((sim.N, sim.J)), auto_reset=False)
+    assert transition.stats["pushes"] == 0
+    np.testing.assert_array_equal(result.data.qvel, transition.qvel1)
 
 
 def test_fixed_commands_match_real_initial_and_resampled_sensor_inputs():
@@ -133,7 +145,7 @@ def test_wm_mixes_native_cold_openings_with_moving_recovery_frames():
 
     from instantamp.zenbot_trials import fallen_starts
 
-    sim = simulator(n=12288, prob_shove=.2)
+    sim = simulator(n=12288, prob_shove=.2, external_pushes=True)
     sim.reset_floor = .35
     world = SimpleNamespace(walk=sim.walk, floor=sim.floor)
     key = jax.random.key(7149)

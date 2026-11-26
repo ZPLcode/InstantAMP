@@ -29,12 +29,13 @@ def test_models_share_the_training_recipe_and_reward_defaults():
     assert default.ppo_frac == .1 and default.ode == 0
     assert default.obs_clip == 10 and default.wm_initial_gait_stage == 0
     other = parse(["--robot", zenbot_models.ZENBOT26.mixed_task])
-    model_settings = {"robot", "walk_dir", "amp_dir", "floor_dir", "amp_getup_dir", "log_dir", "imag_gait_mirror_weight", "motion_train_randomization"}
+    model_settings = {"robot", "walk_dir", "amp_dir", "floor_dir", "amp_getup_dir", "log_dir", "imag_gait_mirror_weight"}
     first = dataclasses.asdict(default)
     second = dataclasses.asdict(other)
     assert {key for key in first if first[key] != second[key]} == model_settings
     assert (default.imag_gait_mirror_weight, other.imag_gait_mirror_weight) == (.2, 0.)
     for cfg in (default, other):
+        assert cfg.motion_train_randomization == 1
         assert cfg.wm_hidden == "1024,1024,1024"
         assert (cfg.learn_action_std, cfg.action_noise, cfg.action_entropy_coef) == (1, 1., .01)
         assert (cfg.wm_tracking_scale, cfg.gait_ls_scale, cfg.action_rate_l2_weight) == (1., 1.5, -.05)

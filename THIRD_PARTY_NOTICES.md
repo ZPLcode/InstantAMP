@@ -145,7 +145,7 @@ Zenbot recovery references are derived from the LAFAN1 take `fallAndGetUp1_subje
 
 The 23- and 26-DoF MJCF files in `assets/` come from Motion Train's RoboLab robot descriptions. The simulator uses actuator calibration from the corresponding models. The source project's BSD-3-Clause notice is included under `licenses/`. [Robot source revision](https://github.com/ZPLcode/h1_train/tree/4733fc9649dc3f2b99b2c3ba21fb2ec5e259e6ff/robolab/data/robots/roboparty) · [RoboLab BSD-3-Clause notice](licenses/Zenbot-BSD-3-Clause.txt)
 
-The Zenbot23 dynamics sampling, shoulder/hip force schedule and mild-terrain parameters in `instantamp/zenbot_domain_randomization.py`, `instantamp/zenbot_push.py` and `instantamp/zenbot_terrain.py` follow Motion Train's local revision `ad923704f7fa1835730d04a10023b15d4e2b29e3`. They are implemented for JAX and native MuJoCo contact geometry; the source RoboLab notice above applies to the adapted task logic.
+The Zenbot23 and Zenbot26 dynamics sampling, shoulder/hip force schedule and mild-terrain parameters in `instantamp/zenbot_domain_randomization.py`, `instantamp/zenbot_push.py` and `instantamp/zenbot_terrain.py` follow Motion Train's local revision `ad923704f7fa1835730d04a10023b15d4e2b29e3`. They are implemented for JAX and native MuJoCo contact geometry. The source RoboLab notice above applies to the adapted task logic.
 
 ## Dependencies
 

@@ -24,6 +24,9 @@ def simulation_options(config):
     options = {name: config[name] for name in shared if name in config}
     motion_train = bool(config.get("motion_train_wm"))
     options["zenbot_motion_train_wm"] = motion_train
+    if motion_train:
+        # Archived configs selected their push mechanism through the dynamics recipe.
+        options["external_pushes"] = config.get("external_pushes", 1)
     if motion_train and config.get("amp_w", 0) > 0:
         options["wm_stand_reference"] = Path(config["amp_dir"]) / "stand_4s_120f.npz"
     return options

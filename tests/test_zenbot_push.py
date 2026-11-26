@@ -4,12 +4,34 @@ import jax
 import jax.numpy as jnp
 import mujoco
 import numpy as np
+import pytest
 
+from instantamp.sim import build_scene
 from instantamp.zenbot_push import CLEAN, HIP, NORMAL, SHOULDER, STRONG, TimedPush
 
 
 def scheduler():
     return TimedPush(8, tuple(range(1, 8)))
+
+
+@pytest.mark.parametrize(("dof", "height"), [(23, .29817), (26, .26517)])
+def test_compiled_model_uses_calibrated_shoulder_offsets_and_hip_links(dof, height):
+    model = build_scene(robot_name=f"zenbot{dof}_walk_run_recovery")
+    push = TimedPush.from_model(model)
+    names = tuple(model.body(body).name for body in push.bodies)
+    assert names == ("robot_torso_Link", "robot_left_hip_pitch_Link", "robot_left_hip_roll_Link",
+                     "robot_left_hip_yaw_Link", "robot_right_hip_pitch_link", "robot_right_hip_roll_Link",
+                     "robot_right_hip_yaw_Link")
+    state = push.init(jax.random.key(0), 2)._replace(
+        profile=jnp.full(2, STRONG), remaining=jnp.full(2, .1), kind=jnp.full(2, SHOULDER),
+        body=jnp.full(2, push.bodies[0]), point=jnp.arange(2),
+        force_w=jnp.tile(jnp.array([100., 50., 0.]), (2, 1)),
+    )
+    xmat = jnp.broadcast_to(jnp.eye(3), (2, model.nbody, 3, 3))
+    wrench = np.asarray(push.wrench(state, xmat))
+    arms = np.array([[.008, .13787, height], [.008, -.13787, height]])
+    expected_torque = np.cross(arms, np.asarray(state.force_w))
+    np.testing.assert_allclose(wrench[:, push.bodies[0], 3:], expected_torque, atol=2e-6)
 
 
 def test_episode_profiles_and_pulse_distributions():
