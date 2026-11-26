@@ -1,0 +1,21 @@
+{
+  "onnx_checker": "passed",
+  "onnxruntime_provider": "CPUExecutionProvider",
+  "input": {
+    "name": "obs",
+    "shape": [
+      1,
+      261
+    ]
+  },
+  "output": {
+    "name": "actions",
+    "shape": [
+      1,
+      26
+    ]
+  },
+  "parity_samples": 194,
+  "parity_max_abs_error": 4.291534423828125e-06,
+  "checkpoints": "Byte-for-byte copies of the source arrays, verified with SHA-256 and ZIP CRC checks"
+}

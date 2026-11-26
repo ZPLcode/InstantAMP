@@ -1,0 +1,67 @@
+{
+  "source_base_commit": "aec5a9707e4b5ce39f18ad27c88dca12614e74b8",
+  "training_source_python_sha256": {
+    "instantamp/__init__.py": "97aff6935485a7e19708e2afecb4b4790ee9d295312148cc124089066c93bb5e",
+    "instantamp/amp.py": "1f0e69e35f2cf324982cc567e05cdd516264626047269b81a4c4f71f403f492a",
+    "instantamp/buffer.py": "a18c800349179b9788df338cc3b3f33c1084e5dd9cf69703df6e6338078a902e",
+    "instantamp/critic.py": "51395e5cc9b687288bc0b7f4d7464613db9805ef85ca98afcf0496f27cdb1037",
+    "instantamp/env.py": "3e52190e9fcd2a489167862b57226d9e3aac80f2f6a3dee2fbf252883416f599",
+    "instantamp/evaluate.py": "5c41c1b34731fe3ac0a4fb60437a8715fe53633fd8a88431cb1d899f796069d3",
+    "instantamp/getup_amp.py": "9e35ac02ea97a8bb5de31370d524f9ecfa073a96772b80f89204ea52332db10a",
+    "instantamp/inference.py": "2c16d37bbe7684d2630853e2d8b99642a5748b9dbe07d09f96a387da48df1ecf",
+    "instantamp/kin.py": "120f1504be5facf7ba810eaec367641fd73e762a0c9cc043624b775e04fb1f3d",
+    "instantamp/native_zenbot.py": "29b2ca386720b60d59b8fb81359d5d05041503c0d3118b199332f7df2803fd0e",
+    "instantamp/nets.py": "bb82f3f45f10f3094b99ec5c047993bb959ae6e0f94fd746d57e4b40add0434e",
+    "instantamp/optim.py": "d03a8537b424ca111451d538d37944139a4a4f05016d4d66ca85dfc9b83769ca",
+    "instantamp/resets.py": "5cdbc95c7ffc2dd14b0d5b7ef41ac3946bacdfe661f54c2b34d929e7b16b4b78",
+    "instantamp/rot.py": "b8b8bac719be5961af3058ea4baa30321d11263fa88165a95e7690ca575b4aed",
+    "instantamp/sim.py": "f833cd0b17bcf91d8f864be0041658f6c0899e48d254459ecd0a2732282e65c8",
+    "instantamp/support_discriminator.py": "f7f3f67731fbdce0525cf92ebb3bc059c6c1d1c5432af13a5e3421c7f96e0f0b",
+    "instantamp/train.py": "a3f8061687d46ab2f38fa0c7381eed0bd24741780bbe5a86834eef7801aba4ff",
+    "instantamp/training_sim.py": "f12f30b86b11cbbf4c284abcb7495d8fa67cbb6691c80c99e1ad3d30bfbfb139",
+    "instantamp/zenbot.py": "34255d003895af0e774fdd0d7afc9e1bcb865d001a3db8fcb3ce99364f376538",
+    "instantamp/zenbot26.py": "944e30c859986d8d01448c4451fc54078c1f803e7e890b68b1858a4c10ab7fec",
+    "instantamp/zenbot_domain_randomization.py": "7f3b141647e1a5d2411c8e5bbdba26d80bd516e9a7b5b1604ffb00b91867ed41",
+    "instantamp/zenbot_gait_demos.py": "2acb61e37911987e068494cb174381346e7c96ef30a2b8bbb07fefeaee41380e",
+    "instantamp/zenbot_gait_rewards.py": "f13f484ebe34b48509027e0bd1720e2233704df20ca6f185828c60594f732ec1",
+    "instantamp/zenbot_models.py": "576a65dd18639ec1bd8c6b1a9ddfc9c84e139e00e4ca9d53fd7680fff39efae5",
+    "instantamp/zenbot_motion_train_obs.py": "947ffcb15da8aceb55280c1ef623503f94157284cba08ec814217014a28749db",
+    "instantamp/zenbot_push.py": "4f6ce032d5c4eda093b892b27fe4f5588426508b986a53b83893a1d123d5760c",
+    "instantamp/zenbot_source_gait.py": "5290f1bbb62e030c58d31fae438d55cda8c612a867b889a7fc9077230e88d67c",
+    "instantamp/zenbot_terrain.py": "eab2effe4a599255cf8c8a339dee4e9bbd472d725d7db9420896635959a435fc",
+    "instantamp/zenbot_trials.py": "1d704d5e757e5cb302e07e9bdaa83327548d29146c1a85a806950399747271ee",
+    "instantamp/zenbot_wm_sensors.py": "26b7e97339865ab38a0d901b1d2a83e662ff20361c09e36ad2c3254132de8995"
+  },
+  "motion_manifest_sha256": "16c2b5f9cf63f6988310c137966c2b595f04ca0a05d4c4b0e1e0494c6390e107",
+  "original_target_iterations": 100000,
+  "checkpoint_iteration": 41000,
+  "last_logged_iteration": 41000,
+  "stopped_at": "2026-11-26T22:04:20+09:00",
+  "stop_signal": "SIGTERM",
+  "phases": [
+    {
+      "num_envs": 2048,
+      "start_iteration": 0,
+      "end_iteration_in_export": 4000,
+      "last_logged_iteration": 4250
+    },
+    {
+      "num_envs": 4096,
+      "start_iteration": 4000,
+      "end_iteration_in_export": 41000
+    }
+  ],
+  "archived_checkpoint_sha256": {
+    "ckpt/41000.json": "19d58326fd8a8334c8594d50472564e2629e8913f8168256fc29d7cc7673f58b",
+    "ckpt/41000.npz": "300332686f78b38b62b5ce7a6230ead7fb7dfe84e156c8d7afeb87112f3dc7bf",
+    "ckpt/full/41000.npz": "38232c27c3ec7d8ca060b38427b03e4cbdd350d01ad290d3c65eb724cc84f522"
+  },
+  "packages": {
+    "onnx": "1.23.2",
+    "onnxruntime": "1.27.0",
+    "jax": "0.7.2",
+    "mujoco": "3.17.0",
+    "numpy": "2.4.6"
+  },
+  "training_source_commit": "ec8569a961225bf69b8032d5853b2565b1a0ee30"
+}
