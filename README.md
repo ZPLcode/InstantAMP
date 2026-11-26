@@ -80,6 +80,8 @@ Zenbot joint training learns one state-independent Gaussian exploration standard
 
 To override these defaults, pass `--wm_tracking_scale`, `--gait_ls_scale` or `--action_rate_l2_weight` to the Python entry point. Prepare the data first and use a fresh run directory for each model.
 
+Recovery ablations can set `--wm_lift_weight` (default `0.5`) and `--getup_amp_scale` independently. A positive `getup_amp_scale` overrides only the recovery prior; `0` retains the shared AMP scale. `--full_ckpt_keep 2` keeps the latest two complete learner checkpoints while preserving every policy export; the default `0` keeps all checkpoints.
+
 ```bash
 bash tools/recipes/prepare_zenbot_wm_data.sh --robot "$robot"
 python -m instantamp.train --robot "$robot" --help

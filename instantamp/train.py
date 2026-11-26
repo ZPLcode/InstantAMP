@@ -159,6 +159,7 @@ class Config:
     log_every: int = 50  # iterations per log line
     ckpt_minutes: float = 2.0
     ckpt_iterations: int = 0  # positive: checkpoint on this iteration interval instead of elapsed minutes
+    full_ckpt_keep: int = 0  # positive: retain this many complete learner checkpoints; keep all policy exports
     seed: int = 0
     log_dir: str = ""
     jax_cache: str = "~/.cache/instantamp/jax"
@@ -169,6 +170,8 @@ class Config:
     def __post_init__(self):
         if self.ckpt_iterations < 0:
             raise ValueError("ckpt_iterations must be nonnegative")
+        if self.full_ckpt_keep < 0:
+            raise ValueError("full_ckpt_keep must be nonnegative")
         walk, floor = motion_dirs(self.robot)
         self.walk_dir = self.walk_dir or walk
         self.amp_dir = self.amp_dir or walk
@@ -197,6 +200,7 @@ class ZenbotMotionTrainWMConfig(Config):
     recovery_amp_seconds: float = 4.0  # include the transition to balance after any fall
     recovery_amp_stride: int = 3  # ten unpaired poses spanning 0.54 s
     recovery_amp_scale: float = 6.  # legacy recovery scale; joint LS priors share gait_ls_scale
+    getup_amp_scale: float = 0.  # positive: override only the recovery prior; zero keeps the existing shared scale
     gait_amp_stride: int = 1
     gait_ls_scale: float = 0.  # positive: least-squares gait AMP on matched finite-difference features
     recovery_amp_loss: str = "least_squares"
@@ -217,6 +221,7 @@ class ZenbotMotionTrainWMConfig(Config):
     gait_mirror_weight: float = 0.  # mirror consistency weighted by the current pose's gait suitability
     imag_gait_mirror_weight: float = 0.  # action consistency on imagined locomotion frames
     wm_lift_gate: float = 0.  # pelvis height where positive lifting progress begins, in metres
+    wm_lift_weight: float = .5  # weight of bounded lifting progress above wm_lift_gate
     wm_tempo_negatives: float = 0.  # fraction of recovery discriminator negatives made by mistiming moving reference segments
     wm_reset_imag_share: float = 0.  # portion of imagination starts in the first real WM window after reset
     ode: int = 0
@@ -252,6 +257,10 @@ class ZenbotMotionTrainWMConfig(Config):
             raise ValueError("Recovery AMP needs at least two frames for joint velocities")
         if self.recovery_amp_stride < 1 or not np.isfinite(self.recovery_amp_scale) or self.recovery_amp_scale <= 0:
             raise ValueError("Use a positive recovery discriminator stride and scale")
+        if not np.isfinite(self.getup_amp_scale) or self.getup_amp_scale < 0:
+            raise ValueError("getup_amp_scale must be finite and nonnegative")
+        if not np.isfinite(self.wm_lift_weight) or self.wm_lift_weight < 0:
+            raise ValueError("wm_lift_weight must be finite and nonnegative")
         if self.recovery_amp_loss not in ("least_squares", "wasserstein"):
             raise ValueError("Unknown recovery AMP discriminator loss")
         if (not np.isfinite(self.gait_ls_scale) or self.gait_ls_scale < 0
@@ -713,6 +722,7 @@ class InstantAMP:
             features = self.ground_features(windows)
             scale = (self.cfg.gait_ls_scale if getattr(self.cfg, "wm_floor_amp", False) and self.cfg.gait_ls_scale > 0
                      else self.cfg.recovery_amp_scale)
+            scale = getattr(self.cfg, "getup_amp_scale", 0.) or scale
             if self.cfg.recovery_amp_loss == "wasserstein":
                 value = amp.score(st["net"], st["norm"], features)
                 spread = jnp.maximum(4., .25 * jnp.abs(st["mu"][0] - st["mu"][1]))
@@ -1366,6 +1376,19 @@ def save_full(path, carry):
     os.replace(path + ".tmp.npz", path + ".npz")
 
 
+def prune_full_checkpoints(directory, keep):
+    """Prune numbered full checkpoints only after their companion exports exist."""
+    if keep <= 0:
+        return
+    directory = Path(directory)
+    complete = sorted((p for p in directory.glob("*.npz") if p.stem.isdecimal()
+                       and (directory.parent / p.name).is_file()
+                       and (directory.parent / p.with_suffix(".json").name).is_file()),
+                      key=lambda p: int(p.stem))
+    for path in complete[:-keep]:
+        path.unlink()
+
+
 def load_full(carry, path):
     part = {k: carry[k] for k in FULL_KEYS if k in carry}
     leaves, tdef = jax.tree.flatten(part)
@@ -1657,6 +1680,7 @@ def main(argv=None):
             save_full(os.path.join(cfg.log_dir, "ckpt", "full", f"{n_ckpt:04d}"), carry)
             save_policy(os.path.join(cfg.log_dir, "ckpt", f"{n_ckpt:04d}"), jax.device_get(xs.export(carry)),
                         {"it": it, "train_s": train_s, "env_steps": env_steps}, ode=(xs.ode_dmax, xs.ode_amax) if xs.ode else None)  # fmt: skip
+            prune_full_checkpoints(Path(cfg.log_dir) / "ckpt/full", cfg.full_ckpt_keep)
             last_ckpt, n_ckpt = train_s, n_ckpt + 1
         if finished:
             break

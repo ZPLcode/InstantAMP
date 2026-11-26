@@ -1,0 +1,11 @@
+{
+  "policy_byte_identical_to_source": true,
+  "policy_numeric_arrays_finite": true,
+  "full_array_count": 202,
+  "full_arrays_exactly_equal_to_source": true,
+  "full_numeric_arrays_finite": true,
+  "exploration_std_matches_checkpoint_metrics": true,
+  "policy_resolved_from_export_directory": true,
+  "native_evaluation": "evaluation/native.json",
+  "continuation_arguments_parse_passed": true
+}

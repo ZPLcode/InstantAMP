@@ -1,0 +1,363 @@
+{
+  "checkpoint": "releases/zenbot23_getup_ablation_31000_30000/B_lift05_getupamp10/ckpt/30000.npz",
+  "sha256": "68d47d3d543c3a7833053873c1102e4b12fe0ee1754def3d8d11f61591d8c093",
+  "iteration": 30000,
+  "seed": 42,
+  "duration_s": 10.0,
+  "assistance_N": 0,
+  "automatic_resets": false,
+  "teacher_inference": false,
+  "gait": [
+    {
+      "command_m_s": 1.0,
+      "measured_m_s": 1.0806294174142232,
+      "upright": true,
+      "alternating_feet": true,
+      "flight_periods_at_least_10ms": 0,
+      "passed": true
+    },
+    {
+      "command_m_s": 2.5,
+      "measured_m_s": 2.443783048840908,
+      "upright": false,
+      "alternating_feet": true,
+      "flight_periods_at_least_10ms": 5,
+      "passed": false
+    }
+  ],
+  "getup_successes": 4,
+  "getup_total": 22,
+  "tempo": {
+    "definition": "Start of first 0.2 second upright stretch within first 6 seconds; peak upward finite difference of pelvis height through first such stretch. Medians omit starts without a qualifying stretch. Reference uses matching clip offset with reset lift added.",
+    "policy_tempo": {
+      "upright_start_s": {
+        "n": 2,
+        "median": 2.09
+      },
+      "peak_rise_m_s": {
+        "n": 2,
+        "median": 0.5468
+      }
+    },
+    "reference_tempo": {
+      "upright_start_s": {
+        "n": 22,
+        "median": 2.39
+      },
+      "peak_rise_m_s": {
+        "n": 22,
+        "median": 0.6313
+      }
+    }
+  },
+  "trials": [
+    {
+      "clip": "fallAndGetUp1_subject1_1058_1140.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.6896260728190565,
+      "policy_tempo": {
+        "upright_start_s": 2.52,
+        "peak_rise_m_s": 0.4809
+      },
+      "reference_tempo": {
+        "upright_start_s": 2.36,
+        "peak_rise_m_s": 0.5274
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1058_1140.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.6897205001377197,
+      "policy_tempo": {
+        "upright_start_s": 1.66,
+        "peak_rise_m_s": 0.6126
+      },
+      "reference_tempo": {
+        "upright_start_s": 1.86,
+        "peak_rise_m_s": 0.5274
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1262_1320.npz",
+      "offset_s": 0.0,
+      "success": false,
+      "final_height_m": 0.2564175371576413,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 1.44,
+        "peak_rise_m_s": 0.4345
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1262_1320.npz",
+      "offset_s": 0.5,
+      "success": false,
+      "final_height_m": 0.6360006400633678,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 0.94,
+        "peak_rise_m_s": 0.3689
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1395_1461.npz",
+      "offset_s": 0.0,
+      "success": false,
+      "final_height_m": 0.6403951087450689,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 1.92,
+        "peak_rise_m_s": 0.5727
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1395_1461.npz",
+      "offset_s": 0.5,
+      "success": false,
+      "final_height_m": 0.2866954160273711,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 1.42,
+        "peak_rise_m_s": 0.5727
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1584_1684.npz",
+      "offset_s": 0.0,
+      "success": false,
+      "final_height_m": 0.1364116342977132,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 2.8,
+        "peak_rise_m_s": 0.6313
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1584_1684.npz",
+      "offset_s": 0.5,
+      "success": false,
+      "final_height_m": 0.20255134252456078,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 2.3,
+        "peak_rise_m_s": 0.6313
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1808_1916.npz",
+      "offset_s": 0.0,
+      "success": false,
+      "final_height_m": 0.22541852620808422,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 3.26,
+        "peak_rise_m_s": 0.6354
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_1808_1916.npz",
+      "offset_s": 0.5,
+      "success": true,
+      "final_height_m": 0.6873575479029178,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 2.76,
+        "peak_rise_m_s": 0.6354
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_2088_2210.npz",
+      "offset_s": 0.0,
+      "success": false,
+      "final_height_m": 0.19400264244724288,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 3.08,
+        "peak_rise_m_s": 0.8614
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_2088_2210.npz",
+      "offset_s": 0.5,
+      "success": false,
+      "final_height_m": 0.1987494644849349,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 2.58,
+        "peak_rise_m_s": 0.8614
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_2301_2391.npz",
+      "offset_s": 0.0,
+      "success": false,
+      "final_height_m": 0.1861331092206634,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 2.68,
+        "peak_rise_m_s": 0.6631
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_2301_2391.npz",
+      "offset_s": 0.5,
+      "success": false,
+      "final_height_m": 0.2178331228861941,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 2.18,
+        "peak_rise_m_s": 0.6631
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_458_565.npz",
+      "offset_s": 0.0,
+      "success": false,
+      "final_height_m": 0.23805122392473013,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 3.34,
+        "peak_rise_m_s": 0.5828
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_458_565.npz",
+      "offset_s": 0.5,
+      "success": false,
+      "final_height_m": 0.26809050030389675,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 2.84,
+        "peak_rise_m_s": 0.5828
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_4873_4962.npz",
+      "offset_s": 0.0,
+      "success": false,
+      "final_height_m": 0.20782919477575293,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 2.22,
+        "peak_rise_m_s": 0.5978
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_4873_4962.npz",
+      "offset_s": 0.5,
+      "success": false,
+      "final_height_m": 0.37179500494797857,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 1.72,
+        "peak_rise_m_s": 0.5978
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_670_785.npz",
+      "offset_s": 0.0,
+      "success": false,
+      "final_height_m": 0.5815678196506783,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 3.22,
+        "peak_rise_m_s": 0.8101
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_670_785.npz",
+      "offset_s": 0.5,
+      "success": false,
+      "final_height_m": 0.18803775631673275,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 2.72,
+        "peak_rise_m_s": 0.8101
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_845_936.npz",
+      "offset_s": 0.0,
+      "success": true,
+      "final_height_m": 0.685967371972869,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 2.42,
+        "peak_rise_m_s": 0.8704
+      }
+    },
+    {
+      "clip": "fallAndGetUp1_subject1_845_936.npz",
+      "offset_s": 0.5,
+      "success": false,
+      "final_height_m": 0.22888280852478063,
+      "policy_tempo": {
+        "upright_start_s": null,
+        "peak_rise_m_s": null
+      },
+      "reference_tempo": {
+        "upright_start_s": 1.92,
+        "peak_rise_m_s": 0.8704
+      }
+    }
+  ]
+}

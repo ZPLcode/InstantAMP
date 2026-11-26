@@ -98,6 +98,9 @@ def test_motion_train_discriminator_clips_loss_gradient_before_adam_weight_decay
 @pytest.mark.parametrize("flag,value", [("--ode", "1"), ("--ppo_frac", "1"), ("--ppo_frac", "-.1"),
                                          ("--obs_clip", "3"), ("--amp_frames", "1"),
                                          ("--recovery_amp_seconds", "0"), ("--imag_gait_mirror_weight", "-.1"),
+                                         ("--getup_amp_scale", "-1"), ("--getup_amp_scale", "nan"),
+                                         ("--wm_lift_weight", "-1"), ("--wm_lift_weight", "nan"),
+                                         ("--full_ckpt_keep", "-1"),
                                          ("--imag_gait_mirror_weight", "nan")])
 def test_incompatible_world_model_settings_fail_before_training(flag, value):
     with pytest.raises(ValueError):

@@ -10,10 +10,31 @@ from instantamp.train import (
     initialize_native_learner,
     load_full,
     parse,
+    prune_full_checkpoints,
     save_full,
     save_policy,
 )
 from tools.resume_zenbot_wm import continuation_args
+
+
+def test_full_checkpoint_retention_preserves_policies_and_incomplete_writes(tmp_path):
+    full = tmp_path / "ckpt/full"
+    full.mkdir(parents=True)
+    for index in range(5):
+        (full / f"{index:04d}.npz").touch()
+        if index < 4:
+            (full.parent / f"{index:04d}.npz").touch()
+            (full.parent / f"{index:04d}.json").write_text("{}")
+    (full / "0005.tmp.npz").touch()
+    (full / "named_export.npz").touch()
+    prune_full_checkpoints(full, 0)
+    assert len(list(full.glob("*.npz"))) == 7
+    prune_full_checkpoints(full, 2)
+    assert {p.name for p in full.iterdir()} == {
+        "0002.npz", "0003.npz", "0004.npz", "0005.tmp.npz", "named_export.npz",
+    }
+    assert len(list(full.parent.glob("*.npz"))) == 4
+    assert len(list(full.parent.glob("*.json"))) == 4
 
 
 def test_continue_archived_i_profile_with_full_directory_on_another_volume(tmp_path):

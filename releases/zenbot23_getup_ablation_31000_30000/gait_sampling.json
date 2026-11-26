@@ -1,0 +1,60 @@
+{
+  "weights": {
+    "Male1_B1_StandToWalk": 3.75,
+    "Male1_B2_WalkToStand": 3.75,
+    "Male2_B1_StandToWalk": 3.75,
+    "Male2_B2_WalkToStand": 3.75,
+    "male_walk__Walk_B4_-_Stand_to_Walk_Back_stageii": 8.0,
+    "droidupe1_side_left": 4.0,
+    "droidupe1_side_right": 4.0,
+    "male_walk__Walk_B10_-_Walk_turn_left_45_stageii": 5.0,
+    "male_walk__Walk_B13_-_Walk_turn_right_45_stageii": 5.0,
+    "droidupe1_turn_left": 7.5,
+    "droidupe1_turn_right": 7.5,
+    "run__C3_-_run_stageii": 10.0,
+    "run__C12_-_run_turn_left_45_stageii": 4.0,
+    "run__C15_-_run_turn_right_45_stageii": 4.0,
+    "run__C4_-_run_to_walk_a_stageii": 4.0,
+    "run__C5_-_walk_to_run_stageii": 4.0,
+    "stand_4s_120f": 10.0
+  },
+  "source_bank": "zenbot_amp_frax_walk_sole8",
+  "source_sha256": {
+    "Male1_B1_StandToWalk": "0681a764482cba60a094bc7ba333e5000010a49615496af016356a9c54e587cc",
+    "Male1_B2_WalkToStand": "f53121e4a28d855b2ab28371d37eebcf1d4833aa9fff4a32e6f659ea710c16fe",
+    "Male2_B1_StandToWalk": "d8568621d70f6f4b46671b7df0f3d444f3116032e4d526d673cb3a4d44da39d7",
+    "Male2_B2_WalkToStand": "8634e717fdd2d491a749486e732db9fcebd23d6346ae92ca98eed7a9c4ff2fb3",
+    "male_walk__Walk_B4_-_Stand_to_Walk_Back_stageii": "a0168c139d06bf576484a0e48d28299b2cfd7a6a7a1a04d9f0f1f6f837b30bad",
+    "droidupe1_side_left": "02141bade000cd7bf43f853005d25dd8b4f562f0d9fed6c13b4639787fd567ea",
+    "droidupe1_side_right": "2d8f93b3346c9f328e1b40a176b9a86ed01233b9aef946984c8ac7ea2c0dad68",
+    "male_walk__Walk_B10_-_Walk_turn_left_45_stageii": "95e56bf12b3eb6f56dc170413e262816b774b64786035edbb23c5235492f8efc",
+    "male_walk__Walk_B13_-_Walk_turn_right_45_stageii": "422aafa36e9722a57f74d6ea559e48c44dc2ca4e13cfe423f73689b80e983e08",
+    "droidupe1_turn_left": "9149aed9f0d22902dcc88ba54bf0df8c3ad27a21aa9f25da987d8f17c56d5466",
+    "droidupe1_turn_right": "af6013a2860f81a616fe8e5959d28300cba17e30ca540768b675a54f64534768",
+    "run__C3_-_run_stageii": "db51f4590a274a75ff285127516af9baa0c28c527bfc6c7b9631624e383d0c00",
+    "run__C12_-_run_turn_left_45_stageii": "a151b8f1f611990b77899fee23b456d442099b880ec2263535f7931f2a5fc43e",
+    "run__C15_-_run_turn_right_45_stageii": "4b73c06d04807f6273fe41d49e4bcfe5b80cc270624c20358cf638067be39240",
+    "run__C4_-_run_to_walk_a_stageii": "5fe4e907aa1b687ad547e27da7ac5c78fce37a749772bb2363d2b7bb04cc6b23",
+    "run__C5_-_walk_to_run_stageii": "29cc1ae0b0521527a04bc4c8d23ee292b1033fcac5ba44ceaad33e12fa76fe8c",
+    "stand_4s_120f": "f4fabe266a4527ca585072eb9e4e339f932833a40c7285b7e6dcfc049b69d882"
+  },
+  "step_width": {
+    "target_m": 0.18,
+    "max_per_foot_m": 0.025,
+    "per_foot_shift_m": {
+      "Male1_B1_StandToWalk": 0.025,
+      "Male1_B2_WalkToStand": 0.025,
+      "Male2_B1_StandToWalk": 0.005792,
+      "Male2_B2_WalkToStand": 0.001591,
+      "male_walk__Walk_B4_-_Stand_to_Walk_Back_stageii": 0.024048,
+      "male_walk__Walk_B10_-_Walk_turn_left_45_stageii": 0.019723,
+      "male_walk__Walk_B13_-_Walk_turn_right_45_stageii": 0.025,
+      "run__C3_-_run_stageii": 0.020539,
+      "run__C12_-_run_turn_left_45_stageii": 0.017454,
+      "run__C15_-_run_turn_right_45_stageii": 0.025,
+      "run__C4_-_run_to_walk_a_stageii": 0.019356,
+      "run__C5_-_walk_to_run_stageii": 0.025
+    }
+  },
+  "footfall_correction": "level only in settled walking stance and preserve heel strike and toe-off"
+}

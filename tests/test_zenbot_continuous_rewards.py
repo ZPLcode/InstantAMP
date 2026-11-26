@@ -1,5 +1,7 @@
 """Physical-state reward contracts for both Zenbot articulations."""
 
+import dataclasses
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -152,6 +154,25 @@ def test_two_motion_priors_share_reward_scale(joint_sim):
     recovery = xs.getup_style(st, windows)
     np.testing.assert_allclose(gait, recovery)
     np.testing.assert_allclose(recovery, .75 * cfg.gait_ls_scale)
+    xs.cfg = dataclasses.replace(cfg, getup_amp_scale=10.)
+    np.testing.assert_allclose(xs.getup_style(st, windows), 7.5)
+    np.testing.assert_array_equal(xs.style(st, windows), gait)
+
+
+def test_lift_ablation_changes_only_weighted_lifting_reward(joint_sim):
+    sim, cfg = joint_sim
+    cfg = dataclasses.replace(cfg, wm_lift_weight=.2)
+    reduced = Sim(**simulation_options(vars(cfg)), physics=False, obs_noise=False)
+    before = physical_state(sim, height=.44)
+    after = physical_state(sim, height=.51)
+    assert reduced.weights == {**sim.weights, "lift": .2}
+    # Contact-history terms are added by the collector, outside reward_terms.
+    contact_terms = {key: jnp.zeros(1) for key in sim.terms}
+    original = sim.weighted({**contact_terms, **task_terms(sim, after, previous=before)})
+    actual = reduced.weighted({**contact_terms, **task_terms(reduced, after, previous=before)})
+    for key in original:
+        np.testing.assert_allclose(actual[key], original[key] * (.4 if key == "lift" else 1.), rtol=1e-6)
+    assert cfg.getup_amp_scale == 0. and cfg.gait_ls_scale == 1.5
 
 
 def test_gait_discriminator_weights_valid_windows_equally_across_poses(joint_sim):

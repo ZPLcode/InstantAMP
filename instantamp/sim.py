@@ -302,7 +302,7 @@ class Sim:
         zenbot_episode_steps=500, recovery_amp_seconds=None, fall_push_speed=0.,
         legged_support=False, support_rsi=0., zero_motor_delay_probability=None,
         zenbot_motion_train_wm=False,
-        wm_floor_amp=False, wm_stand_reference=None, wm_lift_gate=0.,
+        wm_floor_amp=False, wm_stand_reference=None, wm_lift_gate=0., wm_lift_weight=.5,
         floor_stop_command_share=0., gait_source_commands=False,
         wm_gait_rewards=False, wm_posture_and_tracking=False,
         wm_range_commands=False, wm_global_gait=False, wm_side_share=0.,
@@ -392,7 +392,7 @@ class Sim:
             if self.wm_floor_amp:
                 self.weights = {"stand": 6., "action_rate": rate_weight}
                 if self.wm_lift_gate:
-                    self.weights["lift"] = .5
+                    self.weights["lift"] = wm_lift_weight
                 if self.wm_floor_locomotion:
                     self.weights.update(track_lin_vel_xy_exp=2. * wm_tracking_scale, track_ang_vel_z_exp=1.5 * wm_tracking_scale)
                 if self.wm_posture_and_tracking:
