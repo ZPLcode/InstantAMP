@@ -1,0 +1,21 @@
+{
+  "onnx_checker": "passed",
+  "onnxruntime_provider": "CPUExecutionProvider",
+  "input": {
+    "name": "obs",
+    "shape": [
+      1,
+      261
+    ]
+  },
+  "output": {
+    "name": "actions",
+    "shape": [
+      1,
+      26
+    ]
+  },
+  "parity_samples": 194,
+  "parity_max_abs_error": 3.933906555175781e-06,
+  "checkpoint_sha256": "b64e8455d651527001ba357f68287c47aa24a2cac9b80fda8dddb89be53d54d0"
+}

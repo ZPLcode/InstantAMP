@@ -135,6 +135,10 @@ Use `--push-recovery` to additionally test actual falls: after two seconds of st
 
 These reward changes take effect during training; updating the code does not change an existing exported policy's actions during playback. When continuing a full checkpoint from the previous reward scheme, the learner initializes a fresh critic and critic optimizer: its two phase inputs now contain the current pose weight and its complement, and its target returns have changed. The actor, world model and motion discriminators are restored. Evaluate the continued policy before selecting it. Episode termination and the evaluator's supported-standing success criteria remain separate from the continuous training weight.
 
+### Exported Zenbot26 checkpoint
+
+The 55,000-iteration Zenbot26 checkpoint comes from a fresh 2,048-environment run with external pushes, gait AMP set to 3, get-up AMP set to 10 and a default standing-pose weight of −2. In native MuJoCo it passed the 1.0 m/s walking test, failed the 2.5 m/s running test and recovered from all 12 push-induced falls, nine on the first attempt. The release includes the averaged ONNX policy, resumable learner, training logs and per-trial results. [55,000-iteration release](releases/zenbot26_scratch_55000/README.md)
+
 ### Exported Zenbot23 checkpoint
 
 The [74,000-update export](releases/zenbot23_continuous_74000/README.md) includes the policy, complete learner state, configuration, training metrics and native evaluation. Training was stopped at the user's request before the planned 100,000 updates. This checkpoint passed 22/22 fixed recovery trials and tracked a 1.0 m/s command at 0.97 m/s; it reached only 0.86 m/s for a 2.5 m/s command and did not pass the running test. See the export for playback and continuation commands.
