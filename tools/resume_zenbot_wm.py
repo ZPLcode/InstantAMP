@@ -21,6 +21,10 @@ def continuation_args(
     range_commands=False,
     num_envs=None,
     imag_gait_mirror_weight=None,
+    recovery_control_scale=None,
+    getup_amp_scale=None,
+    gait_ls_scale=None,
+    stand_pose_weight=None,
 ):
     checkpoint = checkpoint.absolute()
     ckpt_dir = checkpoint.parent.parent
@@ -122,6 +126,14 @@ def continuation_args(
         config["wm_range_commands"] = 1
     if imag_gait_mirror_weight is not None:
         config["imag_gait_mirror_weight"] = imag_gait_mirror_weight
+    if recovery_control_scale is not None:
+        config["wm_recovery_control_scale"] = recovery_control_scale
+    if getup_amp_scale is not None:
+        config["getup_amp_scale"] = getup_amp_scale
+    if gait_ls_scale is not None:
+        config["gait_ls_scale"] = gait_ls_scale
+    if stand_pose_weight is not None:
+        config["wm_stand_pose_weight"] = stand_pose_weight
     if num_envs is not None:
         if num_envs < 1:
             raise ValueError("--num-envs must be positive")
@@ -165,6 +177,22 @@ def main():
         "--imag-gait-mirror-weight", type=float,
         help="Override the saved mirror loss weight for imagined gait frames",
     )
+    parser.add_argument(
+        "--recovery-control-scale", type=float,
+        help="Opt into soft recovery speed/effort/setback costs (start with 1); resets the critic when changed",
+    )
+    parser.add_argument(
+        "--getup-amp-scale", type=float,
+        help="Override the saved get-up AMP multiplier (0 uses the shared scale)",
+    )
+    parser.add_argument(
+        "--gait-ls-scale", type=float,
+        help="Override the least-squares gait AMP multiplier",
+    )
+    parser.add_argument(
+        "--stand-pose-weight", type=float,
+        help="Weight for the default joint pose at a quiet stand (negative enables the cost)",
+    )
     args = parser.parse_args()
     try:
         flags = continuation_args(
@@ -176,6 +204,10 @@ def main():
             range_commands=args.range_commands,
             num_envs=args.num_envs,
             imag_gait_mirror_weight=args.imag_gait_mirror_weight,
+            recovery_control_scale=args.recovery_control_scale,
+            getup_amp_scale=args.getup_amp_scale,
+            gait_ls_scale=args.gait_ls_scale,
+            stand_pose_weight=args.stand_pose_weight,
         )
     except (OSError, ValueError) as error:
         parser.error(str(error))

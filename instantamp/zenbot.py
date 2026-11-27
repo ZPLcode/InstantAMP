@@ -1,5 +1,6 @@
 """Shared gait/recovery task logic and the 23-DoF articulation profile."""
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -68,12 +69,27 @@ def quiet_command_weight(command):
     return jnp.exp(-jnp.sum(jnp.square(command / .1), axis=-1))
 
 
-def quiet_stand_score(state, foot_contact):
-    """Continuous stance quality; the caller supplies pose and command suitability."""
+def _quiet_base_score(state):
     pos, _, vel, angular, _, _ = state
     height = jnp.exp(-20. * jnp.abs(pos[..., 2] - RISE_HEIGHT))
     still = jnp.exp(-4. * jnp.square(vel).sum(-1) - .5 * jnp.square(angular).sum(-1))
-    return height * still * jnp.mean(foot_contact, axis=-1)
+    return height * still
+
+
+def quiet_stand_score(state, foot_contact):
+    """Continuous stance quality; the caller supplies pose and command suitability."""
+    return _quiet_base_score(state) * jnp.mean(foot_contact, axis=-1)
+
+
+def default_stand_pose_cost(state, command, foot_contact, default_q):
+    """Bounded joint-angle cost at rest, half strength at 10 degrees RMS error."""
+    pos, rot, _, _, q, _ = state
+    standing = standing_posture(pos[..., 2], rot[..., 2, 2]) & jnp.all(command == 0., axis=-1)
+    support = jnp.min(foot_contact, axis=-1)
+    # In imagination the pose gradient should correct joints, not encourage lifting a foot.
+    gate = jax.lax.stop_gradient(standing * support * _quiet_base_score(state))
+    mse = jnp.mean(jnp.square(q - default_q), axis=-1)
+    return gate * mse / (mse + np.deg2rad(10.)**2)
 
 
 def lift_progress(height, onset):

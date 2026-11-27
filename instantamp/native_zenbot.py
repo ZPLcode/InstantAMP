@@ -60,6 +60,8 @@ class ZenbotNative:
         self._force = np.empty(6)
         self.support_load = np.zeros(len(names))
         self.flight = np.zeros(env.DECIMATION, dtype=bool)
+        self.motor_torque = np.zeros((env.DECIMATION, joints))
+        self.motor_velocity = np.zeros_like(self.motor_torque)
 
         @jax.jit
         def control(qpos, qvel, previous, history, command, delays, noise, tick):
@@ -109,6 +111,8 @@ class ZenbotNative:
         self.history = jnp.repeat((frame + self._noise())[None], 3, axis=0)
         self.support_load.fill(0.)
         self.flight.fill(False)
+        self.motor_torque.fill(0.)
+        self.motor_velocity.fill(0.)
 
     def step(self):
         """Apply one policy action and return average foot load in body weights."""
@@ -121,6 +125,8 @@ class ZenbotNative:
         self.flight.fill(True)
         for substep, target in enumerate(np.asarray(targets)):
             data.ctrl[:] = self._actuator_ctrl(data.qpos[7:], data.qvel[6:], target)
+            self.motor_torque[substep] = data.ctrl
+            self.motor_velocity[substep] = data.qvel[6:]
             mujoco.mj_step(self.model, data)
             for k, contact in enumerate(data.contact):
                 if self._floor not in contact.geom:

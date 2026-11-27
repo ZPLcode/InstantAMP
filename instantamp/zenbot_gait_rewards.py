@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from . import env, zenbot_models
+from . import env, zenbot, zenbot_models
 from .rot import mv3, tr3, yaw_mat
 
 WEIGHTS = {
@@ -43,6 +43,38 @@ POSTURE_WEIGHTS = {
     "flat_orientation_l2": -1.2,
     "slow_speed_base_height_l2": -1.,
 }
+RECOVERY_CONTROL_WEIGHTS = {
+    "recovery_vertical_speed": -1.,
+    "recovery_angular_speed": -.2,
+    "recovery_action_rate": -.05,
+    "recovery_torque_excess": -.2,
+    "recovery_setback": -.5,
+}
+
+
+def recovery_control_terms(previous, state, action, last_action, command, torque, effort, lift_gate):
+    """Soft costs for abrupt recovery, retaining force for ordinary support.
+
+    The extra control costs remain active for quiet standing to include settling
+    after a rise, and fade out under an upright locomotion command. Vertical
+    speed uses the world axis; pelvis z is nearly horizontal in a fallen pose.
+    """
+    pos, rotation, velocity, angular = state[:4]
+    gait = zenbot.gait_weight(pos[..., 2], rotation[..., 2, 2])
+    gate = 1. - gait * (1. - zenbot.quiet_command_weight(command))
+    gyro = mv3(tr3(rotation), angular)
+    tilt_speed = jnp.sqrt(jnp.maximum(jnp.sum(gyro[..., :2]**2, -1), 1e-12))
+    torque_excess = jax.nn.relu((jnp.abs(torque) / effort - .8) / .2)
+    before = zenbot.lift_progress(previous[0][..., 2], lift_gate)
+    after = zenbot.lift_progress(pos[..., 2], lift_gate)
+    return {
+        "recovery_vertical_speed": gate * jax.nn.relu(jnp.abs(velocity[..., 2]) - .65)**2,
+        "recovery_angular_speed": gate * jax.nn.relu(tilt_speed - 3.)**2,
+        "recovery_action_rate": gate * jnp.sum((action - last_action)**2, -1),
+        "recovery_torque_excess": gate * jnp.sum(torque_excess**2, -1),
+        # No cost for the low repositioning needed before hand/foot support.
+        "recovery_setback": jax.nn.relu(before - after) / env.DT,
+    }
 
 
 def base_velocity(state, root_com):

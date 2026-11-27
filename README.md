@@ -84,6 +84,8 @@ To override these defaults, pass `--wm_tracking_scale`, `--gait_ls_scale` or `--
 
 Recovery ablations can set `--wm_lift_weight` (default `0.5`) and `--getup_amp_scale` independently. A positive `getup_amp_scale` overrides only the recovery prior; `0` retains the shared AMP scale. `--full_ckpt_keep 2` keeps the latest two complete learner checkpoints while preserving every policy export; the default `0` keeps all checkpoints.
 
+For abrupt or repeated recovery attempts, `--wm_recovery_control_scale 1` enables additional soft costs in both physical and imagined rewards. These penalize world vertical speed above 0.65 m/s, pelvis roll/pitch speed above 3 rad/s, torque above 80% of each motor's rated effort, action changes, and lost lifting progress above the configured lift gate. The speed, torque and action costs also apply during zero-command settling, and fade out during upright locomotion. They do not cap motor output. The default scale is `0`, preserving existing recipes; `1` is an experimental starting weight that needs evaluation after training.
+
 ```bash
 bash tools/recipes/prepare_zenbot_wm_data.sh --robot "$robot"
 python -m instantamp.train --robot "$robot" --help
@@ -110,11 +112,26 @@ python -m tools.evaluate_zenbot_joint "$run" --out "$run/evaluation/final.json"
 python -m tools.play_zenbot_control --checkpoint "$run"
 ```
 
-The viewer starts in a neutral stance. Use W/S and A/D for linear velocity, Q/E for yaw, X to stop, F to push, R for the next fallen start and Space to pause. It can display the simulation geometry directly. Pass `--mesh-dir DIR` for a matching visual model. Both the viewer and scorer accept an individual policy NPZ. To resume training, pass a full checkpoint and a fresh output directory.
+The viewer starts in a neutral stance. Use W/S and A/D for linear velocity, Q/E for yaw, X to stop, F to push, R for the next fallen start and Space to pause. It automatically loads matching STL files from `assets/meshes/zenbot_26dof_43kg/` or `assets/meshes/zenbot_23dof_43kg/` according to the policy. A checkout without a complete mesh set displays the visible collision shapes. Pass `--mesh-dir DIR` to load meshes from another directory. Both the viewer and scorer accept an individual policy NPZ. To resume training, pass a full checkpoint and a fresh output directory.
 
 ```bash
 python -m tools.resume_zenbot_wm "$run/ckpt/full/0039.npz" "${run}_continued" --until 22000
 ```
+
+The Zenbot26 continuation from iteration 41,000 uses a gait AMP multiplier of 3, a get-up AMP multiplier of 10 and external pushes. At a zero command, an upright robot with both feet on the ground receives a soft penalty for deviating from its default joint angles. The starting weight is −2 per second before task/style mixing. At rest at the target height, a 10° RMS error across the 26 joints incurs half that penalty. The penalty fades as the base moves, including when the robot reacts to a push. Changing the stance weight or recovery control scale starts a fresh critic and critic optimizer while restoring the actor, world model and motion priors.
+
+```bash
+python -m tools.resume_zenbot_wm \
+    releases/zenbot26_gait3_push_41000/ckpt/full/41000.npz \
+    runs/zenbot26_recovery_control_from41000 --until 46000 \
+    --recovery-control-scale 1 --gait-ls-scale 3 --getup-amp-scale 10 --stand-pose-weight -2
+python -m tools.evaluate_zenbot_joint runs/zenbot26_recovery_control_from41000 --push-recovery \
+    --out runs/zenbot26_recovery_control_from41000/evaluation/final.json
+```
+
+The native evaluator also reports first-attempt success, lift setbacks, refalls, time to the first and sustained supported one-second stance, vertical/angular speed, torque, motor saturation and absolute joint work. A lift setback means an 8 cm pelvis drop after reaching 44 cm, with another 8 cm rise needed before counting a new setback. First-attempt success requires final supported standing with no such setback or refall; it cannot detect every unsuccessful push below 44 cm. Refalls require 0.2 seconds of lost upright posture after 0.2 seconds of supported upright posture. Effort metrics include retries through the final settling interval, or the full ten seconds on failure, with motor samples at 200 Hz. Compare these alongside walk/run results before choosing a continued policy; final standing success alone can hide retries.
+
+Use `--push-recovery` to additionally test actual falls: after two seconds of standing, the evaluator applies a 0.4-second torso force of 300, 450 or 600 N in each of four directions. After releasing the force, it waits up to two seconds for pelvis height below 44 cm, then scores ten seconds of recovery with the existing velocity and controller history. Pushes that do not cause a fall are reported separately. This reproducible flat-ground stress test supplements the reference starts; it does not reproduce every mouse drag or the randomized training push distribution.
 
 These reward changes take effect during training; updating the code does not change an existing exported policy's actions during playback. When continuing a full checkpoint from the previous reward scheme, the learner initializes a fresh critic and critic optimizer: its two phase inputs now contain the current pose weight and its complement, and its target returns have changed. The actor, world model and motion discriminators are restored. Evaluate the continued policy before selecting it. Episode termination and the evaluator's supported-standing success criteria remain separate from the continuous training weight.
 

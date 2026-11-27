@@ -52,7 +52,7 @@ def task_terms(sim, state, *, previous=None, command=(0., 0., 0.), contact=1., *
     return sim.reward_terms(
         state if previous is None else previous, state, sim.view_state(state).kin,
         action, jnp.zeros_like(action), jnp.asarray(command)[None],
-        jnp.zeros(1, bool), jnp.zeros(1), jnp.full((1, 2), contact),
+        jnp.zeros(1, bool), jnp.zeros(1), jnp.broadcast_to(jnp.asarray(contact), (1, 2)),
         jnp.zeros(1), sim.q_soft, **history,
     )
 
@@ -90,6 +90,40 @@ def test_quiet_stance_remains_rewarded_and_does_not_reward_lying(joint_sim):
     assert task_terms(sim, state, contact=0.)["stand"].item() == 0.
     assert task_terms(sim, state, command=(2.5, 0., 0.))["stand"].item() < .01 * quiet.item()
     assert task_terms(sim, state, command=(0., 0., 1.))["stand"].item() < .01 * quiet.item()
+
+
+def test_default_stand_pose_cost_only_shapes_quiet_double_support(joint_sim):
+    sim, cfg = joint_sim
+    assert "stand_default_pose" not in sim.weights
+    cfg = dataclasses.replace(cfg, wm_stand_pose_weight=-2.)
+    sim = Sim(**simulation_options(vars(cfg)), physics=False, obs_noise=False)
+    state = physical_state(sim)
+    # The model's joint angles are the target even if the AMP reference differs.
+    sim.floor_stand_joints = sim.floor_stand_joints + .1
+
+    def terms(pose, offset, **kwargs):
+        return task_terms(sim, (*pose[:4], pose[4] + offset, pose[5]), **kwargs)
+
+    key = "stand_default_pose"
+    delta = np.deg2rad(10.)
+    assert terms(state, 0.)[key].item() == 0.
+    perturbed = terms(state, delta, contact=(True, True))
+    np.testing.assert_allclose(perturbed[key], .5, atol=1e-6)
+    contact_terms = dict.fromkeys(sim.terms, jnp.zeros(1))
+    np.testing.assert_allclose(sim.weighted({**contact_terms, **perturbed})[key], -env.DT, atol=1e-7)
+    np.testing.assert_allclose(terms(state, -delta, contact=(1., .5))[key], .25, atol=1e-6)
+    for command in ((.01, 0., 0.), (2.5, 0., 0.), (0., .1, 0.), (0., 0., .1)):
+        assert terms(state, delta, command=command)[key].item() == 0.
+    for contact in ((True, False), (False, False)):
+        assert terms(state, delta, contact=contact)[key].item() == 0.
+    for pose in (physical_state(sim, height=.50), physical_state(sim, pitch=.8)):
+        assert terms(pose, delta)[key].item() == 0.
+    pushed = physical_state(sim, velocity=(1., 0., 0.))
+    assert terms(pushed, delta)[key].item() < .02 * perturbed[key].item()
+
+    gradient = jax.jit(jax.grad(lambda offset: terms(state, offset)[key].sum()))
+    assert gradient(0.).item() == 0.
+    assert gradient(delta).item() > 0. and gradient(-delta).item() < 0.
 
 
 def test_state_blend_is_bounded_continuous_and_independent_of_flight(joint_sim):
@@ -154,9 +188,9 @@ def test_two_motion_priors_share_reward_scale(joint_sim):
     recovery = xs.getup_style(st, windows)
     np.testing.assert_allclose(gait, recovery)
     np.testing.assert_allclose(recovery, .75 * cfg.gait_ls_scale)
-    xs.cfg = dataclasses.replace(cfg, getup_amp_scale=10.)
+    xs.cfg = dataclasses.replace(cfg, gait_ls_scale=3., getup_amp_scale=10.)
     np.testing.assert_allclose(xs.getup_style(st, windows), 7.5)
-    np.testing.assert_array_equal(xs.style(st, windows), gait)
+    np.testing.assert_allclose(xs.style(st, windows), 2.25)
 
 
 def test_lift_ablation_changes_only_weighted_lifting_reward(joint_sim):
@@ -200,3 +234,49 @@ def test_existing_startup_curve_and_sampling_defaults_are_unchanged(joint_sim):
         terms = task_terms(sim, physical_state(sim, height=after), previous=physical_state(sim, height=before))
         expected = (zenbot.lift_progress(after, .44) - zenbot.lift_progress(before, .44)) / env.DT
         np.testing.assert_allclose(terms["lift"], expected, rtol=1e-6)
+
+
+def test_recovery_control_penalizes_rush_and_near_saturation_without_a_force_cap(joint_sim):
+    sim, cfg = joint_sim
+    assert cfg.wm_recovery_control_scale == 0.
+    cfg = dataclasses.replace(cfg, wm_recovery_control_scale=1.)
+    controlled = Sim(**simulation_options(vars(cfg)), physics=False, obs_noise=False)
+    state = physical_state(sim, height=.3)
+    effort = jnp.asarray(sim.robot.EFFORT)[None]
+    calm = task_terms(controlled, state, torque=.7 * effort)
+    fast = task_terms(controlled, physical_state(sim, height=.3, velocity=(0., 0., 2.)), torque=effort)
+    assert calm["recovery_torque_excess"].item() == 0.
+    assert calm["recovery_vertical_speed"].item() == 0.
+    assert fast["recovery_vertical_speed"].item() > 0.
+    np.testing.assert_allclose(fast["recovery_torque_excess"], sim.J, rtol=1e-6)
+    # Ordinary locomotion uses its original costs; zero-command settling keeps the extra damping.
+    upright = physical_state(sim, height=.68, velocity=(0., 0., 2.))
+    running = task_terms(controlled, upright, command=(2.5, 0., 0.), torque=effort)
+    settling = task_terms(controlled, upright, torque=effort)
+    for key in zenbot_gait_rewards.RECOVERY_CONTROL_WEIGHTS:
+        assert running[key].item() == 0., key
+    assert settling["recovery_vertical_speed"].item() > 0.
+    for key, weight in zenbot_gait_rewards.RECOVERY_CONTROL_WEIGHTS.items():
+        assert controlled.weights[key] == weight < 0.
+    # Both physical and imagined rewards use this helper; finite gradients are required at rest.
+    def cost(vz, tau):
+        pose = (*state[:2], state[2].at[..., 2].set(vz), *state[3:])
+        return task_terms(controlled, pose, torque=tau)["recovery_vertical_speed"].sum() + task_terms(
+            controlled, pose, torque=tau)["recovery_torque_excess"].sum()
+    value, grads = jax.jit(jax.value_and_grad(cost, argnums=(0, 1)))(jnp.array(0.), jnp.zeros_like(effort))
+    assert np.isfinite(value) and all(np.isfinite(g).all() for g in grads)
+    _, rushing = jax.value_and_grad(cost, argnums=(0, 1))(jnp.array(2.), effort)
+    assert rushing[0] > 0. and np.all(rushing[1] > 0.)
+
+
+def test_recovery_setback_cost_leaves_low_repositioning_free(joint_sim):
+    sim, _ = joint_sim
+    action = jnp.zeros((1, sim.J))
+    def setback(before, after):
+        return zenbot_gait_rewards.recovery_control_terms(
+            physical_state(sim, height=before), physical_state(sim, height=after),
+            action, action, jnp.zeros((1, 3)), action, sim.robot.EFFORT, .44,
+        )["recovery_setback"].item()
+    assert setback(.3, .2) == 0.
+    assert setback(.44, .55) == 0.
+    assert setback(.55, .44) > 0.

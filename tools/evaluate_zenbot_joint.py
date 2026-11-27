@@ -50,7 +50,124 @@ def _gait_trial(trials, speed, steps, window):
     )
 
 
-def evaluate(checkpoint, seed=42, reference=None):
+def recovery_outcome(heights, postures, loads, dt=env.DT):
+    """Keep the final standing test and expose failed rises before it.
+
+    A setback is an 8 cm pelvis drop after reaching 44 cm. Another setback
+    can only be counted after a fresh 8 cm rise, avoiding threshold chatter.
+    This measures substantial reversals, not every push made on the floor.
+    """
+    heights, postures, loads = map(np.asarray, (heights, postures, loads))
+    hold = round(1. / dt)
+    stable = np.array([
+        postures[i:i + hold].all()
+        and np.count_nonzero(loads[i:i + hold] >= .5) >= .9 * hold
+        for i in range(len(heights) - hold + 1)
+    ], dtype=bool)
+    starts = np.flatnonzero(stable)
+    success = bool(len(stable) and stable[-1])
+    unsettled = np.flatnonzero(~stable)
+    sustained_start = int(unsettled[-1] + 1) if len(unsettled) else 0
+    peak = trough = float(heights[0])
+    armed = peak >= .44
+    setbacks = 0
+    for height in heights[1:]:
+        if armed:
+            peak = max(peak, height)
+            if peak - height >= .08:
+                setbacks += 1
+                armed, trough = False, height
+        else:
+            trough = min(trough, height)
+            if height >= .44 and height - trough >= .08:
+                armed, peak = True, height
+    up, good, bad, refalls = False, 0, 0, 0
+    debounce = max(1, round(.2 / dt))
+    for posture, load in zip(postures, loads, strict=True):
+        good = good + 1 if posture and load >= .5 else 0
+        bad = bad + 1 if not posture else 0
+        if not up and good >= debounce:
+            up = True
+        elif up and bad >= debounce:
+            refalls += 1
+            up = False
+    return dict(
+        success=success,
+        first_attempt_success=success and setbacks == 0 and refalls == 0,
+        lift_setbacks=setbacks,
+        refalls=refalls,
+        # Samples describe the state after each control step.
+        first_supported_stand_s=float((starts[0] + 1) * dt) if len(starts) else None,
+        sustained_supported_stand_s=float((sustained_start + 1) * dt) if success else None,
+        final_height_m=float(heights[-1]),
+    )
+
+
+def _recovery_trial(robot, steps):
+    heights, postures, loads, velocity, angular, torque, joint_velocity = ([] for _ in range(7))
+    for _ in range(steps):
+        loads.append(robot.step())
+        heights.append(robot.data.qpos[2])
+        postures.append(zenbot.standing_posture(robot.data.qpos[2], robot.data.xmat[1, 8]))
+        velocity.append(robot.data.qvel[:3].copy())
+        angular.append(robot.data.qvel[3:6].copy())
+        torque.append(robot.motor_torque.copy())
+        joint_velocity.append(robot.motor_velocity.copy())
+    outcome = recovery_outcome(heights, postures, loads)
+    # Include retries through the final settling interval, excluding later standing.
+    settled = outcome["sustained_supported_stand_s"]
+    end = steps if settled is None else min(steps, round(settled / env.DT) + round(1. / env.DT) - 1)
+    tau = np.asarray(torque[:end])
+    qd = np.asarray(joint_velocity[:end])
+    linear, angular = np.asarray(velocity[:end]), np.asarray(angular[:end])
+    outcome.update(
+        effort_window_s=end * env.DT,
+        peak_upward_speed_m_s=float(np.maximum(linear[:, 2], 0.).max()),
+        peak_roll_pitch_speed_rad_s=float(np.linalg.norm(angular[:, :2], axis=-1).max()),
+        peak_joint_speed_rad_s=float(np.abs(qd).max()),
+        peak_torque_nm=float(np.abs(tau).max()),
+        rms_torque_nm=float(np.sqrt(np.mean(tau**2))),
+        motor_saturation_fraction=float(np.mean(np.abs(tau) >= .95 * robot.profile.EFFORT)),
+        absolute_joint_work_j=float(np.abs(tau * qd).sum() * env.SIM_DT),
+    )
+    return outcome
+
+
+def _push_recovery_trials(trials, steps, forces=(300., 450., 600.)):
+    """Recover from physical torso pushes with the live velocity/history intact."""
+    robot = trials.native
+    body = robot.model.body("robot_" + robot.profile.TORSO).id
+    directions = {"forward": (1., 0., 0.), "backward": (-1., 0., 0.),
+                  "left": (0., 1., 0.), "right": (0., -1., 0.)}
+    results = []
+    for force in forces:
+        for name, direction in directions.items():
+            trials.stand()
+            for _ in range(round(2. / env.DT)):
+                robot.step()
+            vector = robot.data.xmat[body].reshape(3, 3) @ np.asarray(direction)
+            vector[2] = 0.
+            vector /= np.linalg.norm(vector)
+            robot.data.xfrc_applied[body, :3] = force * vector
+            try:
+                for _ in range(round(.4 / env.DT)):
+                    robot.step()
+            finally:
+                robot.data.xfrc_applied.fill(0.)
+            # Start scoring on the floor, excluding the externally forced descent.
+            wait = 0
+            while robot.data.qpos[2] >= .44 and wait < round(2. / env.DT):
+                robot.step()
+                wait += 1
+            fallen = bool(robot.data.qpos[2] < .44)
+            result = dict(direction=name, force_N=force, push_duration_s=.4, fall_observed=fallen)
+            if fallen:
+                result.update(_recovery_trial(robot, steps))
+            results.append(result)
+    return results
+
+
+def evaluate(checkpoint, seed=42, reference=None, *, push_recovery=False):
     """Evaluate ten physical seconds per command and per fixed fallen start."""
     checkpoint = Path(checkpoint)
     trials = JointTrials(checkpoint, reference, seed)
@@ -60,27 +177,9 @@ def evaluate(checkpoint, seed=42, reference=None):
     results = []
     for i, (clip, offset) in enumerate(trials.names):
         trials.fallen(i)
-        postures, loads = [], []
-        for _ in range(steps):
-            loads.append(robot.step())
-            postures.append(
-                zenbot.standing_posture(
-                    robot.data.qpos[2], robot.data.xmat[1, 8]
-                )
-            )
-        supported = (
-            np.count_nonzero(np.asarray(loads[-hold:]) >= 0.5) >= 0.9 * hold
-        )
-        results.append(
-            dict(
-                clip=clip,
-                offset_s=offset,
-                success=bool(all(postures[-hold:]) and supported),
-                final_height_m=float(robot.data.qpos[2]),
-            )
-        )
+        results.append(dict(clip=clip, offset_s=offset, **_recovery_trial(robot, steps)))
     metadata = checkpoint.with_suffix(".json")
-    return dict(
+    report = dict(
         checkpoint=str(checkpoint),
         sha256=hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
         iteration=json.loads(metadata.read_text()).get("it")
@@ -93,9 +192,21 @@ def evaluate(checkpoint, seed=42, reference=None):
         teacher_inference=False,
         gait=gait,
         getup_successes=sum(t["success"] for t in results),
+        getup_first_attempt_successes=sum(t["first_attempt_success"] for t in results),
+        getup_lift_setbacks=sum(t["lift_setbacks"] for t in results),
+        getup_refalls=sum(t["refalls"] for t in results),
         getup_total=len(results),
         trials=results,
     )
+    if push_recovery:
+        pushed = _push_recovery_trials(trials, steps)
+        report.update(
+            push_recovery_trials=pushed,
+            push_recovery_falls=sum(t["fall_observed"] for t in pushed),
+            push_recovery_successes=sum(t.get("success", False) for t in pushed),
+            push_recovery_first_attempt_successes=sum(t.get("first_attempt_success", False) for t in pushed),
+        )
+    return report
 
 
 def main():
@@ -114,16 +225,24 @@ def main():
         "--reference", type=Path, help="Recovery clips for this articulation"
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--push-recovery", action="store_true",
+        help="Also apply 300/450/600 N torso pushes for 0.4 s in four directions, then score recovery without resetting",
+    )
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args()
     checkpoint = resolve_checkpoint(args.checkpoint, args.iteration)
-    result = evaluate(checkpoint, args.seed, args.reference)
+    result = evaluate(checkpoint, args.seed, args.reference, push_recovery=args.push_recovery)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n")
     print(
         result["gait"],
         f"get-up {result['getup_successes']}/{result['getup_total']}",
+        f"first attempt {result['getup_first_attempt_successes']}/{result['getup_total']}",
     )
+    if args.push_recovery:
+        print(f"pushed recovery {result['push_recovery_successes']}/{result['push_recovery_falls']}, "
+              f"first attempt {result['push_recovery_first_attempt_successes']}/{result['push_recovery_falls']}")
 
 
 if __name__ == "__main__":

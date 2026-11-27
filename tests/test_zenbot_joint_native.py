@@ -1,6 +1,7 @@
 """Both joint policies use the same observation, motor and contact pipeline."""
 
 import os
+from types import SimpleNamespace
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
@@ -10,6 +11,23 @@ import pytest
 
 from instantamp import env, zenbot_models
 from instantamp.native_zenbot import ZenbotNative
+from instantamp.sim import build_scene
+from tools.play_zenbot_control import _display_model
+
+
+@pytest.mark.parametrize("model", zenbot_models.MODELS, ids=lambda m: m.mixed_task)
+def test_viewer_shows_robot_without_visual_meshes(tmp_path, model):
+    xml = tmp_path / model.xml_path.name
+    xml.write_bytes(model.xml_path.read_bytes())
+    physical = build_scene(robot_name=model.mixed_task)
+    robot = SimpleNamespace(profile=SimpleNamespace(MODEL=SimpleNamespace(xml_path=xml)),
+                            model=physical, data=mujoco.MjData(physical))
+    ground = physical.geom_bodyid == 0
+    ground_color = physical.geom_rgba[ground].copy()
+    shown, data = _display_model(robot, None)
+    assert data is robot.data and shown.nu == len(model.dof)
+    assert np.all(shown.geom_rgba[~ground, 3] == 1.)
+    np.testing.assert_array_equal(shown.geom_rgba[ground], ground_color)
 
 
 @pytest.mark.parametrize("model", zenbot_models.MODELS, ids=lambda m: m.mixed_task)
@@ -56,6 +74,9 @@ def test_joint_actor_controls_native_articulation(tmp_path, model, hold_first_co
     np.testing.assert_allclose(player.previous, action)
     np.testing.assert_allclose(player.data.qpos, expected.qpos, atol=2e-7)
     np.testing.assert_allclose(player.data.qvel, expected.qvel, atol=1e-5)
+    np.testing.assert_allclose(player.motor_torque[-1], expected.ctrl, atol=1e-5)
+    np.testing.assert_allclose(player.motor_velocity[0], velocity[6:])
+    assert player.motor_torque.shape == (env.DECIMATION, joints)
     assert player.data.time == pytest.approx(env.DT)
     assert player.flight.shape == (env.DECIMATION,)
     assert foot_load == player.support_load[:2].sum()

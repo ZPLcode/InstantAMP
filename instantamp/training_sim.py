@@ -16,6 +16,7 @@ def simulation_options(config):
         "recovery_amp_seconds", "fall_push_speed", "support_rsi",
         "wm_floor_amp",
         "wm_lift_gate", "wm_lift_weight", "wm_fixed_floor_envs", "wm_tracking_scale",
+        "wm_recovery_control_scale", "wm_stand_pose_weight",
         "floor_stop_command_share", "gait_source_commands", "wm_global_gait",
         "wm_side_share", "wm_initial_gait_stage", "wm_gait_rewards",
         "wm_posture_and_tracking", "wm_range_commands",

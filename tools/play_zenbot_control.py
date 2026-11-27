@@ -42,12 +42,15 @@ _HELP = (
 
 
 def _display_model(robot, mesh_dir):
+    xml = robot.profile.MODEL.xml_path
+    spec = mujoco.MjSpec.from_file(str(xml))
     if mesh_dir is None:
-        # Show the simulation's collision geometry on a clean checkout.
-        robot.model.geom_group[:] = 0
-        return robot.model, robot.data
-
-    spec = mujoco.MjSpec.from_file(str(robot.profile.MODEL.xml_path))
+        mesh_dir = xml.parent / "meshes" / xml.stem
+        if not all((mesh_dir / Path(mesh.file).name).is_file() for mesh in spec.meshes):
+            # The source MJCF hides collisions so they do not overlap the visual meshes.
+            robot.model.geom_group[:] = 0
+            robot.model.geom_rgba[robot.model.geom_bodyid != 0, 3] = 1.
+            return robot.model, robot.data
     spec.meshdir = str(mesh_dir.resolve())
     for mesh in spec.meshes:
         mesh.file = Path(mesh.file).name

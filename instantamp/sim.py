@@ -287,6 +287,7 @@ class Sim:
     wm_global_gait = False
     wm_side_share = 0.
     wm_lift_gate = 0.
+    wm_recovery_control_scale = 0.
     floor_stop_command_share = 0.
     gait_source_commands = False
     wm_command_speeds = zenbot.DIRECTIONAL_COMMANDS
@@ -303,6 +304,7 @@ class Sim:
         legged_support=False, support_rsi=0., zero_motor_delay_probability=None,
         zenbot_motion_train_wm=False,
         wm_floor_amp=False, wm_stand_reference=None, wm_lift_gate=0., wm_lift_weight=.5,
+        wm_recovery_control_scale=0., wm_stand_pose_weight=0.,
         floor_stop_command_share=0., gait_source_commands=False,
         wm_gait_rewards=False, wm_posture_and_tracking=False,
         wm_range_commands=False, wm_global_gait=False, wm_side_share=0.,
@@ -343,6 +345,13 @@ class Sim:
         if not 0. <= wm_lift_gate < zenbot.UP_HEIGHT or (wm_lift_gate and not self.wm_floor_amp):
             raise ValueError("The late lift reward needs a floor AMP task and a gate below upright pelvis height")
         self.wm_lift_gate = wm_lift_gate
+        if (not np.isfinite(wm_recovery_control_scale) or wm_recovery_control_scale < 0
+                or wm_recovery_control_scale and not (self.wm_floor_amp and wm_lift_gate)):
+            raise ValueError("Recovery control scale must be finite, nonnegative and requires floor AMP with a lift gate")
+        self.wm_recovery_control_scale = wm_recovery_control_scale
+        if (not np.isfinite(wm_stand_pose_weight) or wm_stand_pose_weight > 0.
+                or wm_stand_pose_weight and not self.wm_floor_amp):
+            raise ValueError("Stand pose weight must be finite, nonpositive and requires joint floor AMP")
         if self.wm_floor_amp and (not zenbot_motion_train_wm or not 0. < reset_floor < 1.):
             raise ValueError("Floor AMP requires both locomotion and floor starts")
         self.reset_floor, self.prob_shove, self.push = reset_floor, prob_shove, push
@@ -393,8 +402,13 @@ class Sim:
             self.weights.update(action_rate=rate_weight, recovery_timeout_cost=-100.)
             if self.wm_floor_amp:
                 self.weights = {"stand": 6., "action_rate": rate_weight}
+                if wm_stand_pose_weight:
+                    self.weights["stand_default_pose"] = wm_stand_pose_weight
                 if self.wm_lift_gate:
                     self.weights["lift"] = wm_lift_weight
+                if self.wm_recovery_control_scale:
+                    self.weights.update({name: wm_recovery_control_scale * weight
+                                         for name, weight in gait_rewards.RECOVERY_CONTROL_WEIGHTS.items()})
                 if self.wm_floor_locomotion:
                     self.weights.update(track_lin_vel_xy_exp=2. * wm_tracking_scale, track_ang_vel_z_exp=1.5 * wm_tracking_scale)
                 if self.wm_posture_and_tracking:
@@ -738,6 +752,9 @@ class Sim:
             gait = zenbot.gait_weight(args[1][0][..., 2], args[1][1][..., 2, 2])
             floor_terms = {"stand": gait * zenbot.quiet_command_weight(args[5]) * zenbot.quiet_stand_score(args[1], args[8]),
                            "action_rate": terms["action_rate"]}
+            if "stand_default_pose" in self.weights:
+                floor_terms["stand_default_pose"] = zenbot.default_stand_pose_cost(
+                    args[1], args[5], args[8], self.robot.DEFAULT_Q)
             if self.wm_lift_gate:
                 before = zenbot.lift_progress(args[0][0][..., 2], self.wm_lift_gate)
                 after = zenbot.lift_progress(args[1][0][..., 2], self.wm_lift_gate)
@@ -745,6 +762,9 @@ class Sim:
                 # Compare the quiet stance with the standing AMP clip once the feet support it.
                 joint_error = jnp.square((args[1][4] - self.floor_stand_joints) / .5).mean(axis=-1)
                 floor_terms["stand"] /= 1. + joint_error
+            if self.wm_recovery_control_scale:
+                floor_terms.update(gait_rewards.recovery_control_terms(
+                    args[0], args[1], args[3], args[4], args[5], torque, self.robot.EFFORT, self.wm_lift_gate))
             if self.wm_floor_locomotion:
                 cmd = args[5]
                 actual = gait_rewards.base_velocity(args[1], root_com)

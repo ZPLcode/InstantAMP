@@ -223,6 +223,8 @@ class ZenbotMotionTrainWMConfig(Config):
     imag_gait_mirror_weight: float = 0.  # action consistency on imagined locomotion frames
     wm_lift_gate: float = 0.  # pelvis height where positive lifting progress begins, in metres
     wm_lift_weight: float = .5  # weight of bounded lifting progress above wm_lift_gate
+    wm_recovery_control_scale: float = 0.  # optional soft speed, torque, action-rate and setback costs during recovery
+    wm_stand_pose_weight: float = 0.  # bounded joint-angle cost around the robot's default double-support stance
     wm_tempo_negatives: float = 0.  # fraction of recovery discriminator negatives made by mistiming moving reference segments
     wm_reset_imag_share: float = 0.  # portion of imagination starts in the first real WM window after reset
     ode: int = 0
@@ -305,6 +307,12 @@ class ZenbotMotionTrainWMConfig(Config):
             raise ValueError("Floor-opening AMP needs hybrid training and two motion priors")
         if not 0. <= self.wm_lift_gate < zenbot.UP_HEIGHT or (self.wm_lift_gate and not self.wm_floor_amp):
             raise ValueError("A late lift gate must be below upright pelvis height and requires floor AMP")
+        if (not np.isfinite(self.wm_recovery_control_scale) or self.wm_recovery_control_scale < 0
+                or self.wm_recovery_control_scale and not (self.wm_floor_amp and self.wm_lift_gate)):
+            raise ValueError("Recovery control scale must be finite, nonnegative and requires floor AMP with a lift gate")
+        if (not np.isfinite(self.wm_stand_pose_weight) or self.wm_stand_pose_weight > 0.
+                or self.wm_stand_pose_weight and not self.wm_floor_amp):
+            raise ValueError("Stand pose weight must be finite, nonpositive and requires joint floor AMP")
         if not 0. <= self.wm_tempo_negatives <= .5 or (self.wm_tempo_negatives and not self.wm_floor_amp):
             raise ValueError("Tempo negatives need floor AMP and a share between zero and one half")
         if not 0. <= self.wm_reset_imag_share <= 1. or (self.wm_reset_imag_share and
@@ -523,6 +531,8 @@ class InstantAMP:
         if getattr(self.cfg, "wm_floor_amp", False):
             policy["delay_uses_first_command"] = True
             policy["floor_reward_version"] = 1
+            policy["recovery_control_scale"] = getattr(self.cfg, "wm_recovery_control_scale", 0.)
+            policy["stand_pose_weight"] = self.cfg.wm_stand_pose_weight
         return policy
 
     def act(self, pi, obs_norm, obs, a_prev, out_bf16=False):
@@ -811,8 +821,9 @@ class InstantAMP:
             if motion_train:
                 fall = sim.wm_fall(up, up1, v1.height, S1[1])
             foot_contact = sim.soft_contact(v1.soles)
+            torque = sim.estimated_torque(S, target, xi) if step_history is not None or getattr(sim, "wm_recovery_control_scale", 0.) else None
             terms = sim.reward_terms(S, S1, v1.kin, a, a_last, c_obs, recovering, fall, foot_contact, zeros, sim.q_soft,
-                                     recovery_active=active, recovery_deadline=deadline,
+                                     torque=torque, recovery_active=active, recovery_deadline=deadline,
                                      root_com=sim.context_root_com(xi))
             if step_history is not None:
                 bottom = v1.feet.bottom
@@ -821,7 +832,7 @@ class InstantAMP:
                 undesired = jax.nn.sigmoid((env.FOOT_CONTACT_H - bottom[..., 2:]) / .003).sum(-1)
                 foot_acc_z = (v1.feet.com_velocity_z - v.feet.com_velocity_z) / env.DT
                 step_history, added = gait_rewards.reward_terms(
-                    S1, v1.feet, c_obs, sim.estimated_torque(S, target, xi), (S1[5] - S[5]) / env.DT,
+                    S1, v1.feet, c_obs, torque, (S1[5] - S[5]) / env.DT,
                     sim.q_soft, feet_down, undesired, v1.feet.predicted_slip, foot_acc_z, step_history,
                     sim.gait_weight(S1) if floor_amp else ~active,
                     min_ankle_spacing=sim.min_ankle_spacing)
@@ -1450,7 +1461,8 @@ def initialize_actor(carry, path, expected_ode):
     return {**carry, "pi": pi, "avg": jax.tree.map(jnp.copy, pi), "obs_norm": {**obs_norm, **norm}}
 
 
-def initialize_native_learner(fresh, full_path, actor_path, expected_ode, *, floor_reward_version=0):
+def initialize_native_learner(fresh, full_path, actor_path, expected_ode, *, floor_reward_version=0,
+                              recovery_control_scale=0., stand_pose_weight=0.):
     """Restore the learner, then optionally replace its actor and reset the actor optimizer."""
     carry = fresh
     if full_path:
@@ -1460,8 +1472,11 @@ def initialize_native_learner(fresh, full_path, actor_path, expected_ode, *, flo
         if floor_reward_version:
             with np.load(companion, allow_pickle=False) as archive:
                 saved_version = int(archive.get("zenbot/floor_reward_version", 0))
-            if saved_version != floor_reward_version and "critic" in fresh:
-                # Its input width is unchanged, but both the phase features and return have changed.
+                saved_control_scale = float(archive.get("zenbot/recovery_control_scale", 0.))
+                saved_pose_weight = float(archive.get("zenbot/stand_pose_weight", 0.))
+            changed = (saved_version != floor_reward_version or not np.isclose(saved_control_scale, recovery_control_scale)
+                       or not np.isclose(saved_pose_weight, stand_pose_weight))
+            if changed and "critic" in fresh:
                 carry["critic"] = fresh["critic"]
                 print("[instantamp] Joint reward objective changed: initialized a fresh critic and critic optimizer; "
                       "restored actor, world model and motion discriminators.", flush=True)
@@ -1483,6 +1498,9 @@ def save_policy(path, carry, meta, ode=None):
         flat["zenbot/delay_uses_first_command"] = np.bool_(True)
     if "floor_reward_version" in carry:
         flat["zenbot/floor_reward_version"] = np.int32(carry["floor_reward_version"])
+    for name in ("recovery_control_scale", "stand_pose_weight"):
+        if name in carry:
+            flat[f"zenbot/{name}"] = np.float32(carry[name])
     if ode is not None:
         flat["ode/dmax"] = np.float32(0.0 if ode[0] is None else ode[0])
         flat["ode/amax"] = np.float32(0.0 if ode[1] is None else ode[1])
@@ -1570,7 +1588,9 @@ def main(argv=None):
             if old_loss != cfg.recovery_amp_loss or old.get("recovery_amp_stride", 1) != cfg.recovery_amp_stride:
                 new_head = carry["amp_up"]
         carry = initialize_native_learner(carry, full_path, actor_path, (xs.ode_dmax, xs.ode_amax) if xs.ode else None,
-                                          floor_reward_version=1 if getattr(cfg, "wm_floor_amp", False) else 0)
+                                          floor_reward_version=1 if getattr(cfg, "wm_floor_amp", False) else 0,
+                                          recovery_control_scale=getattr(cfg, "wm_recovery_control_scale", 0.),
+                                          stand_pose_weight=getattr(cfg, "wm_stand_pose_weight", 0.))
         if new_head is not None:
             carry["amp_up"] = new_head
             print("[instantamp] Initialized the new recovery AMP discriminator. Restored the actor and other learner state.", flush=True)

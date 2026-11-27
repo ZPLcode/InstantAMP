@@ -208,18 +208,20 @@ def test_raising_ground_and_robot_preserves_geometry_rewards_and_amp_height():
     np.testing.assert_allclose(raised_amp, amp_frame, atol=2e-7)
 
 
-def test_randomized_context_and_rough_terrain_have_finite_imagination_gradients():
+@pytest.mark.parametrize("control_scale,pose_weight", [(0., 0.), (1., -2.)])
+def test_randomized_context_and_rough_terrain_have_finite_imagination_gradients(control_scale, pose_weight):
     n = 2
-    sim = simulator(n=n, randomize=True)
+    sim = simulator(n=n, randomize=True, wm_recovery_control_scale=control_scale, wm_stand_pose_weight=pose_weight)
     state = sim.init(jax.random.key(142))
     # Put both worlds above actual rough patches, rather than accidentally only
     # exercising the flat share of the startup terrain distribution.
     indices = np.argwhere((sim.terrain.kinds > 0) & (sim.terrain.kinds < 7))[:n]
     origins = jnp.asarray(sim.terrain.origins[indices[:, 0], indices[:, 1]])
     qpos = jnp.tile(jnp.r_[0., 0., .70, 1., 0., 0., 0., zenbot.DEFAULT_Q], (n, 1))
+    qpos = qpos.at[0, 2].set(.51)  # Exercise recovery as well as upright locomotion.
     qpos = qpos.at[:, :3].add(origins)
     qvel = jnp.zeros((n, 29))
-    command = jnp.array([[.3, 0., 0.], [0., .2, 0.]])
+    command = jnp.array([[.3, 0., 0.], [0., 0., 0.]])
     state = state._replace(data=state.data.replace(qpos=qpos, qvel=qvel), c_obs=command)
     pose = unflatten(qpos, qvel)
     sensors = sim.motion_train_sensors(state, pose[1], command, jnp.ones(n, bool), jax.random.key(143))
@@ -242,6 +244,7 @@ def test_randomized_context_and_rough_terrain_have_finite_imagination_gradients(
     learner.cfg = parse([
         "--robot", zenbot.MIXED_TASK, "--num_envs", "32", "--horizon", "2",
         "--imag_unroll", "1", "--mm_bf16", "none", "--imag_gait_mirror_weight", "0",
+        "--wm_recovery_control_scale", str(control_scale), "--wm_stand_pose_weight", str(pose_weight),
     ])
     assert learner.cfg.motion_train_randomization == 1
     pi = nets.mlp_init(jax.random.key(144), (234, 16, 23))
