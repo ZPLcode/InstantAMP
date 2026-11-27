@@ -23,6 +23,11 @@ WRIST_IDX = MODEL.wrist_indices
 KNEES = ("left_knee_Link", "right_knee_Link")
 KEY_BODIES = FEET + KNEES + HANDS
 UP_HEIGHT, RISE_HEIGHT = 0.58, 0.68
+ATTEMPT_LIFT_HEIGHT, ATTEMPT_SETBACK = .44, .08  # metres of pelvis height and drop
+FALLEN_HEIGHT = .44  # start observing a new fall below this height
+FLOOR_REWARD_VERSION = 2
+REFALL_SECONDS, SUPPORTED_STAND_SECONDS, MIN_SUPPORT_FRACTION = .2, 1., .9
+MIN_SUPPORT_LOAD = .5  # combined foot load as a fraction of body weight
 MASS = MODEL.mass
 MIXED_TASK = MODEL.mixed_task
 # Forward walking/running and the lateral steps present in the motion_train AMP bank.
@@ -52,6 +57,31 @@ WEIGHTS = {"joint_acc_l2": -1e-7, "action_rate_l2": -0.005, "joint_torques_l2": 
 
 def standing_posture(height, up_cos):
     return (height > UP_HEIGHT) & (height <= 2 * RISE_HEIGHT - UP_HEIGHT) & (up_cos > np.cos(np.pi / 6))
+
+
+def initial_attempt_peak(height, profile):
+    """23-DoF partial-rise starts can already be armed. Zenbot26 must first rise from its trough."""
+    if profile.MODEL is MODEL:
+        return height * (height >= profile.ATTEMPT_LIFT_HEIGHT)
+    return height * 0.
+
+
+def attempt_heights(pelvis, shoulders=None, *, xp=jnp):
+    """Independent height signals for a single recovery attempt."""
+    return pelvis[..., None] if shoulders is None else xp.stack((pelvis, shoulders), axis=-1)
+
+
+def update_attempt_peaks(heights, trough, peak, profile, *, xp=jnp):
+    """Arm each signal after its own rise. Native evaluation uses the same rule with NumPy."""
+    threshold = ATTEMPT_SETBACK
+    minimum = profile.ATTEMPT_LIFT_HEIGHT
+    if heights.shape[-1] == 2:
+        threshold = xp.asarray([threshold, profile.SHOULDER_SETBACK], dtype=heights.dtype)
+        minimum = xp.asarray([minimum, -np.inf], dtype=heights.dtype)
+    trough = xp.minimum(trough, heights)
+    armed = (peak > 0.) | ((heights >= minimum) & (heights >= trough + threshold))
+    peak = xp.where(armed, xp.maximum(peak, heights), 0.)
+    return trough, peak, armed & (peak >= heights + threshold), threshold
 
 
 def gait_weight(height, up_cos):

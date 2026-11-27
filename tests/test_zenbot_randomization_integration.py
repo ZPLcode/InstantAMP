@@ -40,13 +40,13 @@ def simulator(n=8, *, aligned=True, randomize=False, profile=zenbot, **options):
     return sim
 
 
-@pytest.mark.parametrize("robot", [zenbot.MIXED_TASK, zenbot26.MIXED_TASK])
-def test_new_recipe_enables_alignment_but_saved_legacy_config_remains_legacy(robot):
+@pytest.mark.parametrize(("robot", "pushes"), [(zenbot.MIXED_TASK, 0), (zenbot26.MIXED_TASK, 1)])
+def test_new_recipe_enables_alignment_but_saved_legacy_config_remains_legacy(robot, pushes):
     recipe = asdict(parse(["--robot", robot]))
     assert recipe["motion_train_randomization"] == 1
     assert simulation_options(recipe)["motion_train_randomization"] == 1
-    assert recipe["external_pushes"] == 0
-    assert simulation_options(recipe)["external_pushes"] == 0
+    assert recipe["external_pushes"] == pushes
+    assert simulation_options(recipe)["external_pushes"] == pushes
     archived = {key: value for key, value in recipe.items() if key != "external_pushes"}
     assert simulation_options(archived)["external_pushes"] == 1
     assert ZenbotMotionTrainWMConfig().motion_train_randomization == 0
@@ -208,10 +208,10 @@ def test_raising_ground_and_robot_preserves_geometry_rewards_and_amp_height():
     np.testing.assert_allclose(raised_amp, amp_frame, atol=2e-7)
 
 
-@pytest.mark.parametrize("control_scale,pose_weight", [(0., 0.), (1., -2.)])
-def test_randomized_context_and_rough_terrain_have_finite_imagination_gradients(control_scale, pose_weight):
+@pytest.mark.parametrize("pose_weight", [0., -2.])
+def test_randomized_context_and_rough_terrain_have_finite_imagination_gradients(pose_weight):
     n = 2
-    sim = simulator(n=n, randomize=True, wm_recovery_control_scale=control_scale, wm_stand_pose_weight=pose_weight)
+    sim = simulator(n=n, randomize=True, wm_stand_pose_weight=pose_weight)
     state = sim.init(jax.random.key(142))
     # Put both worlds above actual rough patches, rather than accidentally only
     # exercising the flat share of the startup terrain distribution.
@@ -235,7 +235,8 @@ def test_randomized_context_and_rough_terrain_have_finite_imagination_gradients(
         a_last=state.a_last, a_ode=state.a_ode, c_obs=command,
         cmd=env.Cmd(command, zeros, zeros > 0, zeros > 0, zeros + 8.),
         t=jnp.full(n, 4, jnp.int32), was_up=jnp.ones(n, bool),
-        gait_world=jnp.ones(n, bool), gait_stage=jnp.zeros(n, jnp.int32),
+        gait_world=sim.wm_gait_worlds, gait_stage=jnp.zeros(n, jnp.int32),
+        first_attempt=state.first_attempt._asdict(),
         episode_limit=jnp.full(n, 400, jnp.int32),
         step_history=zenbot_gait_rewards.StepHistory.empty(n)._asdict(),
     )
@@ -244,7 +245,7 @@ def test_randomized_context_and_rough_terrain_have_finite_imagination_gradients(
     learner.cfg = parse([
         "--robot", zenbot.MIXED_TASK, "--num_envs", "32", "--horizon", "2",
         "--imag_unroll", "1", "--mm_bf16", "none", "--imag_gait_mirror_weight", "0",
-        "--wm_recovery_control_scale", str(control_scale), "--wm_stand_pose_weight", str(pose_weight),
+        "--wm_stand_pose_weight", str(pose_weight),
     ])
     assert learner.cfg.motion_train_randomization == 1
     pi = nets.mlp_init(jax.random.key(144), (234, 16, 23))

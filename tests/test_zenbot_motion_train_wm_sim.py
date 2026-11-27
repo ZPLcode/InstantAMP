@@ -70,6 +70,19 @@ def test_disabled_pushes_ignore_a_due_legacy_velocity_kick():
     np.testing.assert_array_equal(result.data.qvel, transition.qvel1)
 
 
+def test_collector_charges_first_attempt_before_timeout_reset():
+    sim = simulator(n=8, wm_floor_amp=True, wm_fixed_floor_envs=True)
+    state = sim.init(jax.random.key(142))
+    eligible = np.asarray(state.first_attempt.active)
+    assert eligible.any() and not eligible.all()
+    state = state._replace(t=state.episode_limit - 1)
+    sim.physics = lambda *args: (*native_substeps(sim, *args), jnp.zeros(sim.N))
+    after, tr = sim.step(state, jnp.zeros_like(state.a_last))
+    np.testing.assert_array_equal(tr.parts[:, sim.terms.index("first_attempt_failure")], -eligible.astype(float))
+    np.testing.assert_array_equal(after.first_attempt.failed, False)
+    np.testing.assert_array_equal(after.first_attempt.active, ~after.was_up & ~sim.wm_gait_worlds)
+
+
 def test_fixed_commands_match_real_initial_and_resampled_sensor_inputs():
     sim=simulator()
     s=sim.init(jax.random.key(352))

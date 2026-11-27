@@ -1,7 +1,7 @@
 """Motion Train Zenbot reward terms for joint floor recovery and locomotion.
 
-Weights are per second. The simulator applies the policy timestep once, along
-with the original task rewards. Foot slip, contact impact and joint costs also apply during recovery.
+The simulator integrates reward rates once per policy step. One-off event costs
+are divided by the timestep here. Foot slip, contact impact and joint costs also apply during recovery.
 """
 
 from typing import NamedTuple
@@ -17,6 +17,7 @@ WEIGHTS = {
     "foot_slip": -.25,
     "sound_suppression": -.001,
     "feet_effective_landing": .5,
+    "step_length_asymmetry": -.05,  # per alternating touchdown, in units of 10 cm excess
     "feet_crossing": -1.,
     "feet_yaw_l2": -2.,
     "feet_swing_clearance": -.15,
@@ -43,38 +44,58 @@ POSTURE_WEIGHTS = {
     "flat_orientation_l2": -1.2,
     "slow_speed_base_height_l2": -1.,
 }
-RECOVERY_CONTROL_WEIGHTS = {
-    "recovery_vertical_speed": -1.,
-    "recovery_angular_speed": -.2,
-    "recovery_action_rate": -.05,
-    "recovery_torque_excess": -.2,
-    "recovery_setback": -.5,
-}
 
 
-def recovery_control_terms(previous, state, action, last_action, command, torque, effort, lift_gate):
-    """Soft costs for abrupt recovery, retaining force for ordinary support.
+class FirstAttempt(NamedTuple):
+    """Per-recovery history, carried from the physical replay into imagination."""
 
-    The extra control costs remain active for quiet standing to include settling
-    after a rise, and fade out under an upright locomotion command. Vertical
-    speed uses the world axis; pelvis z is nearly horizontal in a fallen pose.
-    """
-    pos, rotation, velocity, angular = state[:4]
-    gait = zenbot.gait_weight(pos[..., 2], rotation[..., 2, 2])
-    gate = 1. - gait * (1. - zenbot.quiet_command_weight(command))
-    gyro = mv3(tr3(rotation), angular)
-    tilt_speed = jnp.sqrt(jnp.maximum(jnp.sum(gyro[..., :2]**2, -1), 1e-12))
-    torque_excess = jax.nn.relu((jnp.abs(torque) / effort - .8) / .2)
-    before = zenbot.lift_progress(previous[0][..., 2], lift_gate)
-    after = zenbot.lift_progress(pos[..., 2], lift_gate)
-    return {
-        "recovery_vertical_speed": gate * jax.nn.relu(jnp.abs(velocity[..., 2]) - .65)**2,
-        "recovery_angular_speed": gate * jax.nn.relu(tilt_speed - 3.)**2,
-        "recovery_action_rate": gate * jnp.sum((action - last_action)**2, -1),
-        "recovery_torque_excess": gate * jnp.sum(torque_excess**2, -1),
-        # No cost for the low repositioning needed before hand/foot support.
-        "recovery_setback": jax.nn.relu(before - after) / env.DT,
-    }
+    active: jax.Array
+    failed: jax.Array
+    trough: jax.Array
+    peak: jax.Array  # zero until the lift is armed
+    was_supported: jax.Array
+    support_streak: jax.Array  # positive for supported upright, negative for lost posture
+    upright_steps: jax.Array
+    foot_history: jax.Array
+
+    @classmethod
+    def start(cls, height, active, profile=zenbot, *, shoulder_height=None):
+        zero = jnp.zeros_like(height, dtype=jnp.int32)
+        empty = jnp.zeros((*height.shape, round(zenbot.SUPPORTED_STAND_SECONDS / env.DT)), bool)
+        landmarks = zenbot.attempt_heights(height, shoulder_height)
+        return cls(active, jnp.zeros_like(active), landmarks, zenbot.initial_attempt_peak(landmarks, profile),
+                   jnp.zeros_like(active), zero, zero, empty)
+
+    def advance(self, height, up_cos, supported, done, gait_world, profile=zenbot, *, shoulder_height=None):
+        """Charge the first failed attempt once. A supported second closes the recovery."""
+        # Start a new fall on the floor, excluding its initial forced descent and gait-only episodes.
+        entering = ~self.active & ~gait_world & (height < zenbot.FALLEN_HEIGHT)
+        active = self.active | entering
+        landmarks = zenbot.attempt_heights(height, shoulder_height)
+        trough, peak, setbacks, threshold = zenbot.update_attempt_peaks(
+            landmarks, jnp.where(entering[..., None], landmarks, self.trough),
+            jnp.where(entering[..., None], 0., self.peak), profile)
+
+        upright = zenbot.standing_posture(height, up_cos)
+        posture_steps = jnp.where(active & upright, self.upright_steps + 1, 0)
+        foot_history = jnp.concatenate((self.foot_history[..., 1:], supported[..., None]), axis=-1)
+        hold = foot_history.shape[-1]
+        settled = (posture_steps >= hold) & (foot_history.sum(-1) >= zenbot.MIN_SUPPORT_FRACTION * hold)
+        streak = jnp.where(upright & supported, jnp.maximum(self.support_streak, 0) + 1,
+                           jnp.where(~upright, jnp.minimum(self.support_streak, 0) - 1, 0))
+        debounce = round(zenbot.REFALL_SECONDS / env.DT)
+        was_supported = self.was_supported | (streak >= debounce)
+        eligible = active & ~self.failed
+        refall = was_supported & (streak <= -debounce)
+        failed = eligible & (setbacks.any(-1) | refall | (done & ~settled))
+        # Supply a local height gradient only on the charged setback in imagination.
+        drop = jax.lax.stop_gradient(peak) - landmarks
+        soft = failed * (setbacks * jax.nn.sigmoid((drop - threshold) / .02)).max(-1)
+        cost = failed.astype(height.dtype) + (soft - jax.lax.stop_gradient(soft))
+        ongoing = active & ~settled & ~done
+        return FirstAttempt(ongoing, ongoing & (self.failed | failed), trough, peak, ongoing & was_supported,
+                            jnp.where(ongoing, streak, 0), jnp.where(ongoing, posture_steps, 0),
+                            foot_history & ongoing[..., None]), cost / env.DT
 
 
 def base_velocity(state, root_com):
@@ -130,7 +151,7 @@ def predicted_foot_slip(pos, rotation, velocity, angular, local_corners, ground_
 
 
 class StepHistory(NamedTuple):
-    """Contact timers and sole heights for landing and clearance rewards."""
+    """Foot contact history and the last straight-line step in each world."""
 
     air: jax.Array
     stance: jax.Array
@@ -138,15 +159,50 @@ class StepHistory(NamedTuple):
     stance_z: jax.Array
     peak_z: jax.Array
     supported_swing: jax.Array
+    landing_xy: jax.Array
+    landing_side: jax.Array  # +1 left, -1 right, 0 without an anchor
+    landing_command_x: jax.Array
+    step_length: jax.Array
+    has_step_length: jax.Array
 
     @classmethod
     def empty(cls, worlds):
         ticks = jnp.zeros((worlds, 2), jnp.int32)
         z = jnp.zeros_like(ticks, jnp.float32)
-        return cls(ticks, ticks, ticks > 0, z, z, ticks > 0)
+        return cls(ticks, ticks, ticks > 0, z, z, ticks > 0,
+                   z, ticks[:, 0], z[:, 0], z[:, 0], ticks[:, 0] > 0)
 
     def reset(self, done):
-        return jax.tree.map(lambda x: jnp.where(done[..., None], jnp.zeros_like(x), x), self)
+        return jax.tree.map(lambda x: jnp.where(done[..., None] if x.ndim > done.ndim else done,
+                                                 jnp.zeros_like(x), x), self)
+
+    def step_symmetry(self, contact, foot_xy, forward_xy, command, gait):
+        """Compare two successive step lengths from three alternating touchdowns."""
+        vx, vy, wz = command[..., 0], command[..., 1], command[..., 2]
+        straight = ((gait >= .95) & (jnp.abs(vx) > .10) & (jnp.abs(wz) <= .20)
+                    & (jnp.abs(vy) <= .20 * jnp.abs(vx)))
+        touchdown = contact & self.seen & (self.air >= round(.08 / env.DT))
+        left, right = touchdown[..., 0], touchdown[..., 1]
+        landed = straight & (left ^ right)
+        side = jnp.where(left, 1, -1)
+        xy = jnp.where(left[..., None], foot_xy[..., 0, :], foot_xy[..., 1, :])
+        # A stop, turn, speed change or simultaneous landing breaks the alternating sequence.
+        continuous = straight & ~(left & right) & (jnp.abs(vx - self.landing_command_x) <= .10)
+        alternate = landed & continuous & (self.landing_side == -side)
+        length = jnp.sum((xy - self.landing_xy) * forward_xy, axis=-1) * jnp.sign(vx)
+        mean_length = .5 * (jnp.abs(length) + jnp.abs(self.step_length))
+        tolerance = jnp.maximum(.03, .10 * mean_length)
+        excess = jax.nn.relu(jnp.abs(length - self.step_length) - tolerance) / .10
+        # Quadratic near tolerance, linear for large errors. Integrate an event once at 50 Hz.
+        quadratic = jnp.minimum(excess, 1.)
+        cost = jnp.where(alternate & self.has_step_length, quadratic**2 + 2. * (excess - quadratic), 0.)
+        return self._replace(
+            landing_xy=jnp.where(landed[..., None], xy, self.landing_xy),
+            landing_side=jnp.where(landed, side, jnp.where(continuous, self.landing_side, 0)),
+            landing_command_x=jnp.where(landed, vx, self.landing_command_x),
+            step_length=jnp.where(alternate, length, self.step_length),
+            has_step_length=jnp.where(landed, alternate, continuous & self.has_step_length),
+        ), cost / env.DT
 
     def advance(self, contact, sole_z, command):
         """Score a foot on its first supported ground contact after a swing."""
@@ -177,10 +233,12 @@ def reward_terms(state, feet, command, torque, acceleration, q_soft, foot_contac
                  foot_acc_z, history, gait, *, min_ankle_spacing=.10):
     """Use measured motor/contact signals in physics and predicted signals in imagination."""
     _, rotation, _, _, q, qd = state
+    heading = yaw_mat(rotation)
+    history, asymmetry = history.step_symmetry(foot_contact, feet.positions[..., :2], heading[..., :2, 0], command, gait)
     history, landing, clearance = history.advance(foot_contact, feet.bottom[..., :2], command)
     history = history.reset(gait <= 0.)
     separation = feet.positions[..., 0, :] - feet.positions[..., 1, :]
-    lateral = jnp.sum(separation * yaw_mat(rotation)[..., :, 1], -1)
+    lateral = jnp.sum(separation * heading[..., :, 1], -1)
     # First column of each foot rotation in the full pelvis frame.
     axis = jnp.einsum("...ij,...fj->...fi", tr3(rotation), feet.rotations[..., :, 0])
     horizontal = jnp.sum(axis[..., :2]**2, axis=-1) > 1e-10
@@ -197,6 +255,7 @@ def reward_terms(state, feet, command, torque, acceleration, q_soft, foot_contac
         "foot_slip": foot_slip,
         "sound_suppression": (speed < 1.5) * jnp.where(foot_contact, jnp.minimum(foot_acc_z**2, 50.), 0.).sum(-1),
         "feet_effective_landing": gait * landing,
+        "step_length_asymmetry": asymmetry,
         "feet_swing_clearance": gait * clearance,
         "feet_crossing": gait * jax.nn.relu(min_ankle_spacing - lateral),
         "feet_yaw_l2": gait * straight * jnp.sum(jax.nn.relu(jnp.abs(yaw) - np.deg2rad(2.))**2, -1),

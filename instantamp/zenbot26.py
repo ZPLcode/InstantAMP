@@ -20,6 +20,10 @@ from .zenbot import (
 from .zenbot_models import ZENBOT26 as MODEL
 
 MIXED_TASK = MODEL.mixed_task
+ATTEMPT_LIFT_HEIGHT = .30
+SHOULDER_SETBACK = .12  # both the rise from the trough and the drop from the peak, in metres
+SHOULDERS = ("left_shoulder_pitch_Link", "right_shoulder_pitch_Link")
+FLOOR_REWARD_VERSION = 4
 MASS = MODEL.mass
 DOF = MODEL.dof
 KP, KD = MODEL.kp, MODEL.kd

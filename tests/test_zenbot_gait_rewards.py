@@ -33,6 +33,56 @@ def test_completed_swing_earns_credit_once_and_uses_command_specific_clearance()
     np.testing.assert_array_equal(h.seen[:, 0], [False, True, True, False])
 
 
+def test_step_length_symmetry_uses_three_alternating_landings_and_has_a_local_gradient():
+    # Same contact sequence in a translated world, with the robot facing along world Y.
+    contact = jnp.array([[1, 1]] + ([[0, 1]] * 4 + [[1, 1]] + [[1, 0]] * 4 + [[1, 1]])
+                        + [[0, 1]] * 4 + [[1, 1], [1, 1]], dtype=bool)
+    command = jnp.array([[1., 0., 0.], [-1., 0., 0.], [2., 0., 0.],
+                         [0., .4, 0.], [1., 0., .8], [.15, .08, 0.]])
+    n = len(command)
+    forward = jnp.broadcast_to(jnp.array([0., 1.]), (n, 2))
+    sign = jnp.sign(command[:, 0:1])
+
+    def rollout(last):
+        def step(h, sample):
+            tick, down = sample
+            down = jnp.broadcast_to(down, (n, 2))
+            left = jnp.where(tick < 15, 0., last)
+            distances = jnp.stack([left, jnp.array(.4)])
+            xy = jnp.stack((jnp.broadcast_to(jnp.array([2., 1.8]), (n, 2)),
+                            7. + sign * distances), axis=-1)
+            h, cost = h.step_symmetry(down, xy, forward, command, jnp.ones(n))
+            h, _, _ = h.advance(down, jnp.zeros((n, 2)), command)
+            return h, cost * env.DT
+        return jax.lax.scan(step, rewards.StepHistory.empty(n), (jnp.arange(len(contact)), contact))[1]
+
+    run = jax.jit(rollout)
+    np.testing.assert_allclose(run(.8), 0.)  # .4 m on both sides
+    unequal = np.asarray(run(1.))
+    np.testing.assert_allclose(np.delete(unequal, 15, axis=0), 0.)
+    # Lengths .4 and .6 m, tolerance .05 m, normalized excess 1.5 (linear tail).
+    np.testing.assert_allclose(unequal[15], [2., 2., 2., 0., 0., 0.], atol=2e-5)
+    assert float(jax.grad(lambda x: rollout(x).sum())(1.)) > 0.
+    assert float(jax.grad(lambda x: rollout(x).sum())(.8)) == 0.
+
+
+def test_step_length_pair_is_discarded_across_reset_command_changes_and_ambiguous_contact():
+    n = 8
+    # Rows exercise reset, reversal, speed change, recovery, a repeated left landing,
+    # a two-foot landing, a 20 ms contact bounce, and a valid right landing.
+    h = rewards.StepHistory.empty(n)._replace(
+        air=jnp.full((n, 2), 5).at[6, 1].set(1), seen=jnp.ones((n, 2), bool),
+        landing_side=jnp.ones(n, jnp.int32), landing_command_x=jnp.ones(n),
+        step_length=jnp.full(n, .4), has_step_length=jnp.ones(n, bool),
+    ).reset(jnp.arange(n) == 0)
+    cmd = jnp.zeros((n, 3)).at[:, 0].set(1.).at[1, 0].set(-1.).at[2, 0].set(1.5)
+    down = jnp.tile(jnp.array([False, True]), (n, 1)).at[4].set(jnp.array([True, False])).at[5].set(True)
+    xy = jnp.zeros((n, 2, 2)).at[:, :, 0].set(.6)
+    h, cost = h.step_symmetry(down, xy, jnp.tile(jnp.array([1., 0.]), (n, 1)), cmd, jnp.arange(n) != 3)
+    np.testing.assert_array_equal(cost > 0, jnp.arange(n) == 7)
+    np.testing.assert_array_equal(h.has_step_length, jnp.arange(n) >= 6)
+
+
 def test_joint_costs_and_foot_yaw_crossing_and_recovery_masks():
     q = jnp.zeros((2, 23)).at[:, rewards.ANKLE_ROLL].set(np.deg2rad(15))
     v = jnp.ones_like(q)

@@ -1,6 +1,6 @@
 """Contracts shared by the two integrated Zenbot training tasks."""
 
-import dataclasses
+import re
 
 import jax
 import jax.numpy as jnp
@@ -9,8 +9,18 @@ import pytest
 
 from instantamp import amp, nets, zenbot, zenbot_models
 from instantamp.inference import load
-from instantamp.train import Config, InstantAMP, ZenbotJointConfig, action_log_prob, parse, save_policy
-from instantamp.zenbot_motion_train_obs import mirror_action, motion_train_actor_mean
+from instantamp.train import (
+    Config,
+    InstantAMP,
+    ZenbotJointConfig,
+    action_log_prob,
+    parse,
+    save_policy,
+)
+from instantamp.zenbot_motion_train_obs import (
+    mirror_action,
+    motion_train_actor_mean,
+)
 
 
 def test_default_entry_point_uses_the_g1_combined_task():
@@ -20,7 +30,7 @@ def test_default_entry_point_uses_the_g1_combined_task():
     assert 0 < config.reset_floor < 1
 
 
-def test_models_share_the_training_recipe_and_reward_defaults():
+def test_joint_training_defaults_for_both_models():
     default = parse(["--robot", zenbot_models.ZENBOT23.mixed_task])
     assert isinstance(default, ZenbotJointConfig)
     assert default.robot == zenbot_models.ZENBOT23.mixed_task
@@ -29,20 +39,43 @@ def test_models_share_the_training_recipe_and_reward_defaults():
     assert default.ppo_frac == .1 and default.ode == 0
     assert default.obs_clip == 10 and default.wm_initial_gait_stage == 0
     other = parse(["--robot", zenbot_models.ZENBOT26.mixed_task])
-    model_settings = {"robot", "walk_dir", "amp_dir", "floor_dir", "amp_getup_dir", "log_dir", "imag_gait_mirror_weight"}
-    first = dataclasses.asdict(default)
-    second = dataclasses.asdict(other)
-    assert {key for key in first if first[key] != second[key]} == model_settings
-    assert (default.imag_gait_mirror_weight, other.imag_gait_mirror_weight) == (.2, 0.)
+    assert (default.num_envs, default.max_iterations, default.wm_only_iters) == (2048, 20_000, 150)
+    assert (default.ckpt_iterations, default.full_ckpt_keep, default.external_pushes) == (500, 0, 0)
+    assert (default.getup_amp_scale, default.wm_stand_pose_weight, default.wm_lift_weight) == (0., 0., .5)
+    assert (other.num_envs, other.max_iterations, other.wm_only_iters) == (4096, 100_000, 500)
+    assert (other.ckpt_iterations, other.full_ckpt_keep, other.external_pushes) == (1000, 2, 1)
+    assert (other.getup_amp_scale, other.wm_stand_pose_weight, other.wm_lift_weight) == (10., -2., .2)
+    assert {key for key, value in vars(default).items() if value != getattr(other, key)} == {
+        "robot", "walk_dir", "amp_dir", "floor_dir", "amp_getup_dir", "log_dir",
+        "num_envs", "max_iterations", "wm_only_iters", "ckpt_iterations", "full_ckpt_keep",
+        "external_pushes", "getup_amp_scale", "wm_stand_pose_weight", "wm_lift_weight",
+    }
     for cfg in (default, other):
         assert cfg.motion_train_randomization == 1
         assert cfg.wm_hidden == "1024,1024,1024"
         assert (cfg.learn_action_std, cfg.action_noise, cfg.action_entropy_coef) == (1, 1., .01)
         assert (cfg.wm_tracking_scale, cfg.gait_ls_scale, cfg.action_rate_l2_weight) == (1., 1.5, -.05)
         assert cfg.amp_lerp == .7
+        assert cfg.imag_gait_mirror_weight == .2
+        assert (cfg.wm_gait_frames, cfg.gait_amp_stride, cfg.wm_lift_gate) == (10, 1, .44)
+        assert (cfg.seed, cfg.minutes, cfg.init_policy, cfg.init_full) == (42, 0., "", "")
         assert cfg.walk_dir == cfg.amp_dir
         assert cfg.floor_dir == cfg.amp_getup_dir
         assert cfg.walk_dir != cfg.floor_dir
+
+
+@pytest.mark.parametrize("robot", zenbot_models.MIXED_TASKS)
+def test_zenbot_help_lists_run_options_and_legacy_overrides_still_work(robot, capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        parse(["--robot", robot, "--help"])
+    assert exit_info.value.code == 0
+    help_text = capsys.readouterr().out
+    assert set(re.findall(r"--[\w-]+", help_text)) == {
+        "--help", "--robot", "--log_dir", "--num_envs", "--max_iterations", "--ckpt_iterations",
+        "--seed", "--init_policy",
+    }
+    cfg = parse(["--robot", robot, "--wm_gait_frames", "3", "--getup_amp_scale", "4.5"])
+    assert (cfg.wm_gait_frames, cfg.getup_amp_scale) == (3, 4.5)
 
 
 @pytest.mark.parametrize("flags", [

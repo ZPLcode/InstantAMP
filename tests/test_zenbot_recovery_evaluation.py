@@ -5,14 +5,27 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from instantamp import zenbot, zenbot26
 from tools import evaluate_zenbot_joint
 from tools.evaluate_zenbot_joint import recovery_outcome
 
 
-def score(heights):
+def score(heights, profile=zenbot, **kwargs):
     heights = np.asarray(heights)
     posture = (heights > .58) & (heights <= .78)
-    return recovery_outcome(heights, posture, posture.astype(float), dt=.1)
+    return recovery_outcome(heights, posture, posture.astype(float), dt=.1, profile=profile, **kwargs)
+
+
+def test_26dof_requires_both_a_fresh_rise_and_the_attempt_height():
+    stand = [.68] * 15
+    # Start high, fall, then rise only 6 cm above the trough. No peak has been armed.
+    assert score([.46, .35, .27, .33, .23] + stand, zenbot26)["first_attempt_success"]
+    # A rise over 8 cm that never reaches 30 cm is preparatory.
+    assert score([.18, .299, .20] + stand, zenbot26)["lift_setbacks"] == 0
+    # Both 8 cm thresholds are inclusive. A new rise re-arms after each setback.
+    h = [.30, .22, .30, .219] + stand
+    assert score(h, zenbot26, initial_height=.22)["lift_setbacks"] == 2
+    assert score(h, zenbot)["lift_setbacks"] == 0
 
 
 def test_final_success_does_not_hide_an_aborted_rise():
@@ -23,6 +36,15 @@ def test_final_success_does_not_hide_an_aborted_rise():
     assert clean["first_supported_stand_s"] == .5
     assert retry["success"] and not retry["first_attempt_success"]
     assert retry["lift_setbacks"] == 1
+
+
+def test_shoulder_and_pelvis_setbacks_share_one_attempt():
+    stand = [.68] * 15
+    # A shoulder-only attempt before the pelvis reaches 30 cm, then a separate simultaneous setback.
+    result = score([.21, .22, .21, .20, .37, .26] + stand, zenbot26, initial_shoulder_height=.15,
+                   shoulder_heights=[.28, .27, .15, .14, .45, .27] + [1.] * 15)
+    assert result["success"] and not result["first_attempt_success"]
+    assert result["lift_setbacks"] == 2
 
 
 def test_setbacks_ignore_small_bobs_but_count_separate_failed_rises():

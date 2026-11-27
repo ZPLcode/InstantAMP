@@ -205,6 +205,7 @@ def test_imagined_mirror_only_updates_actor_on_live_commanded_gait(zenbot23_moti
                  a_last=previous, a_ode=previous, c_obs=command, cmd=env.Cmd(command, zeros, zeros > 0, zeros > 0, zeros+8.),
                  t=zeros.astype(int), was_up=jnp.ones(n, bool),
                  gait_world=jnp.array([True, True, True, False, True]),
+                 first_attempt=zenbot_gait_rewards.FirstAttempt.start(q[:, 2], q[:, 2] < .44, zenbot)._asdict(),
                  step_history=zenbot_gait_rewards.StepHistory.empty(n)._asdict())
     pi = nets.mlp_init(jax.random.key(4), (234, 16, 23))
     keys = jax.random.split(jax.random.key(5), cfg.horizon)

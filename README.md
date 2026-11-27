@@ -52,23 +52,31 @@ run="runs/$robot"
 bash tools/recipes/train_zenbot_joint.sh "$run" --robot "$robot"
 ```
 
-The script prepares both motion banks for the selected robot, trains from scratch and evaluates the final checkpoint. By default both Zenbots use 2,048 environments, 40% floor resets, seed 42 and 20,000 updates. The world model uses three hidden layers of 1,024 units each. The resume tool uses the widths saved with each checkpoint.
+The script prepares both motion banks, trains from scratch and evaluates the final checkpoint. With the banks already prepared, start the current Zenbot26 recipe directly with the following command.
+
+```bash
+python -m instantamp.train --robot zenbot26_walk_run_recovery --log_dir runs/zenbot26_new
+```
+
+Edit `Zenbot26JointConfig` to tune fresh 26-DoF runs. Its defaults use 4,096 environments, 100,000 iterations, 500 world-model warmup iterations and a checkpoint every 1,000 iterations. It keeps every policy export and the latest two full learner checkpoints. Zenbot23 defaults to 2,048 environments and 20,000 iterations. Both use 40% floor resets, seed 42 and a world model with three 1,024-unit hidden layers. Each run records its effective settings in `config.json`. [Training recipes](instantamp/train_config.py)
 
 | Shared Zenbot reward setting | Default |
 | --- | ---: |
 | Planar velocity tracking weight | 2.0 |
 | Yaw-rate tracking weight | 1.5 |
-| Shared recovery and gait AMP scale (`gait_ls_scale`) | 1.5 |
+| Gait AMP scale (`gait_ls_scale`) | 1.5 |
 | AMP mixture weight (`amp_lerp`) | 0.7 |
 | Action-rate penalty weight (`action_rate_l2_weight`) | -0.05 |
 
-A continuous weight blends recovery and gait using the current pelvis height and uprightness. Its height range is 0.44–0.58 m, and its uprightness range runs from a 60° tilt to 30°. This weight controls the task terms, AMP styles, recovery-discriminator samples and mirror consistency. The global gait discriminator gives every valid sampled robot window equal weight and clips its loss gradient to norm 1.0 before Adam weight decay. The default `amp_lerp=0.7` gives task and AMP rewards coefficients of 0.3 and 0.7 throughout recovery and locomotion. Both discriminators use the same least-squares score scale. Quiet-standing reward remains active at a zero command and fades as movement is requested. The lifting-progress reward starts at 0.44 m with weight 0.5. [Training rewards](instantamp/sim.py) · [AMP mixing](instantamp/train.py)
+During straight forward or backward locomotion, `step_length_asymmetry` compares the distances between three alternating ankle touchdowns along the pelvis heading. It allows a difference of 3 cm or 10% of the mean step length, whichever is larger. An extra 10 cm costs 0.05 task reward per landing before AMP mixing. The same event is scored in physics and imagination.
 
-The 23-DoF recipe also applies a mirror consistency loss to imagined frames with an active motion command, weighted by the same current posture signal. Its weight is `--imag_gait_mirror_weight 0.2` (26-DoF default `0`). The log records the unweighted error in `imag_gait_mirror_mse` and the mean posture weight of eligible imagined frames in `imag_gait_mirror_fraction`. Resuming keeps the saved weight, with zero for checkpoints that predate this loss. To enable it on an older run, pass `--imag-gait-mirror-weight 0.2` to the resume tool.
+A continuous weight blends recovery and gait using the current pelvis height and uprightness. Its height range is 0.44–0.58 m, and its uprightness range runs from a 60° tilt to 30°. This weight controls the task terms, AMP styles, recovery-discriminator samples and mirror consistency. The global gait discriminator gives every valid sampled robot window equal weight and clips its loss gradient to norm 1.0 before Adam weight decay. The default `amp_lerp=0.7` gives task and AMP rewards coefficients of 0.3 and 0.7 throughout recovery and locomotion. Zenbot26 uses 10 consecutive 50 Hz gait frames and a separate get-up AMP scale of 10. Zenbot23 uses the gait scale of 1.5 for both priors. Quiet-standing reward remains active at a zero command and fades as movement is requested. The lifting-progress reward starts at 0.44 m with weight 0.2 on Zenbot26 and 0.5 on Zenbot23. [Training rewards](instantamp/sim.py) · [AMP mixing](instantamp/train.py)
+
+Both recipes apply a mirror consistency loss of weight 0.2 to imagined frames with an active movement command, weighted by the same posture signal. The log records the unweighted error in `imag_gait_mirror_mse` and the mean posture weight of eligible imagined frames in `imag_gait_mirror_fraction`. Resuming keeps the saved weight, with zero for checkpoints that predate this loss.
 
 New Zenbot23 and Zenbot26 joint runs enable `--motion_train_randomization 1`, following the local Motion Train `ad923704` Zenbot AMP dynamics. Every episode samples a 15–35 ms motor delay independently for each actuator group. Zenbot23 has five groups. Zenbot26 adds one group for waist roll and pitch and one for head yaw. Startup samples PD gains and joint armature at 0.8–1.2 times nominal, calibrated paired leg friction at 0.5–1.5 times the pair mean with at most 10% left/right mismatch, pelvis mass ±3 kg, limb masses at 0.8–1.2 times nominal, and a shared torso/pelvis COM offset of ±3 cm per axis. Zenbot26 uses calibrated joint friction of 0.350 for waist roll and 0.550 for waist pitch. Principal inertias and the physics engine's reference inverse weights are updated with these changes. These startup parameters remain fixed across episode resets.
 
-New Zenbot joint runs disable external pushes during locomotion and floor recovery with `--external_pushes 0`. This covers shoulder and hip forces, shoves at reset, and velocity kicks during the episode. With Motion Train randomization enabled, `--external_pushes 1` selects the original shoulder and hip push schedule. Resuming a run preserves its saved push setting. Runs that predate this switch use their original push behavior when resumed.
+Zenbot26 trains with the Motion Train shoulder and hip push schedule. Zenbot23 starts with external pushes disabled. Resuming a run preserves its saved push setting. Runs that predate this switch use their original push behavior when resumed.
 
 Terrain weights are 40% flat, 35% mild roughness, 15% medium roughness and 10% slopes. Each world keeps its terrain origin across resets. Heights used by rewards, geometry and recovery AMP are measured relative to the local surface. The world model and critic receive the randomized dynamics as privileged context. The deployed actor uses 234 inputs for Zenbot23 and 261 for Zenbot26. The actor observations use per-step IMU noise and a per-episode IMU delay.
 
@@ -76,15 +84,11 @@ Material sampling follows the active Newton backend: continuous robot sliding fr
 
 Both Zenbot models generate the reference terrain at 5 cm spacing, then sample it at 10 cm spacing for physical collisions and reward height queries. This limits the number of triangle candidates per robot collider to MuJoCo Warp's 50-contact pair capacity, including when the robot lies on rough ground.
 
-Exact full-checkpoint continuation retains the saved randomization setting and uses the legacy recipe for configurations that predate this field. The randomization changes the world-model and critic input sizes. To use it with an existing actor of the same articulation, start a fresh learner with `--init_policy RUN/ckpt/NAME.npz`. Set `--motion_train_randomization 0` to select the legacy recipe explicitly.
+Exact full-checkpoint continuation retains the saved randomization setting and uses the legacy recipe for configurations that predate this field. The randomization changes the world-model and critic input sizes. To use it with an existing actor of the same articulation, start a fresh learner with `--init_policy RUN/ckpt/NAME.npz`.
 
 Zenbot joint training learns one state-independent Gaussian exploration standard deviation per joint through PPO. Fresh runs start at `--action_noise 1.0` and use `--action_entropy_coef 0.01`. Half the collector environments sample actions and half execute the mean. The log records `action_std_by_joint` in physical joint order. Full checkpoints save the learned values and their Adam state. When continuing an older fixed-noise run, the resume tool initializes them from that run's `action_noise`. Exported actors execute the learned mean.
 
-To override these defaults, pass `--wm_tracking_scale`, `--gait_ls_scale` or `--action_rate_l2_weight` to the Python entry point. Prepare the data first and use a fresh run directory for each model.
-
-Recovery ablations can set `--wm_lift_weight` (default `0.5`) and `--getup_amp_scale` independently. A positive `getup_amp_scale` overrides only the recovery prior; `0` retains the shared AMP scale. `--full_ckpt_keep 2` keeps the latest two complete learner checkpoints while preserving every policy export; the default `0` keeps all checkpoints.
-
-For abrupt or repeated recovery attempts, `--wm_recovery_control_scale 1` enables additional soft costs in both physical and imagined rewards. These penalize world vertical speed above 0.65 m/s, pelvis roll/pitch speed above 3 rad/s, torque above 80% of each motor's rated effort, action changes, and lost lifting progress above the configured lift gate. The speed, torque and action costs also apply during zero-command settling, and fade out during upright locomotion. They do not cap motor output. The default scale is `0`, preserving existing recipes; `1` is an experimental starting weight that needs evaluation after training.
+Zenbot joint training applies a single task penalty when the first rise fails, −2 for Zenbot26 and −1 for Zenbot23 before AMP mixing. It charges once per fall for a lift setback, a refall, or ending the episode before the robot stands upright for one second with foot support on at least 90% of frames. Both fresh and resumed runs use this reward. Physical training and native evaluation count a frame as supported when the feet carry at least half the robot’s weight. Imagination estimates support from sole clearance.
 
 ```bash
 bash tools/recipes/prepare_zenbot_wm_data.sh --robot "$robot"
@@ -115,27 +119,28 @@ python -m tools.play_zenbot_control --checkpoint "$run"
 The viewer starts in a neutral stance. Use W/S and A/D for linear velocity, Q/E for yaw, X to stop, F to push, R for the next fallen start and Space to pause. It automatically loads matching STL files from `assets/meshes/zenbot_26dof_43kg/` or `assets/meshes/zenbot_23dof_43kg/` according to the policy. A checkout without a complete mesh set displays the visible collision shapes. Pass `--mesh-dir DIR` to load meshes from another directory. Both the viewer and scorer accept an individual policy NPZ. To resume training, pass a full checkpoint and a fresh output directory.
 
 ```bash
-python -m tools.resume_zenbot_wm "$run/ckpt/full/0039.npz" "${run}_continued" --until 22000
+python -m tools.resume_zenbot_wm releases/zenbot26_scratch_55000/ckpt/full/55000.npz \
+    runs/zenbot26_from55000 --until 60000
 ```
 
-The Zenbot26 continuation from iteration 41,000 uses a gait AMP multiplier of 3, a get-up AMP multiplier of 10 and external pushes. At a zero command, an upright robot with both feet on the ground receives a soft penalty for deviating from its default joint angles. The starting weight is −2 per second before task/style mixing. At rest at the target height, a 10° RMS error across the 26 joints incurs half that penalty. The penalty fades as the base moves, including when the robot reacts to a push. Changing the stance weight or recovery control scale starts a fresh critic and critic optimizer while restoring the actor, world model and motion priors.
+The Zenbot26 continuation from iteration 41,000 uses a gait AMP multiplier of 3, a get-up AMP multiplier of 10 and external pushes. At a zero command, an upright robot with both feet on the ground receives a soft penalty for deviating from its default joint angles. The starting weight is −2 per second before task/style mixing. At rest at the target height, a 10° RMS error across the 26 joints incurs half that penalty. The penalty fades as the base moves, including when the robot reacts to a push. Continuing a checkpoint trained with the earlier recovery rewards, or changing the stance weight, initializes a fresh critic and critic optimizer and restores the actor, world model and motion priors.
 
 ```bash
 python -m tools.resume_zenbot_wm \
     releases/zenbot26_gait3_push_41000/ckpt/full/41000.npz \
     runs/zenbot26_recovery_control_from41000 --until 46000 \
-    --recovery-control-scale 1 --gait-ls-scale 3 --getup-amp-scale 10 --stand-pose-weight -2
+    --gait-ls-scale 3 --getup-amp-scale 10 --stand-pose-weight -2
 python -m tools.evaluate_zenbot_joint runs/zenbot26_recovery_control_from41000 --push-recovery \
     --out runs/zenbot26_recovery_control_from41000/evaluation/final.json
 ```
 
-The native evaluator also reports first-attempt success, lift setbacks, refalls, time to the first and sustained supported one-second stance, vertical/angular speed, torque, motor saturation and absolute joint work. A lift setback means an 8 cm pelvis drop after reaching 44 cm, with another 8 cm rise needed before counting a new setback. First-attempt success requires final supported standing with no such setback or refall; it cannot detect every unsuccessful push below 44 cm. Refalls require 0.2 seconds of lost upright posture after 0.2 seconds of supported upright posture. Effort metrics include retries through the final settling interval, or the full ten seconds on failure, with motor samples at 200 Hz. Compare these alongside walk/run results before choosing a continued policy; final standing success alone can hide retries.
+The native evaluator also reports first-attempt success, lift setbacks, refalls, time to the first and sustained supported one-second stance, vertical/angular speed, torque, motor saturation and absolute joint work. For Zenbot26, peak tracking starts when the pelvis has risen at least 8 cm from the lowest observed height and reaches at least 30 cm above the ground. A drop of 8 cm from that peak counts as one setback. Independently, a 12 cm rise of the mean shoulder height arms its peak, and a subsequent 12 cm drop counts toward the same setback. Training charges once per fall. The evaluator requires a fresh qualifying rise to count another setback. Zenbot23 retains its 44 cm attempt height. The separate lifting reward uses `wm_lift_gate`, which defaults to 44 cm for both robots. First-attempt success requires final supported standing with no setback or refall. Refalls require 0.2 seconds of lost upright posture after 0.2 seconds of supported upright posture. Effort metrics include retries through the final settling interval, or the full ten seconds on failure, with motor samples at 200 Hz. Compare these alongside walk/run results before choosing a continued policy; final standing success alone can hide retries.
 
 Use `--push-recovery` to additionally test actual falls: after two seconds of standing, the evaluator applies a 0.4-second torso force of 300, 450 or 600 N in each of four directions. After releasing the force, it waits up to two seconds for pelvis height below 44 cm, then scores ten seconds of recovery with the existing velocity and controller history. Pushes that do not cause a fall are reported separately. This reproducible flat-ground stress test supplements the reference starts; it does not reproduce every mouse drag or the randomized training push distribution.
 
-These reward changes take effect during training; updating the code does not change an existing exported policy's actions during playback. When continuing a full checkpoint from the previous reward scheme, the learner initializes a fresh critic and critic optimizer: its two phase inputs now contain the current pose weight and its complement, and its target returns have changed. The actor, world model and motion discriminators are restored. Evaluate the continued policy before selecting it. Episode termination and the evaluator's supported-standing success criteria remain separate from the continuous training weight.
-
 ### Exported Zenbot26 checkpoint
+
+The original 55,000-iteration training recipe uses the source revision recorded in the release. [Training source](https://github.com/ZPLcode/InstantAMP/tree/1508cd342753531500394a267533cd0ac54e8d1a)
 
 The 55,000-iteration Zenbot26 checkpoint comes from a fresh 2,048-environment run with external pushes, gait AMP set to 3, get-up AMP set to 10 and a default standing-pose weight of −2. In native MuJoCo it passed the 1.0 m/s walking test, failed the 2.5 m/s running test and recovered from all 12 push-induced falls, nine on the first attempt. The release includes the averaged ONNX policy, resumable learner, training logs and per-trial results. [55,000-iteration release](releases/zenbot26_scratch_55000/README.md)
 

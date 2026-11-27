@@ -9,12 +9,11 @@ from instantamp import nets, optim
 from instantamp.train import (
     initialize_native_learner,
     load_full,
-    parse,
     prune_full_checkpoints,
     save_full,
     save_policy,
 )
-from tools.resume_zenbot_wm import continuation_args
+from tools.resume_zenbot_wm import continuation_config
 
 
 def test_full_checkpoint_retention_preserves_policies_and_incomplete_writes(tmp_path):
@@ -56,69 +55,69 @@ def test_continue_archived_i_profile_with_full_directory_on_another_volume(tmp_p
     (run / "config.json").write_text(json.dumps(config))
 
     output = tmp_path / "next"
-    flags = continuation_args(full, output, 12000)
-    assert not any(flag.startswith("--gait_velocity_time_constant") for flag in flags)
-    cfg = parse(flags)
+    cfg = continuation_config(full, output, 12000)
+    assert not hasattr(cfg, "gait_velocity_time_constant")
     assert cfg.init_full == str(full) and cfg.init_policy == ""
     assert cfg.log_dir == str(output) and cfg.max_iterations == 12000
     assert cfg.gait_mirror_weight == 0
     assert cfg.imag_gait_mirror_weight == 0
     assert cfg.wm_hidden == "512,512,512"
-    ranged = parse(continuation_args(full, output, 12000, range_commands=True, num_envs=4096))
+    ranged = continuation_config(full, output, 12000, wm_range_commands=1, num_envs=4096)
     assert ranged.num_envs == 4096 and ranged.wm_range_commands == 1
     assert ranged.init_full == cfg.init_full
     with pytest.raises(ValueError, match="exceed the saved iteration 10000"):
-        continuation_args(full, output, 10000)
+        continuation_config(full, output, 10000)
     with pytest.raises(ValueError, match="full learner"):
-        continuation_args(policy, output, 12000)
+        continuation_config(policy, output, 12000)
     config.update(wm_global_gait=1, wm_fixed_floor_envs=1, wm_range_commands=1,
                   wm_gait_rewards=1, gait_source_commands=0, gait_amp_stride=1)
     for settings, expected in (({}, 3), ({"wm_gait_frames": 10}, 10)):
         (run / "config.json").write_text(json.dumps({**config, **settings}))
-        assert parse(continuation_args(full, output, 12000)).wm_gait_frames == expected
+        assert continuation_config(full, output, 12000).wm_gait_frames == expected
     config.update(wm_initial_gait_stage=0, imag_gait_mirror_weight=.12,
                   imu_replay_path="old_bank.npz", imu_replay_share=.25, imu_replay_scale=.1)
     (run / "config.json").write_text(json.dumps(config))
-    assert parse(continuation_args(full, output, 12000)).imag_gait_mirror_weight == .12
-    assert parse(continuation_args(full, output, 12000, imag_gait_mirror_weight=.2)).imag_gait_mirror_weight == .2
-    config["wm_lift_gate"] = .44
+    assert continuation_config(full, output, 12000).imag_gait_mirror_weight == .12
+    assert continuation_config(full, output, 12000, imag_gait_mirror_weight=.2).imag_gait_mirror_weight == .2
+    config.update(wm_lift_gate=.44, wm_recovery_control_scale=1., wm_first_attempt_only=0)
     (run / "config.json").write_text(json.dumps(config))
-    refined = parse(continuation_args(full, output, 12000, recovery_control_scale=1.))
-    assert refined.wm_recovery_control_scale == 1. and refined.external_pushes == 1
-    assert parse(continuation_args(full, output, 12000)).wm_recovery_control_scale == 0.
-    assert parse(continuation_args(full, output, 12000)).wm_stand_pose_weight == 0.
-    for scale in (-1., float("nan")):
-        with pytest.raises(ValueError, match="Recovery control scale"):
-            parse(continuation_args(full, output, 12000, recovery_control_scale=scale))
+    cfg = continuation_config(full, output, 12000)
+    assert not hasattr(cfg, "wm_recovery_control_scale") and not hasattr(cfg, "wm_first_attempt_only")
+    assert cfg.wm_stand_pose_weight == 0.
     del config["wm_initial_gait_stage"], config["imag_gait_mirror_weight"]
     config.update(robot="zenbot26_walk_run_recovery", wm_global_gait=1)
     (run / "config.json").write_text(json.dumps(config))
-    refined = parse(continuation_args(full, output, 12000, recovery_control_scale=1., getup_amp_scale=10.,
-                                      gait_ls_scale=3., stand_pose_weight=-2.))
+    refined = continuation_config(full, output, 12000, getup_amp_scale=10.,
+                                  gait_ls_scale=3., wm_stand_pose_weight=-2.)
     assert (refined.gait_ls_scale, refined.getup_amp_scale, refined.wm_stand_pose_weight) == (3., 10., -2.)
-    assert refined.wm_recovery_control_scale == refined.external_pushes == 1
+    assert refined.external_pushes == 1
     for weight in (1., float("nan")):
         with pytest.raises(ValueError, match="Stand pose weight"):
-            parse(continuation_args(full, output, 12000, stand_pose_weight=weight))
-    cfg = parse(continuation_args(full, output, 12000))
+            continuation_config(full, output, 12000, wm_stand_pose_weight=weight)
+    cfg = continuation_config(full, output, 12000)
     assert cfg.robot == config["robot"] and cfg.wm_initial_gait_stage == 2
     assert cfg.motion_train_randomization == 0
     assert cfg.external_pushes == 1
     assert (cfg.wm_tracking_scale, cfg.gait_ls_scale, cfg.action_rate_l2_weight) == (2., 10., -.03)
     config.update(motion_train_randomization=1, external_pushes=0)
     (run / "config.json").write_text(json.dumps(config))
-    cfg = parse(continuation_args(full, output, 12000))
+    cfg = continuation_config(full, output, 12000)
     assert (cfg.motion_train_randomization, cfg.external_pushes) == (1, 0)
     del config["gait_ls_scale"]
     (run / "config.json").write_text(json.dumps(config))
-    assert parse(continuation_args(full, output, 12000)).gait_ls_scale == 1.5
+    assert continuation_config(full, output, 12000).gait_ls_scale == 1.5
+    config["wm_initial_gait_stage"] = 0
+    (run / "config.json").write_text(json.dumps(config))
+    cfg = continuation_config(full, output, 12000)
+    assert (cfg.num_envs, cfg.wm_only_iters, cfg.full_ckpt_keep) == (2048, 150, 0)
+    assert (cfg.wm_stand_pose_weight, cfg.wm_lift_weight, cfg.getup_amp_scale) == (0., .5, 0.)
     config.update(wm_getup_only=1)
     (run / "config.json").write_text(json.dumps(config))
     with pytest.raises(ValueError, match="only on floor recovery"):
-        continuation_args(full, output, 12000)
+        continuation_config(full, output, 12000)
     policy.unlink()
     with pytest.raises(FileNotFoundError, match="companion policy"):
-        continuation_args(full, output, 12000)
+        continuation_config(full, output, 12000)
 
 
 def test_full_checkpoint_round_trips_exploration_and_reads_fixed_noise_runs(tmp_path):
@@ -137,13 +136,10 @@ def test_full_checkpoint_round_trips_exploration_and_reads_fixed_noise_runs(tmp_
     assert int(restored["it"]) == 17 and int(restored["opt_std"]["t"]) == 0
 
 
-@pytest.mark.parametrize("saved_version,saved_scale,new_scale,saved_pose,new_pose", [
-    (None, 0., 0., 0., 0.), (1, 0., 0., 0., 0.), (1, 0., 1., 0., 0.),
-    (1, 1., 1., 0., 0.), (1, 1., .5, 0., 0.), (1, 1., 0., 0., 0.),
-    (1, 1., 1., 0., -2.), (1, 1., 1., -2., -2.), (1, 1., 1., -2., -1.), (1, 1., 1., -2., 0.),
+@pytest.mark.parametrize("saved_version,saved_pose,new_pose", [
+    (None, 0., 0.), (1, -2., -2.), (2, 0., 0.), (2, -2., -2.), (2, -2., 0.), (2, 0., -2.),
 ])
-def test_resume_resets_only_critic_when_the_reward_objective_changes(tmp_path, saved_version, saved_scale,
-                                                                     new_scale, saved_pose, new_pose):
+def test_resume_resets_only_critic_when_the_reward_objective_changes(tmp_path, saved_version, saved_pose, new_pose):
     actor = nets.mlp_init(jax.random.key(16), (3, 4, 2))
     fresh = {
         "pi": actor, "avg": actor, "obs_norm": nets.rn_init(3),
@@ -158,19 +154,17 @@ def test_resume_resets_only_critic_when_the_reward_objective_changes(tmp_path, s
     exported = dict(saved)
     if saved_version is not None:
         exported["floor_reward_version"] = saved_version
-    if saved_scale:
-        exported["recovery_control_scale"] = saved_scale
     if saved_pose:
         exported["stand_pose_weight"] = saved_pose
     save_policy(str(directory / "policy"), exported, {})
     restored = initialize_native_learner(
-        fresh, full.with_suffix(".npz"), "", None, floor_reward_version=1, recovery_control_scale=new_scale,
+        fresh, full.with_suffix(".npz"), "", None, floor_reward_version=2,
         stand_pose_weight=new_pose,
     )
     for key in ("pi", "avg", "obs_norm", "wm", "amp"):
         for actual, expected in zip(jax.tree.leaves(restored[key]), jax.tree.leaves(saved[key]), strict=True):
             np.testing.assert_array_equal(actual, expected)
-    same_objective = saved_version == 1 and saved_scale == new_scale and saved_pose == new_pose
+    same_objective = saved_version == 2 and saved_pose == new_pose
     expected_critic = saved["critic"] if same_objective else fresh["critic"]
     for actual, expected in zip(jax.tree.leaves(restored["critic"]), jax.tree.leaves(expected_critic), strict=True):
         np.testing.assert_array_equal(actual, expected)

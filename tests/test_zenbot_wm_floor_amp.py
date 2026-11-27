@@ -26,7 +26,7 @@ def test_joint_floor_amp_commands_and_rewards_follow_current_pose(zenbot23_motio
     sim.dx = CpuState(jnp.zeros(30), jnp.zeros(29), jnp.zeros(29))
     s = sim.init(jax.random.key(44))
     lin, ang = "track_lin_vel_xy_exp", "track_ang_vel_z_exp"
-    expected = {"stand", lin, ang, "action_rate", "lift"}
+    expected = {"stand", lin, ang, "action_rate", "lift", "first_attempt_failure"}
     if posture:
         expected.update(("flat_orientation_l2", "slow_speed_base_height_l2"))
     assert set(sim.weights) == expected and (sim.weights[lin], sim.weights[ang]) == (2., 1.5)
@@ -285,6 +285,12 @@ def test_upright_mirror_traces_the_complete_policy_iteration(zenbot23_motion_ban
                  "--buffer_steps", "64", "--env_steps", "4", "--ppo_len", "4", "--warmup_steps", "48"])
     learner = InstantAMP(cfg)
     carry = learner.init(jax.random.PRNGKey(42))
+    state = carry["env"]
+    state = state._replace(t=state.episode_limit - 1)
+    _, tr = jax.jit(learner.sim.step)(state, jnp.zeros_like(state.a_last))
+    events = tr.parts[:, learner.sim.terms.index("first_attempt_failure")]
+    assert state.first_attempt.active.any()
+    np.testing.assert_array_equal(events, -np.asarray(state.first_attempt.active, float))
     _, stats = jax.eval_shape(learner.pi_iter, carry)
     assert stats["gait_mirror_mse"].shape == ()
     assert stats["imag_gait_mirror_mse"].shape == stats["imag_gait_mirror_fraction"].shape == ()

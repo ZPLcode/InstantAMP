@@ -94,7 +94,7 @@ def test_quiet_stance_remains_rewarded_and_does_not_reward_lying(joint_sim):
 
 def test_default_stand_pose_cost_only_shapes_quiet_double_support(joint_sim):
     sim, cfg = joint_sim
-    assert "stand_default_pose" not in sim.weights
+    assert sim.weights.get("stand_default_pose") == (-2. if sim.J == 26 else None)
     cfg = dataclasses.replace(cfg, wm_stand_pose_weight=-2.)
     sim = Sim(**simulation_options(vars(cfg)), physics=False, obs_noise=False)
     state = physical_state(sim)
@@ -176,7 +176,7 @@ def test_motor_costs_and_task_style_mix_do_not_change_during_recovery(joint_sim)
     np.testing.assert_allclose(increment, (1. - cfg.amp_lerp) * .2, rtol=1e-6)
 
 
-def test_two_motion_priors_share_reward_scale(joint_sim):
+def test_two_motion_priors_have_shared_or_independent_reward_scales(joint_sim):
     sim, cfg = joint_sim
     xs = learner(sim, cfg)
     # Constant discriminator output isolates scale from different feature layouts.
@@ -186,8 +186,10 @@ def test_two_motion_priors_share_reward_scale(joint_sim):
     st["net"] = jax.tree.map(jnp.zeros_like, st["net"])
     gait = xs.style(st, windows)
     recovery = xs.getup_style(st, windows)
-    np.testing.assert_allclose(gait, recovery)
-    np.testing.assert_allclose(recovery, .75 * cfg.gait_ls_scale)
+    np.testing.assert_allclose(gait, .75 * cfg.gait_ls_scale)
+    np.testing.assert_allclose(recovery, .75 * (10. if sim.J == 26 else cfg.gait_ls_scale))
+    xs.cfg = dataclasses.replace(cfg, getup_amp_scale=0.)
+    np.testing.assert_allclose(xs.getup_style(st, windows), gait)
     xs.cfg = dataclasses.replace(cfg, gait_ls_scale=3., getup_amp_scale=10.)
     np.testing.assert_allclose(xs.getup_style(st, windows), 7.5)
     np.testing.assert_allclose(xs.style(st, windows), 2.25)
@@ -195,18 +197,17 @@ def test_two_motion_priors_share_reward_scale(joint_sim):
 
 def test_lift_ablation_changes_only_weighted_lifting_reward(joint_sim):
     sim, cfg = joint_sim
-    cfg = dataclasses.replace(cfg, wm_lift_weight=.2)
-    reduced = Sim(**simulation_options(vars(cfg)), physics=False, obs_noise=False)
+    reduced_cfg = dataclasses.replace(cfg, wm_lift_weight=cfg.wm_lift_weight * .4)
+    reduced = Sim(**simulation_options(vars(reduced_cfg)), physics=False, obs_noise=False)
     before = physical_state(sim, height=.44)
     after = physical_state(sim, height=.51)
-    assert reduced.weights == {**sim.weights, "lift": .2}
+    assert reduced.weights == {**sim.weights, "lift": reduced_cfg.wm_lift_weight}
     # Contact-history terms are added by the collector, outside reward_terms.
     contact_terms = {key: jnp.zeros(1) for key in sim.terms}
     original = sim.weighted({**contact_terms, **task_terms(sim, after, previous=before)})
     actual = reduced.weighted({**contact_terms, **task_terms(reduced, after, previous=before)})
     for key in original:
         np.testing.assert_allclose(actual[key], original[key] * (.4 if key == "lift" else 1.), rtol=1e-6)
-    assert cfg.getup_amp_scale == 0. and cfg.gait_ls_scale == 1.5
 
 
 def test_gait_discriminator_weights_valid_windows_equally_across_poses(joint_sim):
@@ -229,54 +230,75 @@ def test_existing_startup_curve_and_sampling_defaults_are_unchanged(joint_sim):
     assert cfg.wm_lift_gate == .44
     assert (cfg.reset_floor, cfg.support_rsi, cfg.floor_stop_command_share) == (.4, .35, .5)
     np.testing.assert_allclose(zenbot.lift_progress(jnp.array([.10, .44, .51, .58, .70]), .44), [0., 0., .5, 1., 1.], atol=1e-6)
-    assert sim.weights["lift"] == .5
+    assert sim.weights["lift"] == (.2 if sim.J == 26 else .5)
     for before, after in ((.20, .30), (.44, .51), (.51, .58)):
         terms = task_terms(sim, physical_state(sim, height=after), previous=physical_state(sim, height=before))
         expected = (zenbot.lift_progress(after, .44) - zenbot.lift_progress(before, .44)) / env.DT
         np.testing.assert_allclose(terms["lift"], expected, rtol=1e-6)
 
 
-def test_recovery_control_penalizes_rush_and_near_saturation_without_a_force_cap(joint_sim):
+def test_first_attempt_is_charged_once_per_fall_and_allows_ground_repositioning(joint_sim):
     sim, cfg = joint_sim
-    assert cfg.wm_recovery_control_scale == 0.
-    cfg = dataclasses.replace(cfg, wm_recovery_control_scale=1.)
-    controlled = Sim(**simulation_options(vars(cfg)), physics=False, obs_noise=False)
-    state = physical_state(sim, height=.3)
-    effort = jnp.asarray(sim.robot.EFFORT)[None]
-    calm = task_terms(controlled, state, torque=.7 * effort)
-    fast = task_terms(controlled, physical_state(sim, height=.3, velocity=(0., 0., 2.)), torque=effort)
-    assert calm["recovery_torque_excess"].item() == 0.
-    assert calm["recovery_vertical_speed"].item() == 0.
-    assert fast["recovery_vertical_speed"].item() > 0.
-    np.testing.assert_allclose(fast["recovery_torque_excess"], sim.J, rtol=1e-6)
-    # Ordinary locomotion uses its original costs; zero-command settling keeps the extra damping.
-    upright = physical_state(sim, height=.68, velocity=(0., 0., 2.))
-    running = task_terms(controlled, upright, command=(2.5, 0., 0.), torque=effort)
-    settling = task_terms(controlled, upright, torque=effort)
-    for key in zenbot_gait_rewards.RECOVERY_CONTROL_WEIGHTS:
-        assert running[key].item() == 0., key
-    assert settling["recovery_vertical_speed"].item() > 0.
-    for key, weight in zenbot_gait_rewards.RECOVERY_CONTROL_WEIGHTS.items():
-        assert controlled.weights[key] == weight < 0.
-    # Both physical and imagined rewards use this helper; finite gradients are required at rest.
-    def cost(vz, tau):
-        pose = (*state[:2], state[2].at[..., 2].set(vz), *state[3:])
-        return task_terms(controlled, pose, torque=tau)["recovery_vertical_speed"].sum() + task_terms(
-            controlled, pose, torque=tau)["recovery_torque_excess"].sum()
-    value, grads = jax.jit(jax.value_and_grad(cost, argnums=(0, 1)))(jnp.array(0.), jnp.zeros_like(effort))
-    assert np.isfinite(value) and all(np.isfinite(g).all() for g in grads)
-    _, rushing = jax.value_and_grad(cost, argnums=(0, 1))(jnp.array(2.), effort)
-    assert rushing[0] > 0. and np.all(rushing[1] > 0.)
+    assert learner(sim, cfg).floor_reward_version == (5 if sim.J == 26 else 3)
+    assert sim.weights["first_attempt_failure"] == (-2. if sim.J == 26 else -1.)
+    assert not any(key.startswith("recovery_") for key in sim.weights)
+    hold = round(1. / env.DT)
+
+    def rollout(heights, cosines, supported, *, starts_down=True, gait=False):
+        history = zenbot_gait_rewards.FirstAttempt.start(jnp.array(heights[0]), jnp.array(starts_down), sim.robot)
+        def step(history, row):
+            height, cosine, contact, done = row
+            return history.advance(height, cosine, contact >= .5, done, jnp.asarray(gait), sim.robot)
+        data = (jnp.array(heights), jnp.array(cosines), jnp.array(supported),
+                jnp.arange(len(heights)) == len(heights) - 1)
+        _, events = jax.lax.scan(step, history, data)
+        return np.flatnonzero(np.asarray(events * env.DT) > .5).tolist()
+
+    # A low retry detected only by the 26-DoF profile, then a successful rise.
+    h = [.30, .16, .32, .23, .56] + [.67] * hold
+    assert rollout(h, [1.] * len(h), [0.] * 5 + [1.] * hold) == ([3] if sim.J == 26 else [])
+    # A fall bottoming out above 30 cm can still lead to an attempt.
+    h = [.68, .42, .31, .39, .31] + [.67] * hold
+    assert rollout(h, [1.] * len(h), [1.] * len(h), starts_down=False) == ([4] if sim.J == 26 else [])
+    # A high initial pose followed by descent alone is not a failed rise on Zenbot26.
+    h = [.48, .36, .25, .31, .22] + [.67] * hold
+    assert rollout(h, [1.] * len(h), [1.] * len(h)) == ([] if sim.J == 26 else [1])
+    # One setback followed by more retries and eventual success. A later fall gets a new attempt.
+    h = [.20, .50, .39, .51, .38] + [.67] * hold + [.31, .50, .38]
+    assert rollout(h, [1.] * len(h), [1.] * len(h)) == [2, len(h) - 1]
+    # Tilt alone can spoil a briefly supported rise even at constant pelvis height.
+    h = [.25] + [.68] * 26
+    assert rollout(h, [0.] + [1.] * 12 + [0.] * 14, [1.] * len(h)) == [22]
+    # Never rising, or reaching full height without support, fails at the deadline.
+    for h in ([.26] * 65, [.26] + [.68] * 64):
+        assert rollout(h, [1.] * len(h), [0.] * len(h)) == [64]
+    h = [.20] + [.68] * hold
+    assert rollout(h, [1.] * len(h), [0.] * 6 + [1.] * (hold - 5)) == []
+    assert rollout(h, [1.] * len(h), [0.] * 7 + [1.] * (hold - 6)) == [hold]
+    h = [.68, .47, .28, .27, .54] + [.68] * hold
+    assert rollout(h, [1.] * len(h), [1.] * len(h), starts_down=False) == []
+    assert rollout([.68, .28], [1., 0.], [1., 0.], starts_down=False, gait=True) == []
 
 
-def test_recovery_setback_cost_leaves_low_repositioning_free(joint_sim):
+def test_shoulders_arm_before_pelvis_and_charge_only_once(joint_sim):
     sim, _ = joint_sim
-    action = jnp.zeros((1, sim.J))
-    def setback(before, after):
-        return zenbot_gait_rewards.recovery_control_terms(
-            physical_state(sim, height=before), physical_state(sim, height=after),
-            action, action, jnp.zeros((1, 3)), action, sim.robot.EFFORT, .44,
-        )["recovery_setback"].item()
-    assert setback(.3, .2) == 0.
-    assert setback(.44, .55) == 0.
-    assert setback(.55, .44) > 0.
+    if sim.J != 26:
+        assert sim.view_state(physical_state(sim)).shoulder_height is None
+        return
+    from mujoco import MjData, mj_kinematics
+    native = MjData(sim.m)
+    native.qpos[:] = np.r_[0., 0., .2, np.cos(.6), 0., np.sin(.6), 0., sim.robot.DEFAULT_Q]
+    native.qpos[7 + sim.robot.DOF.index("waist_pitch")] = -.3
+    mj_kinematics(sim.m, native)
+    ids = [sim.m.body("robot_" + name).id for name in sim.robot.SHOULDERS]
+    view = sim.view_state(unflatten(jnp.asarray(native.qpos), jnp.asarray(native.qvel)))
+    np.testing.assert_allclose(view.shoulder_height, native.xpos[ids, 2].mean(), atol=1e-6)
+    h = zenbot_gait_rewards.FirstAttempt.start(jnp.array(.17), jnp.array(True), sim.robot, shoulder_height=jnp.array(.45))
+    def step(history, pair):
+        pelvis, shoulders = pair
+        return history.advance(pelvis, 0., jnp.array(False), jnp.array(False), jnp.array(False),
+                               sim.robot, shoulder_height=shoulders)
+    # Forced descent, a small bob, a shoulder-only setback, then a pelvis setback.
+    _, events = jax.lax.scan(step, h, jnp.array([[.17,.28],[.16,.16],[.19,.25],[.17,.14],
+                                                 [.20,.29],[.22,.20],[.21,.16],[.35,.41],[.24,.27]]))
+    np.testing.assert_allclose(events * env.DT, [0.,0.,0.,0.,0.,0.,1.,0.,0.])

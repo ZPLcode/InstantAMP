@@ -9,6 +9,7 @@ from pathlib import Path
 if __name__ == "__main__":
     os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
+import mujoco
 import numpy as np
 
 from instantamp import env, zenbot
@@ -50,41 +51,43 @@ def _gait_trial(trials, speed, steps, window):
     )
 
 
-def recovery_outcome(heights, postures, loads, dt=env.DT):
+def recovery_outcome(heights, postures, loads, dt=env.DT, *, profile=zenbot, initial_height=None,
+                     shoulder_heights=None, initial_shoulder_height=None):
     """Keep the final standing test and expose failed rises before it.
 
-    A setback is an 8 cm pelvis drop after reaching 44 cm. Another setback
-    can only be counted after a fresh 8 cm rise, avoiding threshold chatter.
-    This measures substantial reversals, not every push made on the floor.
+    Count an 8 cm drop from an armed peak. Zenbot26 must first rise 8 cm
+    from the trough and reach 30 cm. Its mean shoulder height can independently arm
+    and fall by 12 cm. Each subsequent attempt requires a fresh rise.
     """
     heights, postures, loads = map(np.asarray, (heights, postures, loads))
-    hold = round(1. / dt)
+    hold = round(zenbot.SUPPORTED_STAND_SECONDS / dt)
     stable = np.array([
         postures[i:i + hold].all()
-        and np.count_nonzero(loads[i:i + hold] >= .5) >= .9 * hold
+        and np.count_nonzero(loads[i:i + hold] >= zenbot.MIN_SUPPORT_LOAD) >= zenbot.MIN_SUPPORT_FRACTION * hold
         for i in range(len(heights) - hold + 1)
     ], dtype=bool)
     starts = np.flatnonzero(stable)
     success = bool(len(stable) and stable[-1])
     unsettled = np.flatnonzero(~stable)
     sustained_start = int(unsettled[-1] + 1) if len(unsettled) else 0
-    peak = trough = float(heights[0])
-    armed = peak >= .44
+    shoulders = None if shoulder_heights is None else np.asarray(shoulder_heights)
+    samples = zenbot.attempt_heights(heights, shoulders, xp=np)
+    trough = samples[0].copy()
+    if initial_height is not None:
+        trough[0] = initial_height
+    if shoulders is not None and initial_shoulder_height is not None:
+        trough[1] = initial_shoulder_height
+    peak = zenbot.initial_attempt_peak(trough, profile)
     setbacks = 0
-    for height in heights[1:]:
-        if armed:
-            peak = max(peak, height)
-            if peak - height >= .08:
-                setbacks += 1
-                armed, trough = False, height
-        else:
-            trough = min(trough, height)
-            if height >= .44 and height - trough >= .08:
-                armed, peak = True, height
+    for sample in samples:
+        trough, peak, hits, _ = zenbot.update_attempt_peaks(sample, trough, peak, profile, xp=np)
+        if hits.any():
+            setbacks += 1
+            trough, peak = sample, np.zeros_like(peak)
     up, good, bad, refalls = False, 0, 0, 0
-    debounce = max(1, round(.2 / dt))
+    debounce = max(1, round(zenbot.REFALL_SECONDS / dt))
     for posture, load in zip(postures, loads, strict=True):
-        good = good + 1 if posture and load >= .5 else 0
+        good = good + 1 if posture and load >= zenbot.MIN_SUPPORT_LOAD else 0
         bad = bad + 1 if not posture else 0
         if not up and good >= debounce:
             up = True
@@ -103,20 +106,39 @@ def recovery_outcome(heights, postures, loads, dt=env.DT):
     )
 
 
+def _mean_shoulder_height(robot, shoulder_ids):
+    # mj_step leaves body positions at the beginning of the last physics substep.
+    mujoco.mj_kinematics(robot.model, robot.data)
+    return robot.data.xpos[shoulder_ids, 2].mean()
+
+
 def _recovery_trial(robot, steps):
     heights, postures, loads, velocity, angular, torque, joint_velocity = ([] for _ in range(7))
+    # Include the reset/release pose in Zenbot26's observed minimum before the first control step.
+    initial_height = float(robot.data.qpos[2]) if robot.profile.MODEL is not zenbot.MODEL else None
+    shoulder_ids = [robot.model.body("robot_" + name).id for name in getattr(robot.profile, "SHOULDERS", ())]
+    shoulders = [_mean_shoulder_height(robot, shoulder_ids)] if shoulder_ids else []
     for _ in range(steps):
         loads.append(robot.step())
+        if shoulder_ids:
+            shoulders.append(_mean_shoulder_height(robot, shoulder_ids))
         heights.append(robot.data.qpos[2])
         postures.append(zenbot.standing_posture(robot.data.qpos[2], robot.data.xmat[1, 8]))
         velocity.append(robot.data.qvel[:3].copy())
         angular.append(robot.data.qvel[3:6].copy())
         torque.append(robot.motor_torque.copy())
         joint_velocity.append(robot.motor_velocity.copy())
-    outcome = recovery_outcome(heights, postures, loads)
+    outcome = recovery_outcome(heights, postures, loads, profile=robot.profile, initial_height=initial_height,
+                               shoulder_heights=shoulders[1:] if shoulders else None,
+                               initial_shoulder_height=shoulders[0] if shoulders else None)
     # Include retries through the final settling interval, excluding later standing.
     settled = outcome["sustained_supported_stand_s"]
     end = steps if settled is None else min(steps, round(settled / env.DT) + round(1. / env.DT) - 1)
+    if shoulders:
+        trace = np.asarray(shoulders[:end + 1])
+        lifted = np.flatnonzero(trace >= np.minimum.accumulate(trace) + robot.profile.SHOULDER_SETBACK)
+        raised = trace[lifted[0]:] if len(lifted) else trace[:1]
+        outcome["max_shoulder_drop_m"] = float((np.maximum.accumulate(raised) - raised).max())
     tau = np.asarray(torque[:end])
     qd = np.asarray(joint_velocity[:end])
     linear, angular = np.asarray(velocity[:end]), np.asarray(angular[:end])
@@ -156,10 +178,10 @@ def _push_recovery_trials(trials, steps, forces=(300., 450., 600.)):
                 robot.data.xfrc_applied.fill(0.)
             # Start scoring on the floor, excluding the externally forced descent.
             wait = 0
-            while robot.data.qpos[2] >= .44 and wait < round(2. / env.DT):
+            while robot.data.qpos[2] >= zenbot.FALLEN_HEIGHT and wait < round(2. / env.DT):
                 robot.step()
                 wait += 1
-            fallen = bool(robot.data.qpos[2] < .44)
+            fallen = bool(robot.data.qpos[2] < zenbot.FALLEN_HEIGHT)
             result = dict(direction=name, force_N=force, push_duration_s=.4, fall_observed=fallen)
             if fallen:
                 result.update(_recovery_trial(robot, steps))
@@ -187,6 +209,8 @@ def evaluate(checkpoint, seed=42, reference=None, *, push_recovery=False):
         else None,
         seed=seed,
         duration_s=10.0,
+        attempt_lift_height_m=robot.profile.ATTEMPT_LIFT_HEIGHT,
+        lift_setback_m=zenbot.ATTEMPT_SETBACK,
         assistance_N=0,
         automatic_resets=False,
         teacher_inference=False,
@@ -198,6 +222,8 @@ def evaluate(checkpoint, seed=42, reference=None, *, push_recovery=False):
         getup_total=len(results),
         trials=results,
     )
+    if hasattr(robot.profile, "SHOULDER_SETBACK"):
+        report["shoulder_lift_and_setback_m"] = robot.profile.SHOULDER_SETBACK
     if push_recovery:
         pushed = _push_recovery_trials(trials, steps)
         report.update(
